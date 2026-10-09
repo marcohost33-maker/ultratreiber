@@ -111,3 +111,81 @@ gaps were analysed and fixed (items 3 and 5 above).
 - Same user SID ≠ same application identity; the DACL limits who can connect, not
   which operation is authorized.
 - No independent (cross-family) review of W12 yet; Python port ≠ native binary.
+
+---
+
+# W13 nach Aegis (2026-10-09/10) — supersedes parts of W12 above
+
+Input: Aegis adversarial audit of `udx_ref/windows_pipe.py` @`c2dcd69` plus the
+Quella precision note (primary sources: Forshaw 2019 on pipe server PIDs; Tokio
+CVE-2023-22466). Vero decision E2 (W12: server requires >= Impersonation) was
+**revised**. Code state for all numbers below: `4b0fa4b` (only docs changed after).
+
+## Protocol after W13
+
+- **Client** (`client_ping`): `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION |
+  SECURITY_EFFECTIVE_ONLY`, static tracking; Impersonation/Delegation cannot be
+  requested. **Before the first write** the owner of the pipe object
+  (`GetSecurityInfo(OWNER_SECURITY_INFORMATION)` on the client handle) must equal
+  the expected SID, otherwise typed refusal and no byte is sent. The server PID is
+  recorded only (Forshaw: not a basis for security decisions). Write/read run with an
+  absolute deadline.
+- **Server**: level >= Identification; from the client **token** additionally
+  integrity >= Medium, `TokenIsAppContainer == 0`, `TokenIsRestricted == 0`,
+  `TokenSessionId ==` own session; then `EqualSid`. Read-then-impersonate kept.
+- **SDDL**: `D:P(A;;GA;;;SY)(A;;GRGW;;;<user>)S:(ML;;NWNR;;;ME)`; read back:
+  `D:P(A;;FA;;;SY)(A;;0x12019f;;;<user>)S:AI(ML;;NWNR;;;ME)`.
+- `windows/udx_sid_client.cpp`, `udx_sid_probe.cpp`, `windows/README.md` follow the
+  same protocol — **still UNCOMPILED** (no compiler on this host).
+
+## Runtime evidence (real Win32, single account, not elevated)
+
+| check | observed |
+|---|---|
+| Identification client | `PEER_OK`, level 1 |
+| Aegis p1 squatter (same account, default DACL) | squatter's impersonation token has level **1** (was 2), 1 privilege (was 5 in Aegis p1); client returns `READ_TIMEOUT` instead of blocking |
+| expected server SID ≠ owner | client `PIPE_OWNER_MISMATCH`, `sent=False`; server never read a byte (`client_pid is None`) |
+| injected foreign owner S-1-5-19 / owner query failure | `PIPE_OWNER_MISMATCH` / `PIPE_OWNER_FAILED` (typed), nothing sent |
+| server PID query fails | still `PEER_OK` (PID not decisive) |
+| real `CreateRestrictedToken` client (restricting SID = user) | opens the pipe (DACL admits), server `RESTRICTED_TOKEN` |
+| injected token facts (IL 0x1000, AppContainer, other session, level 0) | `INTEGRITY_TOO_LOW` / `APPCONTAINER_CLIENT` / `SESSION_MISMATCH` / `IMPERSONATION_LEVEL_TOO_LOW` |
+| Low-IL `GENERIC_READ` open (Aegis F-LOWIL) | **5** with the NW\|NR label (was: open OK, slot occupied); Medium read-only control OK |
+| `dwPipeMode` actually passed to `CreateNamedPipeW` | contains `PIPE_REJECT_REMOTE_CLIENTS`; `FIRST_PIPE_INSTANCE`; `nMaxInstances = 1` |
+| Aegis p3-1 async exception after impersonation | thread reverted (was: still impersonating) |
+| Aegis p3-2 close() before the write | `DENIED`, nothing sent (was: `PEER_OK`) |
+| Aegis p3-3 write complete, re-check late | `PEER_OK`, `response_sent` (was: `DENIED` while client held `PEER_OK`) |
+| Aegis p3-4 `ConvertSidToStringSidW` fails | typed `SID_TEXT_FAILED` (was: `OSError`) |
+| exception during a pending wait | owner cancels the I/O, nothing parked |
+| `DisconnectNamedPipe` raises inside `close()` | handle still closed, name free |
+| dropped server without `close()` | `__del__` releases the name |
+| `validate_deadline(10**400)` | `ValueError('INVALID_DEADLINE')` |
+
+Observation (fail-closed, documented in the test): `client_ping` running under a
+restricted impersonation token got `GetSecurityInfo -> 127` (`ERROR_PROC_NOT_FOUND`)
+when the provider DLL was not loaded yet, and refused with `PIPE_OWNER_FAILED`.
+
+## Suite and discrimination at `4b0fa4b`
+
+- `PYTHONPATH=. python -m unittest discover -s tests -v`: **Ran 239, OK
+  (skipped=82), exit 0** — 157 ok. Per file (ok/skip): w12_windows_pipe 53/0,
+  windows_source_guards 3/0, others unchanged from W12.
+- `evidence/w13_dk_spec.json`, run `DK-20261009T221658-9d24bf4aacbf` @`6787513`:
+  **22/22 DISKRIMINIERT**, provenance VOLL. An earlier run
+  (`DK-20261009T221444-39142574a5d5` @`75e56a8`) had 21/22, W13-DK07 baseline
+  red (the order dependence above); fixed in `6787513`.
+- `evidence/w13_dk_carryover_spec.json` (W12 guards re-targeted), run
+  `DK-20261009T221821-ba1c3a12b550` @`4b0fa4b`: **9/9 DISKRIMINIERT**, VOLL.
+  `evidence/w12_dk_spec.json` is now a historical record (its targets moved).
+
+## Claim ceiling after W13 (unchanged where not stated)
+
+- Owner check proves the pipe **object owner**, not the process behind it; an
+  attacker with the same user SID is trusted by construction. An **elevated** server
+  of an admin account usually has owner = Administrators → the client would refuse
+  it (fail-closed, untested here).
+- Cross-user squatting by a service account (Aegis A3) is mitigated by protocol
+  (Identification only) but **not runtime-tested** (no second account / service context).
+- SY ACE remains GA (C++ parity); untested as a client.
+- AppContainer, other-session and Low-IL **token** paths are evidenced by injection
+  only; the real Low-IL client is blocked earlier by the mandatory label.
+- C++ sources remain uncompiled; no cross-family review of W13 yet.
