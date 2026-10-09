@@ -203,7 +203,10 @@ class WindowsPipeRuntime(unittest.TestCase):
         self.assertEqual((c.result.reason, c.result.sent), ('PIPE_OWNER_MISMATCH', False))
         self.assertEqual(c.result.pipe_owner, self.sid)
         self.assertEqual(r.verdict, 'DENIED')
-        self.assertIn(r.reason, ('READ_FAILED', 'READ_TIMEOUT'))     # not a single byte arrived
+        # Not a single byte arrived. Depending on whether the client closed before
+        # or after the server's ConnectNamedPipe: CONNECT_FAILED (232) or a read error.
+        self.assertIn(r.reason, ('CONNECT_FAILED', 'READ_FAILED', 'READ_TIMEOUT'))
+        self.assertIsNone(r.client_pid)                              # set only after the 1-byte read
 
     def test_client_refuses_injected_foreign_owner(self):
         api = wp.WinApi()
