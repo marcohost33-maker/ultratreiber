@@ -475,7 +475,7 @@ class OneShotPipeServer:
                 if err != ERROR_IO_PENDING:
                     return False, 0, err
                 # WaitForSingleObject may return WAIT_TIMEOUT a few ms BEFORE the
-                # monotonic deadline (timer granularity, measured up to ~6 ms);
+                # monotonic deadline (timer granularity; W12 measured up to 5.05 ms);
                 # wait again for the rest so the deadline is never cut short.
                 while True:
                     remaining = deadline - time.monotonic()

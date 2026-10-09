@@ -253,13 +253,12 @@ class WindowsPipeRuntime(unittest.TestCase):
         if ctl.open_error is not None:
             self.skipTest(f'SMB loopback to \\\\localhost\\pipe unavailable (winerror {ctl.open_error})')
         with wp.OneShotPipeServer(_name()) as srv:
-            box = {}
             client = _Client(wp.client_ping, _remote(srv.name), connect_timeout_s=8.0)
             client.start()
+            r = srv.serve(2.0)
             client.join(10)
-            box['r'] = srv.serve(0.5)
         self.assertEqual(client.result.open_error, wp.ERROR_ACCESS_DENIED)
-        self.assertEqual(box['r'].verdict, 'DENIED')
+        self.assertEqual((r.verdict, r.reason), ('DENIED', 'CONNECT_TIMEOUT'))
 
     # Low integrity client (thread token lowered to S-1-16-4096) with a medium control
     def _client_with_thread_token(self, name, integrity_sid):
