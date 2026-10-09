@@ -89,10 +89,22 @@ class PortableParityAndValidation(unittest.TestCase):
                 wp.build_sddl(bad)
 
     def test_deadline_validation(self):
-        for bad in [0, -1, 0.0, float('nan'), float('inf'), True, False, '1', None, 300.0001,
-                    10 ** 400, -10 ** 400]:                      # W13: OverflowError -> ValueError
+        for bad in [0, -1, 0.0, float('nan'), float('inf'), True, False, '1', None, 300.0001]:
             with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'INVALID_DEADLINE'):
                 wp.validate_deadline(bad)
+
+    def test_deadline_overflow_is_value_error(self):
+        # Aegis P3-g: float(10**400) raised OverflowError past the typed check.
+        for bad in (10 ** 400, -10 ** 400):
+            with self.subTest(bad='±10**400'):
+                try:
+                    wp.validate_deadline(bad)
+                except ValueError as exc:
+                    self.assertEqual(str(exc), 'INVALID_DEADLINE')
+                except Exception as exc:                       # noqa: BLE001
+                    self.fail(f'untyped {type(exc).__name__}')
+                else:
+                    self.fail('accepted')
         self.assertEqual(wp.validate_deadline(300), 300.0)
 
     def test_pipe_name_validation(self):
@@ -876,7 +888,10 @@ class WindowsPipeFaultInjection(unittest.TestCase):
         api.ConvertSidToStringSidW = conv
         with wp.OneShotPipeServer(_name(), api=api) as srv:
             armed['on'] = True
-            r, c = _serve_with_client(srv, 3.0)
+            try:
+                r, c = _serve_with_client(srv, 3.0)
+            except OSError as exc:
+                self.fail(f'serve() raised instead of a typed denial: {exc!r}')
         self.assertEqual((r.verdict, r.reason, r.winerror), ('DENIED', 'SID_TEXT_FAILED', 8))
         self.assertEqual(c.result.response, b'')
 
@@ -902,12 +917,27 @@ class WindowsPipeFaultInjection(unittest.TestCase):
             return rv
 
         def free(p):
-            frees.append(p.value if isinstance(p, ctypes.c_void_p) else p)
+            if isinstance(p, ctypes.c_void_p):
+                frees.append(p.value)
+            elif p is not None and not isinstance(p, int):
+                frees.append(ctypes.cast(p, ctypes.c_void_p).value)
+            else:
+                frees.append(p)
             return real_free(p)
         api.ConvertStringSidToSidW, api.LocalFree = conv, free
         with mock.patch.object(wp, 'current_user_sid', return_value='S-1-0x5-1'):
             with self.assertRaisesRegex(ValueError, 'INVALID_SID_TEXT'):
                 wp.OneShotPipeServer(_name(), expected_sid='S-1-5-18', allow_foreign_expected_sid=True, api=api)
+        self.assertTrue(set(allocs) <= set(frees), (allocs, frees))
+        # Failure AFTER the expected-SID allocation must release it as well.
+
+        def sd_fail(*a):
+            ctypes.set_last_error(wp.ERROR_ACCESS_DENIED)
+            return 0
+        api.ConvertStringSecurityDescriptorToSecurityDescriptorW = sd_fail
+        with self.assertRaises(wp.PipeSetupError):
+            wp.OneShotPipeServer(_name(), api=api)
+        self.assertEqual(len(allocs), 1)
         self.assertTrue(set(allocs) <= set(frees), (allocs, frees))
 
     def test_dropped_server_releases_pipe_name(self):
@@ -916,7 +946,10 @@ class WindowsPipeFaultInjection(unittest.TestCase):
         srv = wp.OneShotPipeServer(name)
         del srv
         gc.collect()
-        wp.OneShotPipeServer(name).close()        # FIRST_PIPE_INSTANCE would refuse a live name
+        try:
+            wp.OneShotPipeServer(name).close()    # FIRST_PIPE_INSTANCE would refuse a live name
+        except wp.PipeSetupError as exc:
+            self.fail(f'pipe name still held by the dropped server: {exc!r}')
 
     def test_single_use_and_invalid_override(self):
         with wp.OneShotPipeServer(_name()) as srv:
