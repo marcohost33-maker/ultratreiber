@@ -487,13 +487,22 @@ def _overlapped_io(api, handle, start, deadline: float, *, lock=None, aborted=No
     event = api.CreateEventW(None, True, False, None)
     if not event:
         return False, 0, api.last_error()
+    ov = OVERLAPPED()
+    pending = False
     try:
-        ov = OVERLAPPED()
         ov.hEvent = event
         n = wintypes.DWORD(0)
+        # W13 (Aegis P2-b): ``pending`` is raised BEFORE start() and lowered only
+        # once completion or cancellation is confirmed. Any other exit (exception,
+        # async interrupt) is handled in ``finally``: cancel, bounded grace, park.
+        pending = True
         started = start(ctypes.byref(ov))
-        if not started:
+        if started:
+            pending = False
+        else:
             err = api.last_error()
+            if err != ERROR_IO_PENDING:
+                pending = False
             if err == ERROR_PIPE_CONNECTED:              # connect raced ahead: success
                 return True, 0, 0
             if err != ERROR_IO_PENDING:
@@ -519,15 +528,22 @@ def _overlapped_io(api, handle, start, deadline: float, *, lock=None, aborted=No
                 if api.WaitForSingleObject(event, CANCEL_GRACE_MS) != WAIT_OBJECT_0:
                     _park(api, ov, event, start)
                     event = None
+                pending = False                           # completed after cancel, or parked
                 if waited == WAIT_TIMEOUT:
                     raise _Timeout()
                 return False, 0, wait_err
+            pending = False                               # event signalled: I/O finished
         if not api.GetOverlappedResult(handle, ctypes.byref(ov), ctypes.byref(n), False):
             return False, n.value, api.last_error()
         if strict and time.monotonic() >= deadline:
             raise _Timeout()                              # completed, but too late: strict
         return True, n.value, 0
     finally:
+        if pending and event is not None:
+            api.CancelIoEx(handle, ctypes.byref(ov))
+            if api.WaitForSingleObject(event, CANCEL_GRACE_MS) != WAIT_OBJECT_0:
+                _park(api, ov, event, start)
+                event = None
         if event is not None:
             api.CloseHandle(event)
 
@@ -541,7 +557,7 @@ class OneShotPipeServer:
     """
 
     def __init__(self, name: str = DEFAULT_PIPE_NAME, *, expected_sid: str | None = None, api=None):
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()       # re-entrant: close() may run inside a locked region
         self._serving = False
         self._abort = False
         self._expected_bin = ctypes.c_void_p()
@@ -595,13 +611,24 @@ class OneShotPipeServer:
                 if self._handle is not None:
                     api.CancelIoEx(self._handle, None)
                 return
-            handle, self._handle = self._handle, None
-            sid, self._expected_bin = self._expected_bin, ctypes.c_void_p()
-        if handle is not None:
-            api.DisconnectNamedPipe(handle)
-            api.CloseHandle(handle)
-        if sid.value:
-            api.LocalFree(sid)
+            # W13 (Aegis P2-b): the field is cleared only AFTER CloseHandle, and
+            # every step runs even if an earlier one raises. The lock is held, so
+            # a second close() cannot see a half-released state.
+            try:
+                if self._handle is not None:
+                    try:
+                        api.DisconnectNamedPipe(self._handle)
+                    finally:
+                        try:
+                            api.CloseHandle(self._handle)
+                        finally:
+                            self._handle = None
+            finally:
+                if self._expected_bin.value:
+                    try:
+                        api.LocalFree(self._expected_bin)
+                    finally:
+                        self._expected_bin = ctypes.c_void_p()
 
     def __enter__(self):
         return self

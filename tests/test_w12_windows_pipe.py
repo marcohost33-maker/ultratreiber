@@ -582,6 +582,55 @@ class WindowsPipeFaultInjection(unittest.TestCase):
         self.assertFalse(still, 'server thread kept the client identity')
         self.assertNotEqual(c.result.response, b'PEER_OK')
 
+    def test_exception_during_pending_io_cancels_before_release(self):
+        # Aegis P2-b: a non-timeout exit while an I/O is pending must cancel it
+        # (and wait/park) instead of dropping OVERLAPPED/buffer under the kernel.
+        api = self._api()
+        real_wait, real_cancel = api.WaitForSingleObject, api.CancelIoEx
+        cancels, armed = [], {'on': True}
+
+        def wait(ev, ms):
+            if armed['on'] and ms > 0:
+                armed['on'] = False
+                raise KeyboardInterrupt('simulated async exception while I/O pending')
+            return real_wait(ev, ms)
+
+        def cancel(h, ov):
+            cancels.append(ov is not None)
+            return real_cancel(h, ov)
+        api.WaitForSingleObject, api.CancelIoEx = wait, cancel
+        parked_before = len(wp._PARKED)
+        with wp.OneShotPipeServer(_name(), api=api) as srv:
+            _Client(wp.client_ping, srv.name, send=False, hold_s=1.0).start()
+            with self.assertRaises(KeyboardInterrupt):
+                srv.serve(3.0)
+        self.assertIn(True, cancels, 'pending I/O was not cancelled by its owner')
+        self.assertEqual(len(wp._PARKED), parked_before)        # cancel confirmed, nothing parked
+        self.assertIsNone(srv.handle)
+
+    def test_close_releases_handle_even_if_disconnect_raises(self):
+        # Aegis P2-b: _handle was set to None BEFORE Disconnect/CloseHandle; an
+        # exception in between leaked the handle (and kept the pipe name).
+        api = self._api()
+        closes = []
+        real_close = api.CloseHandle
+
+        def rec(h):
+            closes.append(h.value if isinstance(h, ctypes.c_void_p) else h)
+            return real_close(h)
+
+        def boom(_h):
+            raise RuntimeError('injected')
+        api.CloseHandle = rec
+        srv = wp.OneShotPipeServer(_name(), api=api)
+        pipe = srv.handle
+        api.DisconnectNamedPipe = boom
+        with self.assertRaises(RuntimeError):
+            srv.close()
+        self.assertIn(pipe, closes)
+        self.assertIsNone(srv.handle)
+        wp.OneShotPipeServer(srv.name).close()                # name is free again
+
     # W13 (Quella F2): token facts checked by the server
     def _patch_token_info(self, api, klass, value):
         real = api.GetTokenInformation
