@@ -13,5 +13,14 @@ class WindowsCandidateSourceAudit(unittest.TestCase):
             self.assertIn(expected,s)
         self.assertIn('D:P(A;;GA;;;SY)',s)
     def test_explicit_client_impersonation_level(self):
+        # W13 protocol inversion (Aegis P1-a): Identification + EFFECTIVE_ONLY,
+        # static tracking; the client must never grant Impersonation.
         s=(DIR/'udx_sid_client.cpp').read_text()
-        self.assertIn('SECURITY_SQOS_PRESENT | SECURITY_IMPERSONATION',s)
+        self.assertIn('SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION | SECURITY_EFFECTIVE_ONLY',s)
+        self.assertNotIn('SECURITY_IMPERSONATION',s)
+        self.assertNotIn('SECURITY_CONTEXT_TRACKING',s)
+    def test_client_checks_pipe_owner_before_write(self):
+        s=(DIR/'udx_sid_client.cpp').read_text()
+        self.assertIn('OWNER_SECURITY_INFORMATION',s)
+        self.assertLess(s.index('OWNER_SECURITY_INFORMATION'), s.index('WriteFile('))
+        self.assertNotIn('GetNamedPipeServerProcessId',s)

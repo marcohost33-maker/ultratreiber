@@ -23,6 +23,23 @@ static bool query_sid(HANDLE token, std::vector<BYTE>& storage, PSID& sid) {
     return sid != nullptr && IsValidSid(sid);
 }
 
+static bool token_dword(HANDLE token, TOKEN_INFORMATION_CLASS klass, DWORD& value) {
+    DWORD got = 0;
+    return GetTokenInformation(token, klass, &value, sizeof(value), &got) != 0 && got == sizeof(value);
+}
+
+static bool integrity_rid(HANDLE token, DWORD& rid) {
+    DWORD required = 0;
+    GetTokenInformation(token, TokenIntegrityLevel, nullptr, 0, &required);
+    if (required == 0 || required > 65536) return false;
+    std::vector<BYTE> buf(required);
+    if (!GetTokenInformation(token, TokenIntegrityLevel, buf.data(), required, &required)) return false;
+    PSID sid = reinterpret_cast<TOKEN_MANDATORY_LABEL*>(buf.data())->Label.Sid;
+    if (sid == nullptr || !IsValidSid(sid) || *GetSidSubAuthorityCount(sid) == 0) return false;
+    rid = *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
+    return true;
+}
+
 int wmain() {
     constexpr wchar_t name[] = LR"(\\.\pipe\UDX_W4_SID_PROBE)";
     HANDLE server_token = nullptr;
@@ -30,6 +47,8 @@ int wmain() {
     std::vector<BYTE> server_sidbuf;
     PSID server_sid = nullptr;
     bool ok = query_sid(server_token, server_sidbuf, server_sid);
+    DWORD server_session = 0;
+    ok = ok && token_dword(server_token, TokenSessionId, server_session);
     CloseHandle(server_token);
     if (!ok) return 11;
 
@@ -63,8 +82,19 @@ int wmain() {
         if (OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &client_token)) {
             std::vector<BYTE> client_sidbuf;
             PSID client_sid = nullptr;
-            if (query_sid(client_token, client_sidbuf, client_sid)) {
-                authorized = (EqualSid(client_sid, server_sid) != 0);
+            // W13 (UNCOMPILED): client grants Identification only; every fact
+            // comes from the token, never from the client PID/session API.
+            DWORD level = 0, appc = 1, restricted = 1, session = 0xFFFFFFFF, rid = 0;
+            if (query_sid(client_token, client_sidbuf, client_sid)
+                && token_dword(client_token, TokenImpersonationLevel, level)
+                && token_dword(client_token, TokenIsAppContainer, appc)
+                && token_dword(client_token, TokenIsRestricted, restricted)
+                && token_dword(client_token, TokenSessionId, session)
+                && integrity_rid(client_token, rid)) {
+                authorized = level >= SecurityIdentification
+                    && rid >= SECURITY_MANDATORY_MEDIUM_RID
+                    && appc == 0 && restricted == 0 && session == server_session
+                    && (EqualSid(client_sid, server_sid) != 0);
             }
             CloseHandle(client_token);
         }

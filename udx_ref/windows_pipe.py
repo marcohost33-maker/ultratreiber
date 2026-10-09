@@ -63,12 +63,17 @@ SECURITY_ANONYMOUS = 0 << 16
 SECURITY_IDENTIFICATION = 1 << 16
 SECURITY_IMPERSONATION = 2 << 16
 SECURITY_DELEGATION = 3 << 16
-SQOS_LEVELS = {
-    'anonymous': SECURITY_ANONYMOUS,
+SECURITY_EFFECTIVE_ONLY = 0x00080000
+SECURITY_CONTEXT_TRACKING = 0x00040000
+# W13 (Aegis P1-a): the client NEVER grants Impersonation. Static tracking
+# (no SECURITY_CONTEXT_TRACKING), effective privileges only. 'anonymous' exists
+# solely as a negative-test surface.
+CLIENT_SQOS_LEVELS = {
     'identification': SECURITY_IDENTIFICATION,
-    'impersonation': SECURITY_IMPERSONATION,
-    'delegation': SECURITY_DELEGATION,
+    'anonymous': SECURITY_ANONYMOUS,
 }
+SQOS_LEVELS = CLIENT_SQOS_LEVELS            # backwards-compatible name
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 # SECURITY_IMPERSONATION_LEVEL
 SecurityAnonymous, SecurityIdentification, SecurityImpersonation, SecurityDelegation = 0, 1, 2, 3
@@ -79,12 +84,18 @@ TOKEN_IMPERSONATE = 0x0004
 TOKEN_ADJUST_DEFAULT = 0x0080
 TokenUser = 1
 TokenImpersonationLevel = 9
+TokenSessionId = 12
 TokenIntegrityLevel = 25
+TokenIsAppContainer = 29
+TokenIsRestricted = 40
 TokenImpersonation = 2
 SE_GROUP_INTEGRITY = 0x00000020
+SECURITY_MANDATORY_MEDIUM_RID = 0x2000
 
 SE_KERNEL_OBJECT = 6
+OWNER_SECURITY_INFORMATION = 0x00000001
 DACL_SECURITY_INFORMATION = 0x00000004
+LABEL_SECURITY_INFORMATION = 0x00000010
 SE_DACL_PROTECTED = 0x1000
 SDDL_REVISION_1 = 1
 ACCESS_ALLOWED_ACE_TYPE = 0
@@ -181,6 +192,10 @@ class ClientResult:
     open_error: int | None
     response: bytes
     sent: bool
+    reason: str = 'OK'
+    winerror: int | None = None
+    server_pid: int | None = None          # logged only, never a security decision
+    pipe_owner: str | None = None
 
 
 # --- ctypes binding ---------------------------------------------------------
@@ -234,6 +249,10 @@ if sys.platform == 'win32':
             self.WaitForSingleObject = _fn(k, 'WaitForSingleObject', D, H, D)
             self.CloseHandle = _fn(k, 'CloseHandle', B, H)
             self.GetNamedPipeClientProcessId = _fn(k, 'GetNamedPipeClientProcessId', B, H, ctypes.POINTER(wintypes.ULONG))
+            self.GetNamedPipeServerProcessId = _fn(k, 'GetNamedPipeServerProcessId', B, H, ctypes.POINTER(wintypes.ULONG))
+            self.CreateRestrictedToken = _fn(a, 'CreateRestrictedToken', B, H, D, D, P, D, P, D, P, ctypes.POINTER(H))
+            self.GetSidSubAuthorityCount = _fn(a, 'GetSidSubAuthorityCount', ctypes.POINTER(ctypes.c_ubyte), P)
+            self.GetSidSubAuthority = _fn(a, 'GetSidSubAuthority', ctypes.POINTER(D), P, D)
             self.GetCurrentProcess = _fn(k, 'GetCurrentProcess', H)
             self.GetCurrentThread = _fn(k, 'GetCurrentThread', H)
             self.LocalFree = _fn(k, 'LocalFree', P, P)
@@ -258,7 +277,7 @@ if sys.platform == 'win32':
                 a, 'ConvertSecurityDescriptorToStringSecurityDescriptorW', B,
                 P, D, D, ctypes.POINTER(wintypes.LPWSTR), ctypes.POINTER(wintypes.ULONG))
             self.GetSecurityInfo = _fn(a, 'GetSecurityInfo', D, H, ctypes.c_int, D,
-                                       P, P, ctypes.POINTER(P), P, ctypes.POINTER(P))
+                                       ctypes.POINTER(P), P, ctypes.POINTER(P), P, ctypes.POINTER(P))
             self.GetSecurityDescriptorControl = _fn(a, 'GetSecurityDescriptorControl', B, P,
                                                     ctypes.POINTER(wintypes.WORD), ctypes.POINTER(D))
             self.GetAce = _fn(a, 'GetAce', B, P, D, ctypes.POINTER(P))
@@ -352,6 +371,45 @@ def thread_is_impersonating(api=None) -> bool:
     return api.last_error() != ERROR_NO_TOKEN
 
 
+def _token_dword(api, token, klass: int):
+    """DWORD-valued token information (SessionId, IsAppContainer, IsRestricted)."""
+    buf, err = _token_info(api, token, klass)
+    if buf is None or len(buf) < 4:
+        return None, err or ERROR_ACCESS_DENIED
+    return ctypes.c_uint32.from_buffer(buf, 0).value, 0
+
+
+def _token_integrity_rid(api, token):
+    """Last sub-authority of TOKEN_MANDATORY_LABEL.Label.Sid (e.g. 0x2000 Medium)."""
+    buf, err = _token_info(api, token, TokenIntegrityLevel)
+    if buf is None:
+        return None, err
+    sid = ctypes.c_void_p.from_buffer(buf, 0).value
+    if not sid or not api.IsValidSid(sid):
+        return None, ERROR_ACCESS_DENIED
+    count = api.GetSidSubAuthorityCount(sid)
+    if not count or count.contents.value == 0:
+        return None, api.last_error() or ERROR_ACCESS_DENIED
+    rid = api.GetSidSubAuthority(sid, count.contents.value - 1)
+    if not rid:
+        return None, api.last_error() or ERROR_ACCESS_DENIED
+    return rid.contents.value, 0
+
+
+def own_session_id(api=None) -> int:
+    api = api or default_api()
+    tok = wintypes.HANDLE()
+    if not api.OpenProcessToken(api.GetCurrentProcess(), TOKEN_QUERY, ctypes.byref(tok)):
+        raise OSError(api.last_error(), 'OpenProcessToken failed')
+    try:
+        value, err = _token_dword(api, tok, TokenSessionId)
+        if value is None:
+            raise OSError(err, 'GetTokenInformation(TokenSessionId) failed')
+        return value
+    finally:
+        api.CloseHandle(tok)
+
+
 def inspect_dacl(handle, api=None) -> DaclInfo:
     """Read back the DACL actually attached to a kernel handle."""
     api = api or default_api()
@@ -415,6 +473,65 @@ def _park(api, ov, event, keepalive) -> None:
         _PARKED[:] = still
 
 
+def _overlapped_io(api, handle, start, deadline: float, *, lock=None, aborted=None, strict: bool = True):
+    """Run one overlapped operation on ``handle``; return (ok, nbytes, winerror).
+
+    Raises _Timeout when the absolute ``deadline`` passes (after cancelling the
+    I/O and waiting a bounded grace). ``lock``/``aborted`` let a server make the
+    abort check and the start of the I/O atomic with respect to close().
+    ``strict=False`` reports an I/O that completed fully but after the deadline
+    as completed (used for the response write: the bytes are already delivered).
+    """
+    if aborted is not None and aborted():
+        return False, 0, ERROR_OPERATION_ABORTED
+    event = api.CreateEventW(None, True, False, None)
+    if not event:
+        return False, 0, api.last_error()
+    try:
+        ov = OVERLAPPED()
+        ov.hEvent = event
+        n = wintypes.DWORD(0)
+        started = start(ctypes.byref(ov))
+        if not started:
+            err = api.last_error()
+            if err == ERROR_PIPE_CONNECTED:              # connect raced ahead: success
+                return True, 0, 0
+            if err != ERROR_IO_PENDING:
+                return False, 0, err
+            # WaitForSingleObject may return WAIT_TIMEOUT a few ms BEFORE the
+            # monotonic deadline (timer granularity; W12 measured up to 5.05 ms);
+            # wait again for the rest so the deadline is never cut short.
+            while True:
+                remaining = deadline - time.monotonic()
+                ms = 0 if remaining <= 0 else min(int(math.ceil(remaining * 1000)), INFINITE - 1)
+                waited = api.WaitForSingleObject(event, ms)
+                if waited != WAIT_TIMEOUT or remaining <= 0:
+                    break
+            if waited != WAIT_OBJECT_0:
+                wait_err = 0 if waited == WAIT_TIMEOUT else (api.last_error() or ERROR_OPERATION_ABORTED)
+                # Cancel, then wait a BOUNDED grace for the I/O to finish. Never
+                # GetOverlappedResult(bWait=TRUE): if the cancel fails, that call
+                # blocks until the peer acts (W12 measured 5.0 s for a 0.3 s
+                # deadline). If the I/O is still pending, the OVERLAPPED, event
+                # and buffer (held by ``start``) are parked, never freed under
+                # the kernel; closing the pipe handle then aborts the I/O.
+                api.CancelIoEx(handle, ctypes.byref(ov))
+                if api.WaitForSingleObject(event, CANCEL_GRACE_MS) != WAIT_OBJECT_0:
+                    _park(api, ov, event, start)
+                    event = None
+                if waited == WAIT_TIMEOUT:
+                    raise _Timeout()
+                return False, 0, wait_err
+        if not api.GetOverlappedResult(handle, ctypes.byref(ov), ctypes.byref(n), False):
+            return False, n.value, api.last_error()
+        if strict and time.monotonic() >= deadline:
+            raise _Timeout()                              # completed, but too late: strict
+        return True, n.value, 0
+    finally:
+        if event is not None:
+            api.CloseHandle(event)
+
+
 class OneShotPipeServer:
     """One pipe instance, one connection, one decision. Single use.
 
@@ -434,6 +551,7 @@ class OneShotPipeServer:
         self._used = False
         api = self._api
         self.server_sid = current_user_sid(api)
+        self._own_session = own_session_id(api)
         self.expected_sid = self.server_sid if expected_sid is None else expected_sid
         build_sddl(self.expected_sid)                    # syntax check of override
         self._expected_bin = ctypes.c_void_p()
@@ -492,58 +610,9 @@ class OneShotPipeServer:
         self.close()
 
     # -- overlapped I/O with an absolute deadline --
-    def _io(self, start, deadline: float):
-        """Run one overlapped operation; return (ok, nbytes, winerror).
-        Raises _Timeout after cancelling and draining the I/O."""
-        api = self._api
-        if self._abort:                                   # close() requested meanwhile
-            return False, 0, ERROR_OPERATION_ABORTED
-        event = api.CreateEventW(None, True, False, None)
-        if not event:
-            return False, 0, api.last_error()
-        try:
-            ov = OVERLAPPED()
-            ov.hEvent = event
-            n = wintypes.DWORD(0)
-            started = start(ctypes.byref(ov))
-            if not started:
-                err = api.last_error()
-                if err == ERROR_PIPE_CONNECTED:          # connect raced ahead: success
-                    return True, 0, 0
-                if err != ERROR_IO_PENDING:
-                    return False, 0, err
-                # WaitForSingleObject may return WAIT_TIMEOUT a few ms BEFORE the
-                # monotonic deadline (timer granularity; W12 measured up to 5.05 ms);
-                # wait again for the rest so the deadline is never cut short.
-                while True:
-                    remaining = deadline - time.monotonic()
-                    ms = 0 if remaining <= 0 else min(int(math.ceil(remaining * 1000)), INFINITE - 1)
-                    waited = api.WaitForSingleObject(event, ms)
-                    if waited != WAIT_TIMEOUT or remaining <= 0:
-                        break
-                if waited != WAIT_OBJECT_0:
-                    wait_err = 0 if waited == WAIT_TIMEOUT else (api.last_error() or ERROR_OPERATION_ABORTED)
-                    # Cancel, then wait a BOUNDED grace for the I/O to finish. Never
-                    # GetOverlappedResult(bWait=TRUE): if the cancel fails, that call
-                    # blocks until the peer acts (W12 measured 5.0 s for a 0.3 s
-                    # deadline). If the I/O is still pending, the OVERLAPPED, event
-                    # and buffer (held by ``start``) are parked, never freed under
-                    # the kernel; serve()'s close() then aborts the I/O.
-                    api.CancelIoEx(self._handle, ctypes.byref(ov))
-                    if api.WaitForSingleObject(event, CANCEL_GRACE_MS) != WAIT_OBJECT_0:
-                        _park(api, ov, event, start)
-                        event = None
-                    if waited == WAIT_TIMEOUT:
-                        raise _Timeout()
-                    return False, 0, wait_err
-            if not api.GetOverlappedResult(self._handle, ctypes.byref(ov), ctypes.byref(n), False):
-                return False, n.value, api.last_error()
-            if time.monotonic() >= deadline:
-                raise _Timeout()                          # completed, but too late: strict
-            return True, n.value, 0
-        finally:
-            if event is not None:
-                api.CloseHandle(event)
+    def _io(self, start, deadline: float, strict: bool = True):
+        return _overlapped_io(self._api, self._handle, start, deadline,
+                              aborted=lambda: self._abort, strict=strict)
 
     def _impersonate_and_query(self):
         """Impersonate, read TokenImpersonationLevel + TokenUser, revert.
@@ -551,8 +620,8 @@ class OneShotPipeServer:
         calls run while impersonating; RevertToSelf failure kills the process."""
         api = self._api
         if not api.ImpersonateNamedPipeClient(self._handle):
-            return 'IMPERSONATE_FAILED', api.last_error(), None, None
-        reason, err, level, user_buf = None, 0, None, None
+            return 'IMPERSONATE_FAILED', api.last_error(), None, None, {}
+        reason, err, level, user_buf, facts = None, 0, None, None, {}
         try:
             tok = wintypes.HANDLE()
             if not api.OpenThreadToken(api.GetCurrentThread(), TOKEN_QUERY, True, ctypes.byref(tok)):
@@ -561,8 +630,14 @@ class OneShotPipeServer:
                 try:
                     lvl_buf, e1 = _token_info(api, tok, TokenImpersonationLevel)
                     user_buf, e2 = _token_info(api, tok, TokenUser)
-                    if lvl_buf is None or user_buf is None:
-                        reason, err = 'TOKEN_QUERY_FAILED', (e1 or e2)
+                    # W13 (Quella F2): every identity fact comes from the TOKEN,
+                    # never from GetNamedPipeClientProcessId/SessionId.
+                    facts['integrity_rid'], e3 = _token_integrity_rid(api, tok)
+                    facts['appcontainer'], e4 = _token_dword(api, tok, TokenIsAppContainer)
+                    facts['restricted'], e5 = _token_dword(api, tok, TokenIsRestricted)
+                    facts['session'], e6 = _token_dword(api, tok, TokenSessionId)
+                    if lvl_buf is None or user_buf is None or None in facts.values():
+                        reason, err = 'TOKEN_QUERY_FAILED', (e1 or e2 or e3 or e4 or e5 or e6)
                     else:
                         level = ctypes.c_int.from_buffer(lvl_buf, 0).value
                 finally:
@@ -570,7 +645,7 @@ class OneShotPipeServer:
         finally:
             if not api.RevertToSelf():
                 _die_on_revert_failure()
-        return reason, err, level, user_buf
+        return reason, err, level, user_buf, facts
 
     def serve(self, deadline_s: float) -> PeerResult:
         budget = validate_deadline(deadline_s)
@@ -617,7 +692,7 @@ class OneShotPipeServer:
                 return deny('CLIENT_PID_FAILED', api.last_error())
             state['pid'] = pid.value
 
-            reason, err, level, user_buf = self._impersonate_and_query()
+            reason, err, level, user_buf, facts = self._impersonate_and_query()
             state['level'] = level
             if reason is not None:
                 return deny(reason, err)
@@ -625,10 +700,18 @@ class OneShotPipeServer:
             if client_sid is None:
                 return deny('INVALID_CLIENT_SID')
             state['sid'] = sid_to_text(api, client_sid)
-            # W12 guard (not in the C++ candidate): Identification/Anonymous
-            # tokens identify but do not let the server act as the client.
-            if level < SecurityImpersonation:
+            # W13 (E2 revised): the client grants only Identification, which is
+            # all an identity check needs; Anonymous carries no identity.
+            if level < SecurityIdentification:
                 return deny('IMPERSONATION_LEVEL_TOO_LOW')
+            if facts['integrity_rid'] < SECURITY_MANDATORY_MEDIUM_RID:
+                return deny('INTEGRITY_TOO_LOW')
+            if facts['appcontainer']:
+                return deny('APPCONTAINER_CLIENT')
+            if facts['restricted']:
+                return deny('RESTRICTED_TOKEN')
+            if facts['session'] != self._own_session:
+                return deny('SESSION_MISMATCH')
             # C++: authorized = EqualSid(client_sid, server_sid)
             if not api.EqualSid(client_sid, self._expected_bin):
                 return deny('SID_MISMATCH')
@@ -662,12 +745,60 @@ class OneShotPipeServer:
 
 
 # --- client (test/demo surface) ---------------------------------------------
-def client_ping(name: str = DEFAULT_PIPE_NAME, *, level: str = 'impersonation',
-                send: bool = True, hold_s: float = 0.0, connect_timeout_s: float = 5.0,
-                api=None) -> ClientResult:
-    """Port of udx_sid_client.cpp with a selectable SQOS level.
+def client_sqos_flags(level: str = 'identification') -> int:
+    """dwFlagsAndAttributes SQOS part. Static tracking (no CONTEXT_TRACKING),
+    EFFECTIVE_ONLY, and never Impersonation/Delegation (W13, Aegis P1-a)."""
+    if level not in CLIENT_SQOS_LEVELS:
+        raise ValueError('INVALID_LEVEL')
+    return SECURITY_SQOS_PRESENT | CLIENT_SQOS_LEVELS[level] | SECURITY_EFFECTIVE_ONLY
 
-    ``send=False`` connects and stays silent for ``hold_s`` seconds (deadline test).
+
+def pipe_owner_sid(api, handle):
+    """Owner SID pointer of the pipe object behind a CLIENT handle.
+    Returns (owner c_void_p, security-descriptor c_void_p, 0) or (None, None, rc);
+    the caller must LocalFree the descriptor (the owner points into it)."""
+    owner = ctypes.c_void_p()
+    sd = ctypes.c_void_p()
+    rc = api.GetSecurityInfo(handle, SE_KERNEL_OBJECT, OWNER_SECURITY_INFORMATION,
+                             ctypes.byref(owner), None, None, None, ctypes.byref(sd))
+    if rc != 0:
+        return None, None, rc
+    return owner, sd, 0
+
+
+def _verify_pipe_owner(api, handle, expected_bin):
+    """Decision: owner of the pipe object == expected SID (Forshaw 2019: the
+    server PID must not be relied upon for security decisions)."""
+    owner, sd, rc = pipe_owner_sid(api, handle)
+    if owner is None:
+        return 'PIPE_OWNER_FAILED', rc, None
+    try:
+        if not owner.value or not api.IsValidSid(owner):
+            return 'PIPE_OWNER_FAILED', ERROR_ACCESS_DENIED, None
+        try:
+            text = sid_to_text(api, owner)
+        except OSError:
+            text = None
+        if not api.EqualSid(owner, expected_bin):
+            return 'PIPE_OWNER_MISMATCH', 0, text
+        return None, 0, text
+    finally:
+        if sd.value:
+            api.LocalFree(sd)
+
+
+def client_ping(name: str = DEFAULT_PIPE_NAME, *, level: str = 'identification',
+                send: bool = True, hold_s: float = 0.0, connect_timeout_s: float = 5.0,
+                response_timeout_s: float = 5.0, expected_server_sid: str | None = None,
+                api=None) -> ClientResult:
+    """Port of udx_sid_client.cpp (W13 protocol).
+
+    * SQOS: Identification + EFFECTIVE_ONLY, static tracking (never Impersonation)
+    * BEFORE the first write: the pipe object's owner must equal
+      ``expected_server_sid`` (default: this process' user SID); otherwise no
+      byte is sent and a typed reason is returned. The server PID is logged only.
+    * write and read run with an absolute deadline (``response_timeout_s``).
+    ``send=False`` connects, verifies and stays silent for ``hold_s`` seconds.
     """
     api = api or default_api()
     # Local names are fully validated; '\\host\pipe\...' is allowed for the
@@ -676,38 +807,58 @@ def client_ping(name: str = DEFAULT_PIPE_NAME, *, level: str = 'impersonation',
         raise ValueError('INVALID_PIPE_NAME')
     if name.startswith(PIPE_PREFIX):
         validate_pipe_name(name)
-    if level not in SQOS_LEVELS:
-        raise ValueError('INVALID_LEVEL')
-    flags = SECURITY_SQOS_PRESENT | SQOS_LEVELS[level]
+    flags = client_sqos_flags(level) | FILE_FLAG_OVERLAPPED
     end = time.monotonic() + validate_deadline(connect_timeout_s)
-    while True:
-        h = api.CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, None, OPEN_EXISTING, flags, None)
-        if h is not None and h != INVALID_HANDLE_VALUE:
-            break
-        err = api.last_error()
-        if err not in (ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY) or time.monotonic() >= end:
-            return ClientResult(err, b'', False)
-        time.sleep(0.02)
+    budget = validate_deadline(response_timeout_s)
+    expected = current_user_sid(api) if expected_server_sid is None else expected_server_sid
+    build_sddl(expected)                                  # SID syntax check
+    expected_bin = ctypes.c_void_p()
+    if not api.ConvertStringSidToSidW(expected, ctypes.byref(expected_bin)):
+        raise ValueError('INVALID_EXPECTED_SID')
     try:
-        if not send:
-            time.sleep(hold_s)
-            return ClientResult(None, b'', False)
-        ping = ctypes.create_string_buffer(b'\x55', 1)
-        sent = wintypes.DWORD(0)
-        if not api.WriteFile(h, ping, 1, ctypes.byref(sent), None) or sent.value != 1:
-            return ClientResult(None, b'', False)
-        # C++ client reads exactly 7 bytes, then closes; reading further would
-        # block until the server's drain deadline.
-        data = b''
-        buf = ctypes.create_string_buffer(len(RESPONSE))
-        while len(data) < len(RESPONSE):
-            got = wintypes.DWORD(0)
-            if not api.ReadFile(h, buf, len(RESPONSE) - len(data), ctypes.byref(got), None) or got.value == 0:
+        while True:
+            h = api.CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, None, OPEN_EXISTING, flags, None)
+            if h is not None and h != INVALID_HANDLE_VALUE:
                 break
-            data += buf.raw[:got.value]
-        return ClientResult(None, data, True)
+            err = api.last_error()
+            if err not in (ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY) or time.monotonic() >= end:
+                return ClientResult(err, b'', False, 'OPEN_FAILED', err)
+            time.sleep(0.02)
+        try:
+            spid = wintypes.ULONG(0)
+            server_pid = spid.value if api.GetNamedPipeServerProcessId(h, ctypes.byref(spid)) else None
+            reason, err, owner_text = _verify_pipe_owner(api, h, expected_bin)
+            if reason is not None:
+                return ClientResult(None, b'', False, reason, err, server_pid, owner_text)
+            if not send:
+                time.sleep(hold_s)
+                return ClientResult(None, b'', False, 'SILENT_HOLD', None, server_pid, owner_text)
+            deadline = time.monotonic() + budget
+            ping = ctypes.create_string_buffer(b'\x55', 1)
+            try:
+                ok, n, err = _overlapped_io(api, h, lambda ov: api.WriteFile(h, ping, 1, None, ov), deadline)
+            except _Timeout:
+                return ClientResult(None, b'', False, 'WRITE_TIMEOUT', None, server_pid, owner_text)
+            if not ok or n != 1:
+                return ClientResult(None, b'', False, 'WRITE_FAILED', err, server_pid, owner_text)
+            # C++ client reads exactly 7 bytes, then closes.
+            data = b''
+            buf = ctypes.create_string_buffer(len(RESPONSE))
+            while len(data) < len(RESPONSE):
+                want = len(RESPONSE) - len(data)
+                try:
+                    ok, got, err = _overlapped_io(api, h, lambda ov: api.ReadFile(h, buf, want, None, ov), deadline)
+                except _Timeout:
+                    return ClientResult(None, data, True, 'READ_TIMEOUT', None, server_pid, owner_text)
+                if not ok or got == 0:
+                    return ClientResult(None, data, True, 'READ_FAILED', err, server_pid, owner_text)
+                data += buf.raw[:got]
+            reason = 'OK' if data == RESPONSE else 'BAD_RESPONSE'
+            return ClientResult(None, data, True, reason, None, server_pid, owner_text)
+        finally:
+            api.CloseHandle(h)
     finally:
-        api.CloseHandle(h)
+        api.LocalFree(expected_bin)
 
 
 def main(argv=None) -> int:
@@ -719,7 +870,7 @@ def main(argv=None) -> int:
     s.add_argument('--deadline', type=float, default=10.0)
     c = sub.add_parser('client')
     c.add_argument('--name', default=DEFAULT_PIPE_NAME)
-    c.add_argument('--level', default='impersonation', choices=sorted(SQOS_LEVELS))
+    c.add_argument('--level', default='identification', choices=sorted(CLIENT_SQOS_LEVELS))
     c.add_argument('--silent-hold', type=float, default=None)
     args = p.parse_args(argv)
     if args.cmd == 'server':
@@ -731,7 +882,7 @@ def main(argv=None) -> int:
     r = client_ping(args.name, level=args.level, send=args.silent_hold is None,
                     hold_s=args.silent_hold or 0.0)
     print(json.dumps({'open_error': r.open_error, 'response': r.response.decode('latin-1'),
-                      'sent': r.sent, 'pid': os.getpid()}), flush=True)
+                      'sent': r.sent, 'reason': r.reason, 'pid': os.getpid()}), flush=True)
     return 0 if r.response == RESPONSE else 3          # C++ client exit codes 0 / 3
 
 

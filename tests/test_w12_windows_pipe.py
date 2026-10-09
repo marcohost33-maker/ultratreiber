@@ -115,7 +115,7 @@ class WindowsPipeRuntime(unittest.TestCase):
         self.assertEqual(r.verdict, 'PEER_OK')
         self.assertEqual(r.client_pid, proc.pid)
         self.assertEqual(r.client_sid, self.sid)
-        self.assertEqual(r.impersonation_level, wp.SecurityImpersonation)
+        self.assertEqual(r.impersonation_level, wp.SecurityIdentification)   # W13: never more
         self.assertTrue(r.response_sent)
         self.assertTrue(r.response_drained)
 
@@ -136,11 +136,133 @@ class WindowsPipeRuntime(unittest.TestCase):
         result = json.loads(out.decode().strip().splitlines()[-1])
         self.assertEqual(result['client_pid'], os.getpid())
 
-    def test_delegation_level_accepted(self):
-        with wp.OneShotPipeServer(_name()) as srv:
-            r, c = _serve_with_client(srv, 5.0, level='delegation')
+    def test_legacy_impersonation_level_client_still_accepted_by_server(self):
+        # The server requires >= Identification; a raw W4-style client that grants
+        # Impersonation is still identified correctly (client_ping never does this).
+        name = _name()
+        with wp.OneShotPipeServer(name) as srv:
+            box = {}
+
+            def raw():
+                h = self.api.CreateFileW(name, wp.GENERIC_READ | wp.GENERIC_WRITE, 0, None, wp.OPEN_EXISTING,
+                                         wp.SECURITY_SQOS_PRESENT | wp.SECURITY_IMPERSONATION, None)
+                buf = ctypes.create_string_buffer(b'U', 8)
+                n = ctypes.c_ulong(0)
+                self.api.WriteFile(h, buf, 1, ctypes.byref(n), None)
+                self.api.ReadFile(h, buf, 7, ctypes.byref(n), None)
+                box['resp'] = buf.raw[:n.value]
+                self.api.CloseHandle(h)
+            t = threading.Thread(target=raw, daemon=True)
+            t.start()
+            r = srv.serve(5.0)
+            t.join(5)
         self.assertTrue(r.ok)
-        self.assertEqual(c.result.response, b'PEER_OK')
+        self.assertEqual(r.impersonation_level, wp.SecurityImpersonation)
+        self.assertEqual(box['resp'], b'PEER_OK')
+
+    def test_client_cannot_request_impersonation(self):
+        for bad in ('impersonation', 'delegation', 'IDENTIFICATION', ''):
+            with self.subTest(level=bad), self.assertRaisesRegex(ValueError, 'INVALID_LEVEL'):
+                wp.client_sqos_flags(bad)
+        flags = wp.client_sqos_flags()
+        self.assertEqual(flags, wp.SECURITY_SQOS_PRESENT | wp.SECURITY_IDENTIFICATION | wp.SECURITY_EFFECTIVE_ONLY)
+        self.assertFalse(flags & wp.SECURITY_CONTEXT_TRACKING)       # static tracking
+
+    # (i) Aegis p1 regression: a squatting pipe owner learns at most Identification
+    def test_squatter_sees_only_identification(self):
+        name = _name()
+        squat = self.api.CreateNamedPipeW(name, wp.PIPE_ACCESS_DUPLEX, 0, 255, 4096, 4096, 0, None)
+        self.assertNotIn(squat, (None, wp.INVALID_HANDLE_VALUE))
+        try:
+            client = _Client(wp.client_ping, name, response_timeout_s=1.0)
+            client.start()
+            self.api.ConnectNamedPipe(squat, None)
+            buf = ctypes.create_string_buffer(1)
+            n = ctypes.c_ulong(0)
+            self.assertTrue(self.api.ReadFile(squat, buf, 1, ctypes.byref(n), None))
+            self.assertTrue(self.api.ImpersonateNamedPipeClient(squat))
+            try:
+                tok = wp.wintypes.HANDLE()
+                self.assertTrue(self.api.OpenThreadToken(self.api.GetCurrentThread(), wp.TOKEN_QUERY, True,
+                                                         ctypes.byref(tok)))
+                lvl, _ = wp._token_info(self.api, tok, wp.TokenImpersonationLevel)
+                self.api.CloseHandle(tok)
+            finally:
+                self.assertTrue(self.api.RevertToSelf())
+            self.assertLessEqual(ctypes.c_int.from_buffer(lvl, 0).value, wp.SecurityIdentification)
+            client.join(4)
+            self.assertFalse(client.is_alive(), 'client blocked on a silent squatter')
+            self.assertEqual(client.result.reason, 'READ_TIMEOUT')
+        finally:
+            self.api.CloseHandle(squat)
+
+    # (ii) client refuses a pipe whose owner is not the expected server SID
+    def test_client_refuses_foreign_owner_without_writing(self):
+        with wp.OneShotPipeServer(_name()) as srv:
+            r, c = _serve_with_client(srv, 1.0, expected_server_sid='S-1-5-18')
+        self.assertEqual((c.result.reason, c.result.sent), ('PIPE_OWNER_MISMATCH', False))
+        self.assertEqual(c.result.pipe_owner, self.sid)
+        self.assertEqual(r.verdict, 'DENIED')
+        self.assertIn(r.reason, ('READ_FAILED', 'READ_TIMEOUT'))     # not a single byte arrived
+
+    def test_client_refuses_injected_foreign_owner(self):
+        api = wp.WinApi()
+        real = api.GetSecurityInfo
+        foreign = ctypes.c_void_p()
+        self.assertTrue(api.ConvertStringSidToSidW('S-1-5-19', ctypes.byref(foreign)))
+
+        def gsi(*a):
+            rc = real(*a)
+            if rc == 0 and a[2] == wp.OWNER_SECURITY_INFORMATION:
+                a[3]._obj.value = foreign.value          # owner pointer -> LocalService
+            return rc
+        api.GetSecurityInfo = gsi
+        try:
+            with wp.OneShotPipeServer(_name()) as srv:
+                r, c = _serve_with_client(srv, 1.0, api=api)
+        finally:
+            api.LocalFree(foreign)
+        self.assertEqual((c.result.reason, c.result.sent, c.result.pipe_owner),
+                         ('PIPE_OWNER_MISMATCH', False, 'S-1-5-19'))
+        self.assertFalse(r.ok)
+
+    def test_server_pid_is_logged_not_decisive(self):
+        api = wp.WinApi()
+
+        def fail(_h, _p):
+            ctypes.set_last_error(wp.ERROR_ACCESS_DENIED)
+            return 0
+        api.GetNamedPipeServerProcessId = fail
+        with wp.OneShotPipeServer(_name()) as srv:
+            r, c = _serve_with_client(srv, 5.0, api=api)
+        self.assertTrue(r.ok)
+        self.assertEqual((c.result.reason, c.result.server_pid), ('OK', None))
+
+    def test_client_owner_query_failure_is_typed(self):
+        api = wp.WinApi()
+        api.GetSecurityInfo = lambda *a: wp.ERROR_ACCESS_DENIED
+        with wp.OneShotPipeServer(_name()) as srv:
+            r, c = _serve_with_client(srv, 1.0, api=api)
+        self.assertEqual((c.result.reason, c.result.winerror, c.result.sent),
+                         ('PIPE_OWNER_FAILED', wp.ERROR_ACCESS_DENIED, False))
+        self.assertFalse(r.ok)
+
+    def test_reject_remote_flag_reaches_create_named_pipe(self):
+        # Tokio CVE-2023-22466 class: a later setter silently dropping the flag.
+        api = wp.WinApi()
+        seen = []
+        real = api.CreateNamedPipeW
+
+        def rec(*a):
+            seen.append(a)
+            return real(*a)
+        api.CreateNamedPipeW = rec
+        with wp.OneShotPipeServer(_name(), api=api):
+            pass
+        self.assertEqual(len(seen), 1)
+        self.assertTrue(seen[0][2] & wp.PIPE_REJECT_REMOTE_CLIENTS)
+        self.assertTrue(seen[0][1] & wp.FILE_FLAG_FIRST_PIPE_INSTANCE)
+        self.assertEqual(seen[0][3], 1)                              # nMaxInstances
 
     # (b) second instance with the same name
     def test_second_own_instance_refused(self):
@@ -162,15 +284,14 @@ class WindowsPipeRuntime(unittest.TestCase):
         finally:
             self.api.CloseHandle(squat)
 
-    # (c) impersonation level below SecurityImpersonation
-    def test_identification_level_denied(self):
+    # (iii) Identification client -> PEER_OK (W13 protocol); Anonymous below
+    def test_identification_level_peer_ok(self):
         with wp.OneShotPipeServer(_name()) as srv:
             r, c = _serve_with_client(srv, 5.0, level='identification')
-        self.assertEqual((r.verdict, r.reason), ('DENIED', 'IMPERSONATION_LEVEL_TOO_LOW'))
-        # The identification token DID reveal the same SID: only the level guard denies.
+        self.assertEqual((r.verdict, r.reason), ('PEER_OK', 'OK'))
         self.assertEqual(r.client_sid, self.sid)
         self.assertEqual(r.impersonation_level, wp.SecurityIdentification)
-        self.assertEqual(c.result.response, b'')
+        self.assertEqual((c.result.response, c.result.reason), (b'PEER_OK', 'OK'))
 
     def test_anonymous_level_denied(self):
         with wp.OneShotPipeServer(_name()) as srv:
@@ -185,7 +306,7 @@ class WindowsPipeRuntime(unittest.TestCase):
             r, c = _serve_with_client(srv, 5.0)
         self.assertEqual((r.verdict, r.reason), ('DENIED', 'SID_MISMATCH'))
         self.assertEqual(r.client_sid, self.sid)
-        self.assertEqual(r.impersonation_level, wp.SecurityImpersonation)
+        self.assertEqual(r.impersonation_level, wp.SecurityIdentification)
         self.assertEqual(c.result.response, b'')
 
     # (d) DACL read back from the live handle
@@ -434,6 +555,96 @@ class WindowsPipeFaultInjection(unittest.TestCase):
                            capture_output=True, timeout=30)
         self.assertEqual(p.returncode, wp.REVERT_FAILURE_EXIT, p.stderr)
         self.assertNotIn(b'RETURNED', p.stdout)
+
+    # W13 (Quella F2): token facts checked by the server
+    def _patch_token_info(self, api, klass, value):
+        real = api.GetTokenInformation
+
+        def gti(tok, k, buf, size, req):
+            rv = real(tok, k, buf, size, req)
+            if rv and k == klass and buf is not None:
+                if klass == wp.TokenIntegrityLevel:
+                    sid = ctypes.c_void_p.from_buffer(buf, 0).value
+                    count = api.GetSidSubAuthorityCount(sid).contents.value
+                    api.GetSidSubAuthority(sid, count - 1).contents.value = value
+                else:
+                    ctypes.c_uint32.from_buffer(buf, 0).value = value
+            return rv
+        api.GetTokenInformation = gti
+
+    def _run_with_token_fact(self, klass, value):
+        api = self._api()
+        srv = wp.OneShotPipeServer(_name(), api=api)     # own session read before patching
+        self._patch_token_info(api, klass, value)
+        with srv:
+            r, c = _serve_with_client(srv, 3.0)
+        self.assertEqual(c.result.response, b'')
+        self.assertFalse(wp.thread_is_impersonating(wp.default_api()))
+        return r
+
+    def test_low_integrity_token_denied(self):
+        r = self._run_with_token_fact(wp.TokenIntegrityLevel, 0x1000)
+        self.assertEqual((r.verdict, r.reason), ('DENIED', 'INTEGRITY_TOO_LOW'))
+
+    def test_appcontainer_token_denied(self):
+        r = self._run_with_token_fact(wp.TokenIsAppContainer, 1)
+        self.assertEqual((r.verdict, r.reason), ('DENIED', 'APPCONTAINER_CLIENT'))
+
+    def test_restricted_flag_denied(self):
+        r = self._run_with_token_fact(wp.TokenIsRestricted, 1)
+        self.assertEqual((r.verdict, r.reason), ('DENIED', 'RESTRICTED_TOKEN'))
+
+    def test_other_session_denied(self):
+        r = self._run_with_token_fact(wp.TokenSessionId, wp.own_session_id() + 7)
+        self.assertEqual((r.verdict, r.reason), ('DENIED', 'SESSION_MISMATCH'))
+
+    def test_anonymous_level_value_denied(self):
+        r = self._run_with_token_fact(wp.TokenImpersonationLevel, wp.SecurityAnonymous)
+        self.assertEqual((r.verdict, r.reason), ('DENIED', 'IMPERSONATION_LEVEL_TOO_LOW'))
+
+    def test_real_restricted_token_client_denied(self):
+        api = wp.default_api()
+        proc, rtok, imp = wp.wintypes.HANDLE(), wp.wintypes.HANDLE(), wp.wintypes.HANDLE()
+        self.assertTrue(api.OpenProcessToken(api.GetCurrentProcess(),
+                                             wp.TOKEN_QUERY | wp.TOKEN_DUPLICATE | 0x0001, ctypes.byref(proc)))
+        user = ctypes.c_void_p()
+        self.assertTrue(api.ConvertStringSidToSidW(wp.current_user_sid(), ctypes.byref(user)))
+        restrict = wp.SID_AND_ATTRIBUTES(user, 0)
+        try:
+            self.assertTrue(api.CreateRestrictedToken(proc, 0, 0, None, 0, None, 1, ctypes.byref(restrict),
+                                                      ctypes.byref(rtok)))
+            self.assertTrue(api.DuplicateTokenEx(rtok, wp.TOKEN_QUERY | wp.TOKEN_IMPERSONATE, None,
+                                                 wp.SecurityImpersonation, wp.TokenImpersonation,
+                                                 ctypes.byref(imp)))
+        finally:
+            api.LocalFree(user)
+            api.CloseHandle(proc)
+            if rtok.value:
+                api.CloseHandle(rtok)
+        out = {}
+
+        def run():
+            if not api.SetThreadToken(None, imp):
+                out['err'] = api.last_error()
+                return
+            try:
+                out['c'] = wp.client_ping(name, response_timeout_s=3.0)
+            finally:
+                if not api.RevertToSelf():
+                    os._exit(31)
+        name = _name()
+        try:
+            with wp.OneShotPipeServer(name) as srv:
+                t = threading.Thread(target=run, daemon=True)
+                t.start()
+                r = srv.serve(3.0)
+                t.join(5)
+        finally:
+            api.CloseHandle(imp)
+        self.assertNotIn('err', out)
+        self.assertIsNone(out['c'].open_error)                    # DACL admitted the restricted token
+        self.assertEqual((r.verdict, r.reason), ('DENIED', 'RESTRICTED_TOKEN'))
+        self.assertEqual(out['c'].response, b'')
 
     def test_failed_cancel_does_not_extend_deadline_unbounded(self):
         # Deadline guard turned against itself: if CancelIoEx fails, the old code
