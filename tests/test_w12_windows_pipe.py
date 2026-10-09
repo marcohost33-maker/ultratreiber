@@ -631,6 +631,28 @@ class WindowsPipeFaultInjection(unittest.TestCase):
         self.assertIsNone(srv.handle)
         wp.OneShotPipeServer(srv.name).close()                # name is free again
 
+    def test_close_before_write_gives_no_peer_ok(self):
+        # Aegis p3-2: close() landing after the abort check but before the write
+        # I/O started (CancelIoEx had nothing to cancel) still produced PEER_OK.
+        api = self._api()
+        real_ev = api.CreateEventW
+        calls = {'n': 0}
+        holder = {}
+
+        def ev(*a):
+            calls['n'] += 1
+            if calls['n'] == 3:                   # 1 connect, 2 ping read, 3 response write
+                holder['srv'].close()
+            return real_ev(*a)
+        api.CreateEventW = ev
+        with wp.OneShotPipeServer(_name(), api=api) as srv:
+            holder['srv'] = srv
+            r, c = _serve_with_client(srv, 3.0, response_timeout_s=2.0)
+        self.assertEqual(calls['n'] >= 3, True)
+        self.assertEqual(r.verdict, 'DENIED')
+        self.assertFalse(r.response_sent)
+        self.assertNotEqual(c.result.response, b'PEER_OK')
+
     # W13 (Quella F2): token facts checked by the server
     def _patch_token_info(self, api, klass, value):
         real = api.GetTokenInformation

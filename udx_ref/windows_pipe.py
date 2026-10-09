@@ -29,6 +29,7 @@ Deliberate differences (hardening, each with its own negative test):
 """
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import json
 import math
@@ -495,8 +496,14 @@ def _overlapped_io(api, handle, start, deadline: float, *, lock=None, aborted=No
         # W13 (Aegis P2-b): ``pending`` is raised BEFORE start() and lowered only
         # once completion or cancellation is confirmed. Any other exit (exception,
         # async interrupt) is handled in ``finally``: cancel, bounded grace, park.
-        pending = True
-        started = start(ctypes.byref(ov))
+        # W13 (Aegis P2-c): abort check and I/O start are atomic w.r.t. close():
+        # close() takes the same lock, so it either runs before (abort seen, no
+        # I/O) or after the I/O was issued (its CancelIoEx then hits it).
+        with (lock if lock is not None else contextlib.nullcontext()):
+            if aborted is not None and aborted():
+                return False, 0, ERROR_OPERATION_ABORTED
+            pending = True
+            started = start(ctypes.byref(ov))
         if started:
             pending = False
         else:
@@ -638,7 +645,7 @@ class OneShotPipeServer:
 
     # -- overlapped I/O with an absolute deadline --
     def _io(self, start, deadline: float, strict: bool = True):
-        return _overlapped_io(self._api, self._handle, start, deadline,
+        return _overlapped_io(self._api, self._handle, start, deadline, lock=self._lock,
                               aborted=lambda: self._abort, strict=strict)
 
     def _impersonate_and_query(self):
