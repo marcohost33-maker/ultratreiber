@@ -559,6 +559,29 @@ class WindowsPipeFaultInjection(unittest.TestCase):
         self.assertEqual(p.returncode, wp.REVERT_FAILURE_EXIT, p.stderr)
         self.assertNotIn(b'RETURNED', p.stdout)
 
+    def test_async_exception_after_impersonation_still_reverts(self):
+        # Aegis p3-1: an exception landing right after ImpersonateNamedPipeClient
+        # returned (before any try) left the thread running as the client.
+        api = self._api()
+        real_imp = api.ImpersonateNamedPipeClient
+
+        def imp_then_interrupt(h):
+            if real_imp(h):
+                raise KeyboardInterrupt('simulated async exception at call boundary')
+            return 0
+        api.ImpersonateNamedPipeClient = imp_then_interrupt
+        with wp.OneShotPipeServer(_name(), api=api) as srv:
+            c = _Client(wp.client_ping, srv.name, response_timeout_s=2.0)
+            c.start()
+            with self.assertRaises(KeyboardInterrupt):
+                srv.serve(3.0)
+            still = wp.thread_is_impersonating(wp.default_api())
+            if still:
+                wp.default_api().RevertToSelf()          # keep the test runner sane
+            c.join(5)
+        self.assertFalse(still, 'server thread kept the client identity')
+        self.assertNotEqual(c.result.response, b'PEER_OK')
+
     # W13 (Quella F2): token facts checked by the server
     def _patch_token_info(self, api, klass, value):
         real = api.GetTokenInformation

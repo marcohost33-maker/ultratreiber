@@ -619,10 +619,14 @@ class OneShotPipeServer:
         Returns (reason|None, winerror, level, sid_bytes_buffer). Only ctypes
         calls run while impersonating; RevertToSelf failure kills the process."""
         api = self._api
-        if not api.ImpersonateNamedPipeClient(self._handle):
-            return 'IMPERSONATE_FAILED', api.last_error(), None, None, {}
         reason, err, level, user_buf, facts = None, 0, None, None, {}
+        # W13 (Aegis P2-a): the impersonation call is INSIDE the try. An exception
+        # landing right after it returns can no longer skip RevertToSelf; reverting
+        # a thread that is not impersonating is harmless (serve() refuses to run
+        # on a thread that already impersonates, so no outer identity is lost).
         try:
+            if not api.ImpersonateNamedPipeClient(self._handle):
+                return 'IMPERSONATE_FAILED', api.last_error(), None, None, {}
             tok = wintypes.HANDLE()
             if not api.OpenThreadToken(api.GetCurrentThread(), TOKEN_QUERY, True, ctypes.byref(tok)):
                 reason, err = 'OPEN_THREAD_TOKEN_FAILED', api.last_error()
