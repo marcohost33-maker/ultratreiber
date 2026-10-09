@@ -784,12 +784,29 @@ class WindowsPipeFaultInjection(unittest.TestCase):
                 api.CloseHandle(rtok)
         out = {}
 
+        # Raw client with the W13 SQOS: this test isolates the SERVER guard.
+        # (client_ping under this restricted token fails closed earlier with
+        # PIPE_OWNER_FAILED/127 when GetSecurityInfo's provider DLL is not yet
+        # loaded - observed when the test runs alone.)
         def run():
             if not api.SetThreadToken(None, imp):
                 out['err'] = api.last_error()
                 return
             try:
-                out['c'] = wp.client_ping(name, response_timeout_s=3.0)
+                h = api.CreateFileW(name, wp.GENERIC_READ | wp.GENERIC_WRITE, 0, None, wp.OPEN_EXISTING,
+                                    wp.client_sqos_flags(), None)
+                if h in (None, wp.INVALID_HANDLE_VALUE):
+                    out['c'] = wp.ClientResult(api.last_error(), b'', False, 'OPEN_FAILED')
+                    return
+                try:
+                    buf = ctypes.create_string_buffer(b'U', 8)
+                    n = ctypes.c_ulong(0)
+                    sent = bool(api.WriteFile(h, buf, 1, ctypes.byref(n), None))
+                    got = ctypes.c_ulong(0)
+                    ok = api.ReadFile(h, buf, 7, ctypes.byref(got), None)
+                    out['c'] = wp.ClientResult(None, buf.raw[:got.value] if ok else b'', sent)
+                finally:
+                    api.CloseHandle(h)
             finally:
                 if not api.RevertToSelf():
                     os._exit(31)
