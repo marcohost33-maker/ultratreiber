@@ -52,6 +52,11 @@
      "datei": "udx_ref/windows_pipe.py",
      "alt": "            if self._serving:",
      "neu": "            if False:",
-     "test": "tests/test_w12_windows_pipe.py::WindowsPipeFaultInjection::test_close_during_serve_defers_release_to_serving_thread"}
+     "test": "tests/test_w12_windows_pipe.py::WindowsPipeFaultInjection::test_close_during_serve_defers_release_to_serving_thread"},
+    {"name": "W12-DK11 begrenzte Gnadenfrist nach CancelIoEx (unbegrenztes Warten)",
+     "datei": "udx_ref/windows_pipe.py",
+     "alt": "                    if api.WaitForSingleObject(event, CANCEL_GRACE_MS) != WAIT_OBJECT_0:",
+     "neu": "                    if api.WaitForSingleObject(event, INFINITE) != WAIT_OBJECT_0:",
+     "test": "tests/test_w12_windows_pipe.py::WindowsPipeFaultInjection::test_failed_cancel_does_not_extend_deadline_unbounded"}
   ]
 }

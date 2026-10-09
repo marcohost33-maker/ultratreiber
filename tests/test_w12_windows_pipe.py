@@ -435,6 +435,23 @@ class WindowsPipeFaultInjection(unittest.TestCase):
         self.assertEqual(p.returncode, wp.REVERT_FAILURE_EXIT, p.stderr)
         self.assertNotIn(b'RETURNED', p.stdout)
 
+    def test_failed_cancel_does_not_extend_deadline_unbounded(self):
+        # Deadline guard turned against itself: if CancelIoEx fails, the old code
+        # blocked in GetOverlappedResult(bWait=TRUE) until the client went away.
+        api = self._api()
+
+        def cancel_fails(_h, _ov):
+            ctypes.set_last_error(wp.ERROR_ACCESS_DENIED)
+            return 0
+        api.CancelIoEx = cancel_fails
+        for _ in range(2):            # second round must prune the first parked entry
+            with wp.OneShotPipeServer(_name(), api=api) as srv:
+                _Client(wp.client_ping, srv.name, send=False, hold_s=5.0).start()
+                r = srv.serve(0.3)
+            self.assertEqual((r.verdict, r.reason), ('DENIED', 'READ_TIMEOUT'))
+            self.assertLess(r.elapsed_s, 0.3 + wp.CANCEL_GRACE_MS / 1000 + 0.5)
+        self.assertEqual(len(wp._PARKED), 1)
+
     def test_close_during_serve_defers_release_to_serving_thread(self):
         # Regression: a concurrent close() freed the SID buffer / closed the pipe
         # while serve() still used them (observed STATUS_HEAP_CORRUPTION 0xc0000374).

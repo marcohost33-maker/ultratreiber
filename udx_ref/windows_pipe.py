@@ -394,6 +394,27 @@ class _Timeout(Exception):
     pass
 
 
+CANCEL_GRACE_MS = 1000
+# I/O whose cancellation could not be confirmed within CANCEL_GRACE_MS: the
+# kernel may still write into these objects, so they are kept alive. Entries
+# whose event has meanwhile been signalled are pruned on the next park, so the
+# list holds at most the I/Os that are concurrently stuck.
+_PARKED: list = []
+_PARKED_LOCK = threading.Lock()
+
+
+def _park(api, ov, event, keepalive) -> None:
+    with _PARKED_LOCK:
+        still = []
+        for entry in _PARKED:
+            if api.WaitForSingleObject(entry[1], 0) == WAIT_OBJECT_0:
+                api.CloseHandle(entry[1])
+            else:
+                still.append(entry)
+        still.append((ov, event, keepalive))
+        _PARKED[:] = still
+
+
 class OneShotPipeServer:
     """One pipe instance, one connection, one decision. Single use.
 
@@ -501,18 +522,28 @@ class OneShotPipeServer:
                     if waited != WAIT_TIMEOUT or remaining <= 0:
                         break
                 if waited != WAIT_OBJECT_0:
-                    # Deadline (or wait failure): cancel, then wait for the I/O to
-                    # finish so the OVERLAPPED/buffer are not freed while in use.
+                    wait_err = 0 if waited == WAIT_TIMEOUT else (api.last_error() or ERROR_OPERATION_ABORTED)
+                    # Cancel, then wait a BOUNDED grace for the I/O to finish. Never
+                    # GetOverlappedResult(bWait=TRUE): if the cancel fails, that call
+                    # blocks until the peer acts (W12 measured 5.0 s for a 0.3 s
+                    # deadline). If the I/O is still pending, the OVERLAPPED, event
+                    # and buffer (held by ``start``) are parked, never freed under
+                    # the kernel; serve()'s close() then aborts the I/O.
                     api.CancelIoEx(self._handle, ctypes.byref(ov))
-                    api.GetOverlappedResult(self._handle, ctypes.byref(ov), ctypes.byref(n), True)
-                    raise _Timeout()
+                    if api.WaitForSingleObject(event, CANCEL_GRACE_MS) != WAIT_OBJECT_0:
+                        _park(api, ov, event, start)
+                        event = None
+                    if waited == WAIT_TIMEOUT:
+                        raise _Timeout()
+                    return False, 0, wait_err
             if not api.GetOverlappedResult(self._handle, ctypes.byref(ov), ctypes.byref(n), False):
                 return False, n.value, api.last_error()
             if time.monotonic() >= deadline:
                 raise _Timeout()                          # completed, but too late: strict
             return True, n.value, 0
         finally:
-            api.CloseHandle(event)
+            if event is not None:
+                api.CloseHandle(event)
 
     def _impersonate_and_query(self):
         """Impersonate, read TokenImpersonationLevel + TokenUser, revert.
