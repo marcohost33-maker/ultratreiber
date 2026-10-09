@@ -1,0 +1,74 @@
+{
+  "repo": "C:/Users/marco/dev/udx",
+  "test_befehl": [
+    "python",
+    "-m",
+    "pytest"
+  ],
+  "timeout_s": 120,
+  "faelle": [
+    {
+      "name": "W13-CO W12-DK2 Token-SID-Vergleich (EqualSid) entfernt",
+      "datei": "udx_ref/windows_pipe.py",
+      "alt": "            if not api.EqualSid(client_sid, self._expected_bin):",
+      "neu": "            if False:",
+      "test": "tests/test_w12_windows_pipe.py::WindowsPipeRuntime::test_sid_mismatch_denied"
+    },
+    {
+      "name": "W13-CO W12-DK5 FILE_FLAG_FIRST_PIPE_INSTANCE entfernt (Squatter)",
+      "datei": "udx_ref/windows_pipe.py",
+      "alt": "                                     PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,",
+      "neu": "                                     PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,",
+      "test": "tests/test_w12_windows_pipe.py::WindowsPipeRuntime::test_squatted_name_refused_by_first_pipe_instance"
+    },
+    {
+      "name": "W13-CO W12-DK6 PIPE_REJECT_REMOTE_CLIENTS entfernt (SMB-Loopback)",
+      "datei": "udx_ref/windows_pipe.py",
+      "alt": "            pipe_mode = PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS",
+      "neu": "            pipe_mode = PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT",
+      "test": "tests/test_w12_windows_pipe.py::WindowsPipeRuntime::test_smb_loopback_client_rejected"
+    },
+    {
+      "name": "W13-CO W12-DK7 RevertToSelf-Fehlschlag ohne Prozessabbruch",
+      "datei": "udx_ref/windows_pipe.py",
+      "alt": "                _die_on_revert_failure()",
+      "neu": "                pass",
+      "test": "tests/test_w12_windows_pipe.py::WindowsPipeFaultInjection::test_revert_failure_terminates_process"
+    },
+    {
+      "name": "W13-CO W12-DK8 Vorbedingung: Server-Thread impersoniert bereits",
+      "datei": "udx_ref/windows_pipe.py",
+      "alt": "            if thread_is_impersonating(api):",
+      "neu": "            if False:",
+      "test": "tests/test_w12_windows_pipe.py::WindowsPipeRuntime::test_server_thread_already_impersonating_refuses"
+    },
+    {
+      "name": "W13-CO W12-DK9 DurableGrantStore Nicht-POSIX-Sperre (B1)",
+      "datei": "udx_ref/durable_grants.py",
+      "alt": "    if os.name != 'posix' or not hasattr(os, 'getuid'):",
+      "neu": "    if False:",
+      "test": "tests/test_w12_platform_guards.py::DurableStoreNonPosixDenied::test_relative_path_also_denied_before_any_io"
+    },
+    {
+      "name": "W13-CO W12-DK10 close() waehrend serve() gibt Ressourcen nicht unter laufender I/O frei",
+      "datei": "udx_ref/windows_pipe.py",
+      "alt": "            if self._serving:",
+      "neu": "            if False:",
+      "test": "tests/test_w12_windows_pipe.py::WindowsPipeFaultInjection::test_close_during_serve_defers_release_to_serving_thread"
+    },
+    {
+      "name": "W13-CO W12-DK4 absolute Deadline entfernt (Wait INFINITE)",
+      "datei": "udx_ref/windows_pipe.py",
+      "alt": "                ms = 0 if remaining <= 0 else min(int(math.ceil(remaining * 1000)), INFINITE - 1)",
+      "neu": "                ms = INFINITE",
+      "test": "tests/test_w12_windows_pipe.py::WindowsPipeRuntime::test_silent_client_hits_deadline_without_hang"
+    },
+    {
+      "name": "W13-CO W12-DK11 begrenzte Gnadenfrist nach CancelIoEx (unbegrenztes Warten)",
+      "datei": "udx_ref/windows_pipe.py",
+      "alt": "                if api.WaitForSingleObject(event, CANCEL_GRACE_MS) != WAIT_OBJECT_0:",
+      "neu": "                if api.WaitForSingleObject(event, INFINITE) != WAIT_OBJECT_0:",
+      "test": "tests/test_w12_windows_pipe.py::WindowsPipeFaultInjection::test_failed_cancel_does_not_extend_deadline_unbounded"
+    }
+  ]
+}
