@@ -47,6 +47,11 @@
      "datei": "udx_ref/durable_grants.py",
      "alt": "    if os.name != 'posix' or not hasattr(os, 'getuid'):",
      "neu": "    if False:",
-     "test": "tests/test_w12_platform_guards.py::DurableStoreNonPosixDenied::test_relative_path_also_denied_before_any_io"}
+     "test": "tests/test_w12_platform_guards.py::DurableStoreNonPosixDenied::test_relative_path_also_denied_before_any_io"},
+    {"name": "W12-DK10 close() waehrend serve() gibt Ressourcen nicht unter laufender I/O frei",
+     "datei": "udx_ref/windows_pipe.py",
+     "alt": "            if self._serving:",
+     "neu": "            if False:",
+     "test": "tests/test_w12_windows_pipe.py::WindowsPipeFaultInjection::test_close_during_serve_defers_release_to_serving_thread"}
   ]
 }

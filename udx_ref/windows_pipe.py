@@ -35,6 +35,7 @@ import math
 import os
 import re
 import sys
+import threading
 import time
 from dataclasses import asdict, dataclass
 
@@ -402,6 +403,10 @@ class OneShotPipeServer:
     """
 
     def __init__(self, name: str = DEFAULT_PIPE_NAME, *, expected_sid: str | None = None, api=None):
+        self._lock = threading.Lock()
+        self._serving = False
+        self._abort = False
+        self._expected_bin = ctypes.c_void_p()
         self._api = api or default_api()
         self.name = validate_pipe_name(name)
         self._handle = None
@@ -440,14 +445,24 @@ class OneShotPipeServer:
         return self._handle
 
     def close(self) -> None:
+        """Idempotent and thread-safe. While serve() runs, close() only cancels
+        its pending I/O; serve() releases handle and SID buffer in its own
+        finally, so nothing is freed under a running operation (W12: a
+        concurrent close previously caused STATUS_HEAP_CORRUPTION)."""
         api = self._api
-        if self._handle is not None:
-            api.DisconnectNamedPipe(self._handle)
-            api.CloseHandle(self._handle)
-            self._handle = None
-        if self._expected_bin.value:
-            api.LocalFree(self._expected_bin)
-            self._expected_bin = ctypes.c_void_p()
+        with self._lock:
+            if self._serving:
+                self._abort = True
+                if self._handle is not None:
+                    api.CancelIoEx(self._handle, None)
+                return
+            handle, self._handle = self._handle, None
+            sid, self._expected_bin = self._expected_bin, ctypes.c_void_p()
+        if handle is not None:
+            api.DisconnectNamedPipe(handle)
+            api.CloseHandle(handle)
+        if sid.value:
+            api.LocalFree(sid)
 
     def __enter__(self):
         return self
@@ -460,6 +475,8 @@ class OneShotPipeServer:
         """Run one overlapped operation; return (ok, nbytes, winerror).
         Raises _Timeout after cancelling and draining the I/O."""
         api = self._api
+        if self._abort:                                   # close() requested meanwhile
+            return False, 0, ERROR_OPERATION_ABORTED
         event = api.CreateEventW(None, True, False, None)
         if not event:
             return False, 0, api.last_error()
@@ -526,9 +543,11 @@ class OneShotPipeServer:
 
     def serve(self, deadline_s: float) -> PeerResult:
         budget = validate_deadline(deadline_s)
-        if self._used:
-            raise RuntimeError('SERVER_SINGLE_USE')
-        self._used = True
+        with self._lock:
+            if self._used:
+                raise RuntimeError('SERVER_SINGLE_USE')
+            self._used = True
+            self._serving = True
         t0 = time.monotonic()
         deadline = t0 + budget
         api = self._api
@@ -606,6 +625,8 @@ class OneShotPipeServer:
             return PeerResult('PEER_OK', 'OK', None, state['pid'], state['sid'], level,
                               True, drained, time.monotonic() - t0)
         finally:
+            with self._lock:
+                self._serving = False
             self.close()
 
 

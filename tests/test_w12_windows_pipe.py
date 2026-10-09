@@ -106,7 +106,8 @@ class WindowsPipeRuntime(unittest.TestCase):
         name = _name()
         with wp.OneShotPipeServer(name) as srv:
             proc = subprocess.Popen([sys.executable, '-m', 'udx_ref.windows_pipe', 'client', '--name', name],
-                                    cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                    cwd=REPO, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
             r = srv.serve(10.0)
             out, err = proc.communicate(timeout=20)
         self.assertEqual(proc.returncode, 0, err)
@@ -121,7 +122,8 @@ class WindowsPipeRuntime(unittest.TestCase):
     def test_cli_server_exit_codes_match_cpp(self):
         name = _name()
         proc = subprocess.Popen([sys.executable, '-m', 'udx_ref.windows_pipe', 'server', '--name', name,
-                                 '--deadline', '10'], cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                 '--deadline', '10'], cwd=REPO, stdin=subprocess.DEVNULL,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         try:
             self.assertIn('listening', proc.stdout.readline().decode())
             c = wp.client_ping(name)
@@ -428,10 +430,43 @@ class WindowsPipeFaultInjection(unittest.TestCase):
             'r = srv.serve(5.0)\n'
             'print("RETURNED", r.verdict, flush=True)\n'
         )
-        p = subprocess.run([sys.executable, '-c', script, _name()], cwd=REPO,
+        p = subprocess.run([sys.executable, '-c', script, _name()], cwd=REPO, stdin=subprocess.DEVNULL,
                            capture_output=True, timeout=30)
         self.assertEqual(p.returncode, wp.REVERT_FAILURE_EXIT, p.stderr)
         self.assertNotIn(b'RETURNED', p.stdout)
+
+    def test_close_during_serve_defers_release_to_serving_thread(self):
+        # Regression: a concurrent close() freed the SID buffer / closed the pipe
+        # while serve() still used them (observed STATUS_HEAP_CORRUPTION 0xc0000374).
+        api = self._api()
+        closes, frees = [], []
+        real_close, real_free = api.CloseHandle, api.LocalFree
+
+        def rec_close(h):
+            closes.append((h, threading.get_ident()))
+            return real_close(h)
+
+        def rec_free(p):
+            v = p.value if isinstance(p, ctypes.c_void_p) else ctypes.cast(p, ctypes.c_void_p).value
+            frees.append(v)
+            return real_free(p)
+        api.CloseHandle, api.LocalFree = rec_close, rec_free
+        srv = wp.OneShotPipeServer(_name(), api=api)
+        pipe_handle = srv.handle
+        _Client(wp.client_ping, srv.name, send=False, hold_s=1.5).start()
+        box = {}
+        t = threading.Thread(target=lambda: box.update(tid=threading.get_ident(), r=srv.serve(5.0)),
+                             daemon=True)
+        t.start()
+        time.sleep(0.3)                       # serve() is now blocked in the 1-byte read
+        srv.close()
+        t.join(2.0)
+        self.assertFalse(t.is_alive(), 'serve() did not return after concurrent close()')
+        self.assertEqual(box['r'].verdict, 'DENIED')
+        self.assertEqual([tid for h, tid in closes if h == pipe_handle], [box['tid']])
+        released = [v for v in frees if v]
+        self.assertEqual(len(released), len(set(released)), 'double LocalFree')
+        srv.close()                           # idempotent afterwards
 
     def test_single_use_and_invalid_override(self):
         with wp.OneShotPipeServer(_name()) as srv:
