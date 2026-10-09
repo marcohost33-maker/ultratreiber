@@ -48,6 +48,8 @@ class PortalClockFalsification(unittest.TestCase):
         with self.assertRaisesRegex(PortalFlowError,'CLOCK_FAILED'):
             PortalRequest(caller_unique=':1.22',portal_owner_unique=':1.23',clock=bad)
 
+@unittest.skipUnless(os.name == 'posix' and hasattr(os, 'getuid'),
+                     'POSIX uid/mode store checks required (os.getuid, fcntl)')
 class ThreadSafety(unittest.TestCase):
     def test_single_connection_concurrent_grant_claim(self):
         with tempfile.TemporaryDirectory() as directory:

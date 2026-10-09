@@ -12,6 +12,11 @@ from udx_ref.portal_request import PortalRequest,PortalFlowError
 from udx_ref.authorized_handoff import perform_trusted_handoff
 from udx_ref.credentialed_handoff import available, credentialed_pair, process_one
 
+# W12: DurableGrantStore relies on POSIX owner/mode checks (os.getuid, st_uid, 0o077)
+# and fcntl-based FD reading; on Windows these tests crashed in setUp instead of skipping.
+POSIX_STORE = os.name == 'posix' and hasattr(os, 'getuid')
+
+@unittest.skipUnless(POSIX_STORE, 'POSIX uid/mode store checks required (os.getuid, fcntl)')
 class DurableGrantTests(unittest.TestCase):
     def setUp(self):
         self.root=tempfile.TemporaryDirectory(prefix='udx-w10-')

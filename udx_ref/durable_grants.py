@@ -22,6 +22,11 @@ _STATES = frozenset(('ISSUED','INFLIGHT','COMPLETED','REVOKED','REVOKED_INFLIGHT
 
 
 def _secure_store(path: str):
+    # W12: the owner/mode checks below are POSIX semantics. On Windows os.getuid is
+    # absent and st_mode does not express a DACL, so deny with a typed reason instead
+    # of an AttributeError (or a vacuous check on an emulated mode).
+    if os.name != 'posix' or not hasattr(os, 'getuid'):
+        raise GrantDenied('UNSUPPORTED_PLATFORM')
     p = Path(path)
     if not p.is_absolute() or p.name in ('', '.', '..'):
         raise GrantDenied('ABSOLUTE_STORE_PATH_REQUIRED')
