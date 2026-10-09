@@ -55,9 +55,11 @@ int wmain() {
     LPWSTR sid_text = nullptr;
     if (!ConvertSidToStringSidW(server_sid, &sid_text)) return 12;
     // Protected DACL: LocalSystem and the exact current user SID. No Everyone.
-    std::wstring sddl = L"D:P(A;;GA;;;SY)(A;;GA;;;";
+    // W13 (UNCOMPILED): user ACE GRGW (least privilege) + Medium label NW|NR,
+    // so a Low-IL process cannot even open the single instance for reading.
+    std::wstring sddl = L"D:P(A;;GA;;;SY)(A;;GRGW;;;";
     sddl += sid_text;
-    sddl += L")";
+    sddl += L")S:(ML;;NWNR;;;ME)";
     LocalFree(sid_text);
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &sd, nullptr)) return 13;

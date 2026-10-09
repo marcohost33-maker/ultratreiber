@@ -8,6 +8,7 @@ local SMB redirector (\\\\localhost\\pipe\\...), not through a second machine.
 from __future__ import annotations
 
 import ctypes
+import gc
 import json
 import os
 import pathlib
@@ -17,12 +18,16 @@ import threading
 import time
 import unittest
 import uuid
+from unittest import mock
 
 from udx_ref import windows_pipe as wp
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 IS_WINDOWS = sys.platform == 'win32'
 FILE_ALL_ACCESS = 0x001F01FF
+FILE_GENERIC_READ_WRITE = 0x0012019F
+WRITE_DAC = 0x00040000
+WRITE_OWNER = 0x00080000
 BS = chr(92)
 
 
@@ -60,9 +65,11 @@ class PortableParityAndValidation(unittest.TestCase):
     CPP = (REPO / 'windows' / 'udx_sid_probe.cpp').read_text()
 
     def test_sddl_prefix_identical_to_cpp(self):
-        self.assertIn('std::wstring sddl = L"D:P(A;;GA;;;SY)(A;;GA;;;";', self.CPP)
+        # W13: GRGW + Medium NW|NR label in both the C++ source and the port.
+        self.assertIn('std::wstring sddl = L"D:P(A;;GA;;;SY)(A;;GRGW;;;";', self.CPP)
+        self.assertIn('sddl += L")S:(ML;;NWNR;;;ME)";', self.CPP)
         sid = 'S-1-5-21-1-2-3-1001'
-        self.assertEqual(wp.build_sddl(sid), 'D:P(A;;GA;;;SY)(A;;GA;;;' + sid + ')')
+        self.assertEqual(wp.build_sddl(sid), 'D:P(A;;GA;;;SY)(A;;GRGW;;;' + sid + ')S:(ML;;NWNR;;;ME)')
 
     def test_constants_identical_to_cpp(self):
         self.assertIn('UDX_W4_SID_PROBE', self.CPP)
@@ -82,7 +89,8 @@ class PortableParityAndValidation(unittest.TestCase):
                 wp.build_sddl(bad)
 
     def test_deadline_validation(self):
-        for bad in [0, -1, 0.0, float('nan'), float('inf'), True, False, '1', None, 300.0001]:
+        for bad in [0, -1, 0.0, float('nan'), float('inf'), True, False, '1', None, 300.0001,
+                    10 ** 400, -10 ** 400]:                      # W13: OverflowError -> ValueError
             with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'INVALID_DEADLINE'):
                 wp.validate_deadline(bad)
         self.assertEqual(wp.validate_deadline(300), 300.0)
@@ -305,7 +313,7 @@ class WindowsPipeRuntime(unittest.TestCase):
 
     def test_sid_mismatch_denied(self):
         # DACL still admits the current user; the expected SID is narrowed to SYSTEM.
-        with wp.OneShotPipeServer(_name(), expected_sid='S-1-5-18') as srv:
+        with wp.OneShotPipeServer(_name(), expected_sid='S-1-5-18', allow_foreign_expected_sid=True) as srv:
             r, c = _serve_with_client(srv, 5.0)
         self.assertEqual((r.verdict, r.reason), ('DENIED', 'SID_MISMATCH'))
         self.assertEqual(r.client_sid, self.sid)
@@ -319,9 +327,13 @@ class WindowsPipeRuntime(unittest.TestCase):
         self.assertTrue(info.protected)
         self.assertEqual(len(info.aces), 2)
         self.assertEqual([a.sid for a in info.aces], ['S-1-5-18', self.sid])
-        for a in info.aces:
-            self.assertEqual((a.ace_type, a.ace_flags, a.mask), (wp.ACCESS_ALLOWED_ACE_TYPE, 0, FILE_ALL_ACCESS))
-        self.assertEqual(info.sddl, 'D:P(A;;FA;;;SY)(A;;FA;;;' + self.sid + ')')
+        # W13: SY keeps FILE_ALL_ACCESS (C++ parity); the user gets
+        # FILE_GENERIC_READ|FILE_GENERIC_WRITE only - no WRITE_DAC/WRITE_OWNER.
+        self.assertEqual([(a.ace_type, a.ace_flags, a.mask) for a in info.aces],
+                         [(wp.ACCESS_ALLOWED_ACE_TYPE, 0, FILE_ALL_ACCESS),
+                          (wp.ACCESS_ALLOWED_ACE_TYPE, 0, FILE_GENERIC_READ_WRITE)])
+        self.assertFalse(info.aces[1].mask & (WRITE_DAC | WRITE_OWNER))
+        self.assertEqual(info.sddl, 'D:P(A;;FA;;;SY)(A;;0x12019f;;;' + self.sid + ')S:AI(ML;;NWNR;;;ME)')
 
     # (e) absolute deadline
     def test_silent_client_hits_deadline_without_hang(self):
@@ -420,6 +432,46 @@ class WindowsPipeRuntime(unittest.TestCase):
                 api.LocalFree(sid)
             api.CloseHandle(proc)
             self._dup = dup
+
+    def test_low_integrity_read_only_open_denied(self):
+        # Aegis F-LOWIL: with only the implicit label (no-write-up), a Low-IL
+        # process could open GENERIC_READ and occupy the single instance. The
+        # explicit NW|NR label closes that; a Medium read-only open still works.
+        api = self.api
+        results = {}
+        for label, il in (('medium', None), ('low', 'S-1-16-4096')):
+            with wp.OneShotPipeServer(_name()) as srv:
+                proc, dup = wp.wintypes.HANDLE(), wp.wintypes.HANDLE()
+                self.assertTrue(api.OpenProcessToken(api.GetCurrentProcess(), wp.TOKEN_QUERY | wp.TOKEN_DUPLICATE,
+                                                     ctypes.byref(proc)))
+                self.assertTrue(api.DuplicateTokenEx(proc, wp.TOKEN_QUERY | wp.TOKEN_IMPERSONATE |
+                                                     wp.TOKEN_ADJUST_DEFAULT, None, wp.SecurityImpersonation,
+                                                     wp.TokenImpersonation, ctypes.byref(dup)))
+                api.CloseHandle(proc)
+                if il:
+                    sid = ctypes.c_void_p()
+                    self.assertTrue(api.ConvertStringSidToSidW(il, ctypes.byref(sid)))
+                    lab = wp.SID_AND_ATTRIBUTES(sid, wp.SE_GROUP_INTEGRITY)
+                    self.assertTrue(api.SetTokenInformation(dup, wp.TokenIntegrityLevel, ctypes.byref(lab),
+                                                            ctypes.sizeof(lab) + 12))
+                    api.LocalFree(sid)
+
+                def run():
+                    self.assertTrue(api.SetThreadToken(None, dup))
+                    try:
+                        h = api.CreateFileW(srv.name, wp.GENERIC_READ, 0, None, wp.OPEN_EXISTING, 0, None)
+                        ok = h not in (None, wp.INVALID_HANDLE_VALUE)
+                        results[label] = None if ok else api.last_error()
+                        if ok:
+                            api.CloseHandle(h)
+                    finally:
+                        if not api.RevertToSelf():
+                            os._exit(31)
+                t = threading.Thread(target=run, daemon=True)
+                t.start()
+                t.join(5)
+                api.CloseHandle(dup)
+        self.assertEqual(results, {'medium': None, 'low': wp.ERROR_ACCESS_DENIED})
 
     def test_low_integrity_client_cannot_open_pipe(self):
         for il, expect_ok in ((None, True), ('S-1-16-4096', False)):
@@ -792,6 +844,79 @@ class WindowsPipeFaultInjection(unittest.TestCase):
         released = [v for v in frees if v]
         self.assertEqual(len(released), len(set(released)), 'double LocalFree')
         srv.close()                           # idempotent afterwards
+
+    def test_late_complete_write_counts_as_sent(self):
+        # Aegis p3-3: write completed, but serve() re-checked after the deadline
+        # and reported DENIED/WRITE_TIMEOUT while the client held PEER_OK.
+        api = self._api()
+        real_w = api.WriteFile
+
+        def slow_write(*a):
+            rv = real_w(*a)
+            time.sleep(1.3)
+            return rv
+        api.WriteFile = slow_write
+        with wp.OneShotPipeServer(_name(), api=api) as srv:
+            r, c = _serve_with_client(srv, 1.0)
+        self.assertEqual(c.result.response, b'PEER_OK')
+        self.assertEqual((r.verdict, r.response_sent), ('PEER_OK', True))
+
+    def test_sid_text_failure_is_typed_denial(self):
+        # Aegis p3-4: ConvertSidToStringSidW failing after the token query raised
+        # OSError out of serve() instead of a typed DENIED.
+        api = self._api()
+        real_c = api.ConvertSidToStringSidW
+        armed = {'on': False}
+
+        def conv(*a):
+            if armed['on']:
+                ctypes.set_last_error(8)
+                return 0
+            return real_c(*a)
+        api.ConvertSidToStringSidW = conv
+        with wp.OneShotPipeServer(_name(), api=api) as srv:
+            armed['on'] = True
+            r, c = _serve_with_client(srv, 3.0)
+        self.assertEqual((r.verdict, r.reason, r.winerror), ('DENIED', 'SID_TEXT_FAILED', 8))
+        self.assertEqual(c.result.response, b'')
+
+    def test_foreign_expected_sid_requires_flag(self):
+        # Aegis P3-d: 'S-1-5-18' would switch acceptance to SYSTEM (DACL has SY).
+        with self.assertRaisesRegex(ValueError, 'FOREIGN_EXPECTED_SID_REQUIRES_FLAG'):
+            wp.OneShotPipeServer(_name(), expected_sid='S-1-5-18')
+        with self.assertRaisesRegex(ValueError, 'INVALID_FLAG'):
+            wp.OneShotPipeServer(_name(), expected_sid='S-1-5-18', allow_foreign_expected_sid=1)
+        with wp.OneShotPipeServer(_name(), expected_sid=wp.current_user_sid()) as srv:
+            self.assertEqual(srv.expected_sid, srv.server_sid)
+
+    def test_no_allocation_leak_when_server_sid_text_invalid(self):
+        # Aegis P3-f: build_sddl(server_sid) ran after ConvertStringSidToSidW.
+        api = self._api()
+        allocs, frees = [], []
+        real_conv, real_free = api.ConvertStringSidToSidW, api.LocalFree
+
+        def conv(text, out):
+            rv = real_conv(text, out)
+            if rv:
+                allocs.append(out._obj.value)
+            return rv
+
+        def free(p):
+            frees.append(p.value if isinstance(p, ctypes.c_void_p) else p)
+            return real_free(p)
+        api.ConvertStringSidToSidW, api.LocalFree = conv, free
+        with mock.patch.object(wp, 'current_user_sid', return_value='S-1-0x5-1'):
+            with self.assertRaisesRegex(ValueError, 'INVALID_SID_TEXT'):
+                wp.OneShotPipeServer(_name(), expected_sid='S-1-5-18', allow_foreign_expected_sid=True, api=api)
+        self.assertTrue(set(allocs) <= set(frees), (allocs, frees))
+
+    def test_dropped_server_releases_pipe_name(self):
+        # Aegis P3-f: without close() the handle (and the name) stayed alive.
+        name = _name()
+        srv = wp.OneShotPipeServer(name)
+        del srv
+        gc.collect()
+        wp.OneShotPipeServer(name).close()        # FIRST_PIPE_INSTANCE would refuse a live name
 
     def test_single_use_and_invalid_override(self):
         with wp.OneShotPipeServer(_name()) as srv:

@@ -1,12 +1,20 @@
-"""W12 Windows named-pipe peer-SID probe -- Python/ctypes runtime port of
+"""W12/W13 Windows named-pipe peer-SID probe -- Python/ctypes runtime port of
 ``windows/udx_sid_probe.cpp`` (W4 C++ candidate, still uncompiled).
 
 RESEARCH ONLY. NOT a UDX broker, no OS action, no request/response protocol.
 The only positive observable is the fixed 7-byte handshake ``PEER_OK``.
 
+W13 (after the Aegis audit) supersedes parts of the W12 list below:
+  * protocol inverted: the client grants only Identification (+EFFECTIVE_ONLY,
+    static tracking) and checks the pipe OWNER before its first write; the
+    server accepts level >= Identification (the W12 ">= Impersonation" guard is
+    gone) and checks integrity/AppContainer/restricted/session from the token
+  * DACL user ACE GRGW instead of GA, explicit Medium label NW+NR (build_sddl)
+  * a fully written response counts as sent; every Win32 failure stays typed
+
 What is reproduced 1:1 from the C++ candidate (see docs/W12_WINDOWS_LANE.md):
   * protected DACL ``D:P(A;;GA;;;SY)(A;;GA;;;<current user SID>)`` built via
-    ConvertStringSecurityDescriptorToSecurityDescriptorW
+    ConvertStringSecurityDescriptorToSecurityDescriptorW (W13: see above)
   * CreateNamedPipeW with FILE_FLAG_FIRST_PIPE_INSTANCE and
     PIPE_REJECT_REMOTE_CLIENTS, one instance, 4096/4096 buffers, byte mode
   * read exactly one byte BEFORE ImpersonateNamedPipeClient
@@ -17,9 +25,8 @@ What is reproduced 1:1 from the C++ candidate (see docs/W12_WINDOWS_LANE.md):
 Deliberate differences (hardening, each with its own negative test):
   * absolute deadline over connect+read+write+drain via overlapped I/O and
     CancelIoEx (C++: blocking calls, no deadline)
-  * explicit TokenImpersonationLevel >= SecurityImpersonation check. The C++
-    candidate does not check the level; an Identification-level token still
-    answers TokenUser, so the C++ server would accept such a client.
+  * explicit TokenImpersonationLevel check (W12: >= Impersonation; W13 revised
+    to >= Identification, which is all an identity check needs)
   * GetNamedPipeClientProcessId is recorded; its failure denies
   * refuse to run on a thread that is already impersonating (RevertToSelf would
     otherwise drop that outer identity)
@@ -129,21 +136,35 @@ class PipeSetupError(OSError):
     """Pipe could not be created; carries the Win32 error code."""
 
 
-def build_sddl(sid_text: str) -> str:
-    """Exactly the C++ string: ``D:P(A;;GA;;;SY)(A;;GA;;;`` + sid + ``)``.
-
-    The SID text is validated first so no SDDL fragment (e.g. ``)(A;;GA;;;WD``)
-    can be smuggled into the descriptor.
-    """
+def validate_sid_text(sid_text) -> str:
     if type(sid_text) is not str or not _SID_TEXT.fullmatch(sid_text):
         raise ValueError('INVALID_SID_TEXT')
-    return 'D:P(A;;GA;;;SY)(A;;GA;;;' + sid_text + ')'
+    return sid_text
+
+
+def build_sddl(sid_text: str) -> str:
+    """W13: ``D:P(A;;GA;;;SY)(A;;GRGW;;;<sid>)S:(ML;;NWNR;;;ME)``.
+
+    * user ACE GRGW instead of GA (Aegis P3-e: no WRITE_DAC/WRITE_OWNER for the
+      client). GW still contains FILE_APPEND_DATA == FILE_CREATE_PIPE_INSTANCE;
+      moot here because the pipe has exactly one instance (FIRST_PIPE_INSTANCE,
+      nMaxInstances=1).
+    * SY ACE unchanged (C++ parity; not testable as a client on this host).
+    * explicit Medium mandatory label No-Write-Up + No-Read-Up: measured, a
+      Low-IL process can no longer open the pipe even for reading, i.e. it cannot
+      occupy the single instance (Aegis F-LOWIL).
+    The SID text is validated first so no SDDL fragment can be smuggled in.
+    """
+    return 'D:P(A;;GA;;;SY)(A;;GRGW;;;' + validate_sid_text(sid_text) + ')S:(ML;;NWNR;;;ME)'
 
 
 def validate_deadline(deadline_s) -> float:
     if type(deadline_s) not in (int, float):          # rejects bool, str, None
         raise ValueError('INVALID_DEADLINE')
-    value = float(deadline_s)
+    try:
+        value = float(deadline_s)
+    except OverflowError:                             # e.g. 10**400 (Aegis P3-g)
+        raise ValueError('INVALID_DEADLINE') from None
     if not math.isfinite(value) or value <= 0 or value > MAX_DEADLINE_S:
         raise ValueError('INVALID_DEADLINE')
     return value
@@ -416,7 +437,8 @@ def inspect_dacl(handle, api=None) -> DaclInfo:
     api = api or default_api()
     dacl = ctypes.c_void_p()
     sd = ctypes.c_void_p()
-    rc = api.GetSecurityInfo(handle, SE_KERNEL_OBJECT, DACL_SECURITY_INFORMATION,
+    info_flags = DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION
+    rc = api.GetSecurityInfo(handle, SE_KERNEL_OBJECT, info_flags,
                              None, None, ctypes.byref(dacl), None, ctypes.byref(sd))
     if rc != 0:
         raise OSError(rc, 'GetSecurityInfo failed')
@@ -437,7 +459,7 @@ def inspect_dacl(handle, api=None) -> DaclInfo:
                 aces.append(AceInfo(ace.AceType, ace.AceFlags, ace.Mask, sid_text))
         text = wintypes.LPWSTR()
         if not api.ConvertSecurityDescriptorToStringSecurityDescriptorW(
-                sd, SDDL_REVISION_1, DACL_SECURITY_INFORMATION, ctypes.byref(text), None):
+                sd, SDDL_REVISION_1, info_flags, ctypes.byref(text), None):
             raise OSError(api.last_error(), 'ConvertSecurityDescriptorToStringSecurityDescriptorW failed')
         try:
             sddl = text.value
@@ -559,30 +581,38 @@ class OneShotPipeServer:
     """One pipe instance, one connection, one decision. Single use.
 
     ``expected_sid`` defaults to the current process user SID (C++ semantics).
-    The DACL is ALWAYS SY + current process user; an override therefore can
-    only narrow acceptance (or deny everything), never widen it.
+    Correction of the W12 docstring (Aegis P3-d): an override does NOT only
+    narrow. The DACL admits SY and the server user; ``expected_sid='S-1-5-18'``
+    would switch acceptance from the user to SYSTEM. Any override that differs
+    from the server user SID therefore requires
+    ``allow_foreign_expected_sid=True`` (used by the SID-mismatch tests).
     """
 
-    def __init__(self, name: str = DEFAULT_PIPE_NAME, *, expected_sid: str | None = None, api=None):
+    def __init__(self, name: str = DEFAULT_PIPE_NAME, *, expected_sid: str | None = None,
+                 allow_foreign_expected_sid: bool = False, api=None):
         self._lock = threading.RLock()       # re-entrant: close() may run inside a locked region
         self._serving = False
         self._abort = False
         self._expected_bin = ctypes.c_void_p()
-        self._api = api or default_api()
-        self.name = validate_pipe_name(name)
         self._handle = None
         self._used = False
+        self._api = api or default_api()
+        self.name = validate_pipe_name(name)
+        if type(allow_foreign_expected_sid) is not bool:
+            raise ValueError('INVALID_FLAG')
         api = self._api
-        self.server_sid = current_user_sid(api)
+        # Everything that can raise without owning a resource happens first
+        # (Aegis P3-f: build_sddl(server_sid) used to run after the allocation).
+        self.server_sid = validate_sid_text(current_user_sid(api))
         self._own_session = own_session_id(api)
-        self.expected_sid = self.server_sid if expected_sid is None else expected_sid
-        build_sddl(self.expected_sid)                    # syntax check of override
-        self._expected_bin = ctypes.c_void_p()
-        if not api.ConvertStringSidToSidW(self.expected_sid, ctypes.byref(self._expected_bin)):
-            raise ValueError('INVALID_EXPECTED_SID')
+        self.expected_sid = self.server_sid if expected_sid is None else validate_sid_text(expected_sid)
+        if self.expected_sid != self.server_sid and not allow_foreign_expected_sid:
+            raise ValueError('FOREIGN_EXPECTED_SID_REQUIRES_FLAG')
         self.sddl = build_sddl(self.server_sid)
         sd = ctypes.c_void_p()
         try:
+            if not api.ConvertStringSidToSidW(self.expected_sid, ctypes.byref(self._expected_bin)):
+                raise ValueError('INVALID_EXPECTED_SID')
             if not api.ConvertStringSecurityDescriptorToSecurityDescriptorW(
                     self.sddl, SDDL_REVISION_1, ctypes.byref(sd), None):
                 raise PipeSetupError(api.last_error(), 'ConvertStringSecurityDescriptorToSecurityDescriptorW failed')
@@ -595,12 +625,22 @@ class OneShotPipeServer:
                 raise PipeSetupError(api.last_error(), 'CreateNamedPipeW failed')
             self._handle = h
         except BaseException:
-            api.LocalFree(self._expected_bin)
+            if self._expected_bin.value:
+                api.LocalFree(self._expected_bin)
             self._expected_bin = ctypes.c_void_p()
             raise
         finally:
             if sd.value:
                 api.LocalFree(sd)
+
+    def __del__(self):
+        # Aegis P3-f: a server dropped without close() must not keep the pipe
+        # handle (and with it the name) alive. Never raises from a finalizer.
+        try:
+            if not getattr(self, '_serving', True):
+                self.close()
+        except Exception:
+            pass
 
     @property
     def handle(self):
@@ -737,7 +777,10 @@ class OneShotPipeServer:
             client_sid = _sid_ptr_from_token_user(api, user_buf)
             if client_sid is None:
                 return deny('INVALID_CLIENT_SID')
-            state['sid'] = sid_to_text(api, client_sid)
+            try:
+                state['sid'] = sid_to_text(api, client_sid)
+            except OSError as exc:                        # Aegis P3-c: typed, not an exception
+                return deny('SID_TEXT_FAILED', exc.errno)
             # W13 (E2 revised): the client grants only Identification, which is
             # all an identity check needs; Anonymous carries no identity.
             if level < SecurityIdentification:
@@ -758,7 +801,11 @@ class OneShotPipeServer:
 
             out = ctypes.create_string_buffer(RESPONSE, len(RESPONSE))
             try:
-                ok, written, err = self._io(lambda ov: api.WriteFile(h, out, len(RESPONSE), None, ov), deadline)
+                # strict=False (Aegis P3-a): a response that was written completely
+                # is delivered; reporting DENIED while the client holds PEER_OK
+                # would make server and client verdicts diverge.
+                ok, written, err = self._io(lambda ov: api.WriteFile(h, out, len(RESPONSE), None, ov),
+                                            deadline, strict=False)
             except _Timeout:
                 return deny('WRITE_TIMEOUT')
             if not ok or written != len(RESPONSE):
