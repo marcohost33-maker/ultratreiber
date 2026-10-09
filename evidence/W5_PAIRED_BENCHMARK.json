@@ -1,0 +1,64 @@
+{
+  "description": "paired baseline with same W5 client; serial requests only",
+  "python": "3.13.5",
+  "platform": "linux",
+  "server_w4": "/mnt/data/udx_standalone_v0_4",
+  "server_w5": "/mnt/data/udx_standalone_v0_5",
+  "seed": 20261009,
+  "trials": [
+    {
+      "trial": 1,
+      "revision": "w5",
+      "n": 500,
+      "p50_ms": 0.376509,
+      "p95_ms": 2.149532,
+      "p99_ms": 3.46549,
+      "mean_ms": 0.768170454
+    },
+    {
+      "trial": 1,
+      "revision": "w4",
+      "n": 500,
+      "p50_ms": 0.215462,
+      "p95_ms": 1.388279,
+      "p99_ms": 3.412928,
+      "mean_ms": 0.38853633
+    },
+    {
+      "trial": 2,
+      "revision": "w4",
+      "n": 500,
+      "p50_ms": 0.145782,
+      "p95_ms": 1.088624,
+      "p99_ms": 2.428688,
+      "mean_ms": 0.324070638
+    },
+    {
+      "trial": 2,
+      "revision": "w5",
+      "n": 500,
+      "p50_ms": 0.326053,
+      "p95_ms": 1.666768,
+      "p99_ms": 2.483387,
+      "mean_ms": 0.515781466
+    },
+    {
+      "trial": 3,
+      "revision": "w5",
+      "n": 500,
+      "p50_ms": 0.320306,
+      "p95_ms": 1.565576,
+      "p99_ms": 2.553051,
+      "mean_ms": 0.528036518
+    },
+    {
+      "trial": 3,
+      "revision": "w4",
+      "n": 500,
+      "p50_ms": 0.145893,
+      "p95_ms": 0.444577,
+      "p99_ms": 1.17988,
+      "mean_ms": 0.201176832
+    }
+  ]
+}

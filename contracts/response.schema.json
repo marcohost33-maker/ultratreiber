@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://udx.invalid/contracts/response-0.1.schema.json",
+  "title": "UDX reference response 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "request_id",
+    "status",
+    "code",
+    "data"
+  ],
+  "properties": {
+    "version": {
+      "const": "udx/0.1"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        }
+      ]
+    },
+    "status": {
+      "enum": [
+        "OK",
+        "DENIED"
+      ]
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[A-Z_]+$"
+    },
+    "data": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "OK"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "code": {
+            "const": "OK"
+          },
+          "data": {
+            "type": "object"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "DENIED"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "null"
+          }
+        },
+        "not": {
+          "properties": {
+            "code": {
+              "const": "OK"
+            }
+          },
+          "required": [
+            "code"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "environment": {
+    "architecture": "x86_64",
+    "kernel": "6.18.44",
+    "os": "Linux",
+    "python": "3.13.5"
+  },
+  "frame_size_bytes": 262144,
+  "gate_check": {
+    "max_ms": 0.138398,
+    "min_ms": 0.003972,
+    "n": 1500,
+    "p50_ms": 0.004719,
+    "p95_ms": 0.005555,
+    "p99_ms": 0.010201
+  },
+  "scope": "single process; 1500 dry-run authorizations, 300 synthetic 256x256x4 tile scans; not IPC/OS/video benchmarks",
+  "tile_scan": {
+    "max_ms": 17.118936,
+    "min_ms": 0.452156,
+    "n": 300,
+    "p50_ms": 0.545524,
+    "p95_ms": 1.06974,
+    "p99_ms": 2.734979
+  },
+  "tracked_digest_bytes": 256
+}

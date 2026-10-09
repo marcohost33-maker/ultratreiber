@@ -1,0 +1,10 @@
+{
+  "w4": {
+    "noncharacter_parser": "ACCEPT",
+    "slow_peer_fast_client_s": 0.8887142980001954
+  },
+  "w5": {
+    "noncharacter_parser": "MALFORMED_JSON",
+    "slow_peer_fast_client_s": 0.013915562999955
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "scope": "in-process Python mock; excludes transport/OS/I/O/security/sandbox",
+  "samples": 5000,
+  "python": "3.13.5",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "microseconds": {
+    "p50": 6.249,
+    "p95": 7.692,
+    "p99": 27.06,
+    "mean": 7.605231600000001
+  }
+}

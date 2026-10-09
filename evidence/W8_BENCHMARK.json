@@ -1,0 +1,47 @@
+{
+  "kind": "in-process-socketpair-transfer-and-seal",
+  "sample_file_bytes": 4096,
+  "samples_per_round": 300,
+  "rounds": 5,
+  "host_process_separation": false,
+  "portal_gui_consent": false,
+  "machine": "local Linux test environment",
+  "median_of_rounds": {
+    "p50_ms": 0.080348,
+    "p95_ms": 0.233994,
+    "p99_ms": 1.20509,
+    "max_ms": 2.299889
+  },
+  "rounds_detail": [
+    {
+      "p50_ms": 0.078564,
+      "p95_ms": 0.153433,
+      "p99_ms": 0.375356,
+      "max_ms": 0.61204
+    },
+    {
+      "p50_ms": 0.079335,
+      "p95_ms": 0.256143,
+      "p99_ms": 0.616257,
+      "max_ms": 2.277223
+    },
+    {
+      "p50_ms": 0.080348,
+      "p95_ms": 0.224626,
+      "p99_ms": 1.20509,
+      "max_ms": 3.253094
+    },
+    {
+      "p50_ms": 0.081975,
+      "p95_ms": 1.523321,
+      "p99_ms": 2.675588,
+      "max_ms": 3.675518
+    },
+    {
+      "p50_ms": 0.080355,
+      "p95_ms": 0.233994,
+      "p99_ms": 1.633943,
+      "max_ms": 2.299889
+    }
+  ]
+}

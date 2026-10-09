@@ -1,0 +1,38 @@
+{
+  "6": {
+    "gate": {
+      "n_per_round": 1000,
+      "rounds": 5,
+      "median_of_round_medians_ms": 0.004543,
+      "min_round_median_ms": 0.0043745,
+      "max_round_median_ms": 0.0045745,
+      "p95_last_round_ms": 0.005247
+    },
+    "tile": {
+      "n_per_round": 200,
+      "rounds": 5,
+      "median_of_round_medians_ms": 0.5190985,
+      "min_round_median_ms": 0.5125425,
+      "max_round_median_ms": 0.523522,
+      "p95_last_round_ms": 0.872884
+    }
+  },
+  "7": {
+    "gate": {
+      "n_per_round": 1000,
+      "rounds": 5,
+      "median_of_round_medians_ms": 0.0060495,
+      "min_round_median_ms": 0.005984,
+      "max_round_median_ms": 0.0061345,
+      "p95_last_round_ms": 0.007223
+    },
+    "tile": {
+      "n_per_round": 200,
+      "rounds": 5,
+      "median_of_round_medians_ms": 0.5265985,
+      "min_round_median_ms": 0.5184455,
+      "max_round_median_ms": 0.534584,
+      "p95_last_round_ms": 0.950822
+    }
+  }
+}

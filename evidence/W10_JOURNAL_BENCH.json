@@ -1,0 +1,46 @@
+{
+  "benchmark": "W10 three synchronous durable SQLite transitions",
+  "rounds": 5,
+  "operations_per_round": 60,
+  "uid": 1000,
+  "commit_mode": "WAL/FULL",
+  "median_round_percentiles_ms": {
+    "p50_ms": 0.092569,
+    "p95_ms": 0.199339,
+    "p99_ms": 0.21787
+  },
+  "round_details": [
+    {
+      "p50_ms": 0.101363,
+      "p95_ms": 0.199339,
+      "p99_ms": 0.21787
+    },
+    {
+      "p50_ms": 0.111221,
+      "p95_ms": 0.399173,
+      "p99_ms": 0.44458
+    },
+    {
+      "p50_ms": 0.092569,
+      "p95_ms": 0.456308,
+      "p99_ms": 0.694694
+    },
+    {
+      "p50_ms": 0.090817,
+      "p95_ms": 0.152084,
+      "p99_ms": 0.200304
+    },
+    {
+      "p50_ms": 0.090246,
+      "p95_ms": 0.113156,
+      "p99_ms": 0.136076
+    }
+  ],
+  "excluded": [
+    "portal GUI",
+    "real Windows",
+    "distinct UID context switches",
+    "FD transfer",
+    "hardware power-loss simulation"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "kind": "W11_PORTAL_SIMULATION_IN_PROCESS",
+  "n": 2500,
+  "units": "microseconds",
+  "p50": 4.632,
+  "p95": 5.637,
+  "p99": 35.778,
+  "os_consented": false,
+  "linux_portal_used": false
+}

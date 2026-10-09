@@ -1,0 +1,14 @@
+{
+  "6": {
+    "first_changed_state": "QUIET_CANDIDATE",
+    "second_changed_stable": true,
+    "second_changed_state": "STABLE_HEURISTIC",
+    "type_confusion_accepted": true
+  },
+  "7": {
+    "first_changed_state": "LOW_CHANGE",
+    "second_changed_stable": false,
+    "second_changed_state": "LOW_CHANGE",
+    "type_confusion_accepted": false
+  }
+}

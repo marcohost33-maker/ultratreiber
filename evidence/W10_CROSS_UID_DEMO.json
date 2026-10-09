@@ -1,0 +1,1 @@
+{"distinct_uids": true, "durable_pretransfer_claim": true, "forged_claim_denied": true, "host_uid": 1000, "message_time_creds": true, "replay_after_restart_denied": true, "result": "PASS", "two_processes": true, "worker_no_path_permission": true, "worker_uid": 65534}

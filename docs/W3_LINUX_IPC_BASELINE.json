@@ -1,0 +1,13 @@
+{
+  "scope": "local unprivileged Linux AF_UNIX TCP-free fixture metadata read: connect + uid-check + bounded frame + broker + decode",
+  "system": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "python": "3.13.5",
+  "n": 300,
+  "success": 300,
+  "p50_ms": 0.06406,
+  "p95_ms": 0.25031,
+  "p99_ms": 0.3239,
+  "mean_ms": 0.08814,
+  "max_ms": 0.42676,
+  "notes": "No real OS object read. Single-process server, separate client process. Local non-root account. Not an SLO."
+}
