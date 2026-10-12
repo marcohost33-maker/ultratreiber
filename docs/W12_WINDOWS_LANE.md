@@ -135,6 +135,10 @@ CVE-2023-22466). Vero decision E2 (W12: server requires >= Impersonation) was
   `TokenSessionId ==` own session; then `EqualSid`. Read-then-impersonate kept.
 - **SDDL**: `D:P(A;;GA;;;SY)(A;;GRGW;;;<user>)S:(ML;;NWNR;;;ME)`; read back:
   `D:P(A;;FA;;;SY)(A;;0x12019f;;;<user>)S:AI(ML;;NWNR;;;ME)`.
+- **W14 (E1010M-05, 2026-10-12)**: the SYSTEM ACE is narrowed to GRGW as well:
+  `D:P(A;;GRGW;;;SY)(A;;GRGW;;;<user>)S:(ML;;NWNR;;;ME)`; read back (live, this host):
+  `D:P(A;;0x12019f;;;SY)(A;;0x12019f;;;<user>)S:AI(ML;;NWNR;;;ME)`. Neither ACE carries
+  WRITE_DAC/WRITE_OWNER. Discrimination: `evidence/w14_dk_spec.json` (3 cases).
 - `windows/udx_sid_client.cpp`, `udx_sid_probe.cpp`, `windows/README.md` follow the
   same protocol — **still UNCOMPILED** (no compiler on this host).
 

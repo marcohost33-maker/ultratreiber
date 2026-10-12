@@ -11,7 +11,7 @@ class WindowsCandidateSourceAudit(unittest.TestCase):
                          'ImpersonateNamedPipeClient', 'OpenThreadToken', 'EqualSid',
                          'RevertToSelf', 'ReadFile']:
             self.assertIn(expected,s)
-        self.assertIn('D:P(A;;GA;;;SY)',s)
+        self.assertIn('D:P(A;;GRGW;;;SY)',s)
     def test_explicit_client_impersonation_level(self):
         # W13 protocol inversion (Aegis P1-a): Identification + EFFECTIVE_ONLY,
         # static tracking; the client must never grant Impersonation.

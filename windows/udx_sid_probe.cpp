@@ -57,7 +57,7 @@ int wmain() {
     // Protected DACL: LocalSystem and the exact current user SID. No Everyone.
     // W13 (UNCOMPILED): user ACE GRGW (least privilege) + Medium label NW|NR,
     // so a Low-IL process cannot even open the single instance for reading.
-    std::wstring sddl = L"D:P(A;;GA;;;SY)(A;;GRGW;;;";
+    std::wstring sddl = L"D:P(A;;GRGW;;;SY)(A;;GRGW;;;";
     sddl += sid_text;
     sddl += L")S:(ML;;NWNR;;;ME)";
     LocalFree(sid_text);

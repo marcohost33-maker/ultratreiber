@@ -10,6 +10,7 @@ W13 (after the Aegis audit) supersedes parts of the W12 list below:
     server accepts level >= Identification (the W12 ">= Impersonation" guard is
     gone) and checks integrity/AppContainer/restricted/session from the token
   * DACL user ACE GRGW instead of GA, explicit Medium label NW+NR (build_sddl)
+  * W14 (E1010M-05): SYSTEM ACE also GRGW instead of GA (no WRITE_DAC/WRITE_OWNER)
   * a fully written response counts as sent; every Win32 failure stays typed
 
 What is reproduced 1:1 from the C++ candidate (see docs/W12_WINDOWS_LANE.md):
@@ -143,7 +144,7 @@ def validate_sid_text(sid_text) -> str:
 
 
 def build_sddl(sid_text: str) -> str:
-    """W13: ``D:P(A;;GA;;;SY)(A;;GRGW;;;<sid>)S:(ML;;NWNR;;;ME)``.
+    """W14 (E1010M-05): ``D:P(A;;GRGW;;;SY)(A;;GRGW;;;<sid>)S:(ML;;NWNR;;;ME)``.
 
     * user ACE GRGW instead of GA (Aegis P3-e: no WRITE_DAC/WRITE_OWNER for the
       client). GW still contains FILE_APPEND_DATA == FILE_CREATE_PIPE_INSTANCE;
@@ -155,7 +156,7 @@ def build_sddl(sid_text: str) -> str:
       occupy the single instance (Aegis F-LOWIL).
     The SID text is validated first so no SDDL fragment can be smuggled in.
     """
-    return 'D:P(A;;GA;;;SY)(A;;GRGW;;;' + validate_sid_text(sid_text) + ')S:(ML;;NWNR;;;ME)'
+    return 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + validate_sid_text(sid_text) + ')S:(ML;;NWNR;;;ME)'
 
 
 def validate_deadline(deadline_s) -> float:

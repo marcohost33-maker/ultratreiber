@@ -66,10 +66,10 @@ class PortableParityAndValidation(unittest.TestCase):
 
     def test_sddl_prefix_identical_to_cpp(self):
         # W13: GRGW + Medium NW|NR label in both the C++ source and the port.
-        self.assertIn('std::wstring sddl = L"D:P(A;;GA;;;SY)(A;;GRGW;;;";', self.CPP)
+        self.assertIn('std::wstring sddl = L"D:P(A;;GRGW;;;SY)(A;;GRGW;;;";', self.CPP)
         self.assertIn('sddl += L")S:(ML;;NWNR;;;ME)";', self.CPP)
         sid = 'S-1-5-21-1-2-3-1001'
-        self.assertEqual(wp.build_sddl(sid), 'D:P(A;;GA;;;SY)(A;;GRGW;;;' + sid + ')S:(ML;;NWNR;;;ME)')
+        self.assertEqual(wp.build_sddl(sid), 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + sid + ')S:(ML;;NWNR;;;ME)')
 
     def test_constants_identical_to_cpp(self):
         self.assertIn('UDX_W4_SID_PROBE', self.CPP)
@@ -339,13 +339,14 @@ class WindowsPipeRuntime(unittest.TestCase):
         self.assertTrue(info.protected)
         self.assertEqual(len(info.aces), 2)
         self.assertEqual([a.sid for a in info.aces], ['S-1-5-18', self.sid])
-        # W13: SY keeps FILE_ALL_ACCESS (C++ parity); the user gets
-        # FILE_GENERIC_READ|FILE_GENERIC_WRITE only - no WRITE_DAC/WRITE_OWNER.
+        # W14 (E1010M-05): SY and the user both get FILE_GENERIC_READ|
+        # FILE_GENERIC_WRITE only - neither ACE carries WRITE_DAC/WRITE_OWNER.
         self.assertEqual([(a.ace_type, a.ace_flags, a.mask) for a in info.aces],
-                         [(wp.ACCESS_ALLOWED_ACE_TYPE, 0, FILE_ALL_ACCESS),
+                         [(wp.ACCESS_ALLOWED_ACE_TYPE, 0, FILE_GENERIC_READ_WRITE),
                           (wp.ACCESS_ALLOWED_ACE_TYPE, 0, FILE_GENERIC_READ_WRITE)])
+        self.assertFalse(info.aces[0].mask & (WRITE_DAC | WRITE_OWNER))
         self.assertFalse(info.aces[1].mask & (WRITE_DAC | WRITE_OWNER))
-        self.assertEqual(info.sddl, 'D:P(A;;FA;;;SY)(A;;0x12019f;;;' + self.sid + ')S:AI(ML;;NWNR;;;ME)')
+        self.assertEqual(info.sddl, 'D:P(A;;0x12019f;;;SY)(A;;0x12019f;;;' + self.sid + ')S:AI(ML;;NWNR;;;ME)')
 
     # (e) absolute deadline
     def test_silent_client_hits_deadline_without_hang(self):
