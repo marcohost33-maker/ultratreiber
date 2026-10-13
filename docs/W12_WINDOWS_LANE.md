@@ -189,7 +189,10 @@ when the provider DLL was not loaded yet, and refused with `PIPE_OWNER_FAILED`.
   it (fail-closed, untested here).
 - Cross-user squatting by a service account (Aegis A3) is mitigated by protocol
   (Identification only) but **not runtime-tested** (no second account / service context).
-- SY ACE remains GA (C++ parity); untested as a client.
+- SY ACE is GRGW since W14 (C++ parity); untested as a client. The W13 discrimination
+  spec `evidence/w13_dk_spec.json` is a historical record of W13: its DK16/DK17 anchors
+  name the pre-W14 SDDL and are carried over, re-anchored, as cases 4-5 of
+  `evidence/w14_dk_spec.json`.
 - AppContainer, other-session and Low-IL **token** paths are evidenced by injection
   only; the real Low-IL client is blocked earlier by the mandatory label.
 - C++ sources remain uncompiled; no cross-family review of W13 yet.

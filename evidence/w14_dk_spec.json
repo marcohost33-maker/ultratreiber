@@ -1,22 +1,46 @@
 {
  "repo": "C:/Users/marco/dev/udx",
- "test_befehl": ["python", "-m", "pytest"],
+ "test_befehl": [
+  "python",
+  "-m",
+  "pytest"
+ ],
  "timeout_s": 120,
  "faelle": [
-  {"name": "W14-DK1 SYSTEM-ACE wieder GA statt GRGW (E1010M-05), Laufzeit-Ruecklesung",
+  {
+   "name": "W14-DK1 SYSTEM-ACE wieder GA statt GRGW (E1010M-05), Laufzeit-Ruecklesung",
    "datei": "udx_ref/windows_pipe.py",
    "alt": "    return 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + validate_sid_text(sid_text) + ')S:(ML;;NWNR;;;ME)'",
    "neu": "    return 'D:P(A;;GA;;;SY)(A;;GRGW;;;' + validate_sid_text(sid_text) + ')S:(ML;;NWNR;;;ME)'",
-   "test": "tests/test_w12_windows_pipe.py::WindowsPipeRuntime::test_dacl_exactly_system_and_current_user"},
-  {"name": "W14-DK2 SYSTEM-ACE wieder GA im Port, Paritaet zum C++",
+   "test": "tests/test_w12_windows_pipe.py::WindowsPipeRuntime::test_dacl_exactly_system_and_current_user"
+  },
+  {
+   "name": "W14-DK2 SYSTEM-ACE wieder GA im Port, Paritaet zum C++",
    "datei": "udx_ref/windows_pipe.py",
    "alt": "    return 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + validate_sid_text(sid_text) + ')S:(ML;;NWNR;;;ME)'",
    "neu": "    return 'D:P(A;;GA;;;SY)(A;;GRGW;;;' + validate_sid_text(sid_text) + ')S:(ML;;NWNR;;;ME)'",
-   "test": "tests/test_w12_windows_pipe.py::PortableParityAndValidation::test_sddl_prefix_identical_to_cpp"},
-  {"name": "W14-DK3 SYSTEM-ACE wieder GA im C++-Kandidaten",
+   "test": "tests/test_w12_windows_pipe.py::PortableParityAndValidation::test_sddl_prefix_identical_to_cpp"
+  },
+  {
+   "name": "W14-DK3 SYSTEM-ACE wieder GA im C++-Kandidaten",
    "datei": "windows/udx_sid_probe.cpp",
    "alt": "    std::wstring sddl = L\"D:P(A;;GRGW;;;SY)(A;;GRGW;;;\";",
    "neu": "    std::wstring sddl = L\"D:P(A;;GA;;;SY)(A;;GRGW;;;\";",
-   "test": "tests/test_windows_source_guards.py::WindowsCandidateSourceAudit::test_no_default_dacl_or_remote_flag_omission"}
+   "test": "tests/test_windows_source_guards.py::WindowsCandidateSourceAudit::test_no_default_dacl_or_remote_flag_omission"
+  },
+  {
+   "name": "W14-DK4 (Carry-over W13-DK16) Nutzer-ACE wieder GA statt GRGW (P3-e)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    return 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + validate_sid_text(sid_text) + ')S:(ML;;NWNR;;;ME)'",
+   "neu": "    return 'D:P(A;;GRGW;;;SY)(A;;GA;;;' + validate_sid_text(sid_text) + ')S:(ML;;NWNR;;;ME)'",
+   "test": "tests/test_w12_windows_pipe.py::WindowsPipeRuntime::test_dacl_exactly_system_and_current_user"
+  },
+  {
+   "name": "W14-DK5 (Carry-over W13-DK17) Mandatory-Label NW|NR entfernt (P3-e, F-LOWIL)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    return 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + validate_sid_text(sid_text) + ')S:(ML;;NWNR;;;ME)'",
+   "neu": "    return 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + validate_sid_text(sid_text) + ')'",
+   "test": "tests/test_w12_windows_pipe.py::WindowsPipeRuntime::test_low_integrity_read_only_open_denied"
+  }
  ]
 }

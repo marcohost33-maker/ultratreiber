@@ -146,11 +146,14 @@ def validate_sid_text(sid_text) -> str:
 def build_sddl(sid_text: str) -> str:
     """W14 (E1010M-05): ``D:P(A;;GRGW;;;SY)(A;;GRGW;;;<sid>)S:(ML;;NWNR;;;ME)``.
 
-    * user ACE GRGW instead of GA (Aegis P3-e: no WRITE_DAC/WRITE_OWNER for the
-      client). GW still contains FILE_APPEND_DATA == FILE_CREATE_PIPE_INSTANCE;
+    * user ACE GRGW instead of GA (Aegis P3-e: the ACE grants no WRITE_DAC/
+      WRITE_OWNER). The same-user client is the pipe's owner and still holds
+      READ_CONTROL/WRITE_DAC implicitly through owner rights; accepted, because
+      the same user is trusted by design (Equalita W14, measured). GW still contains FILE_APPEND_DATA == FILE_CREATE_PIPE_INSTANCE;
       moot here because the pipe has exactly one instance (FIRST_PIPE_INSTANCE,
       nMaxInstances=1).
-    * SY ACE unchanged (C++ parity; not testable as a client on this host).
+    * SY ACE narrowed to GRGW as well (W14; C++ parity; not testable as a client
+      on this host, and a SYSTEM client is refused anyway: SESSION/SID mismatch).
     * explicit Medium mandatory label No-Write-Up + No-Read-Up: measured, a
       Low-IL process can no longer open the pipe even for reading, i.e. it cannot
       occupy the single instance (Aegis F-LOWIL).
