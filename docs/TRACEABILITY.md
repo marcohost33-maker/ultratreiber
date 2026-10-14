@@ -2,17 +2,19 @@
 
 ## Reuse evidence / claim ceiling
 
+Sources marked "(private, not publicly accessible)" are internal Coworker Research projects or workspaces; the references document provenance only and cannot be followed from this public repository.
+
 | Source | Existing element | UDX concept | Evidence limit |
 |---|---|---|---|
-| `marcohost33-maker/digi` `docs/adr/ADR-0002-zones-as-ports-and-adapters.md` | core-owned ports, per-platform guarantees | independent adapter contract | design reuse only, no code linked |
-| Digi `digi/stage3/registry.py` | typed capability manifests, strict verdict mapping | capability discovery and default-deny | synthetic ecosystem manifest ≠ OS rights |
-| Digi `digi/stage3/guard.py` | fixed action/flag checks | validate checked operation before action | never directly execute checked CLI argv |
-| Digi `digi/authority.py`, `docs/architecture/ARCHITECTURE.md` | probabilistic proposer / deterministic admission | optional Digi client with extra gate | no Digi runtime import or authority inheritance |
-| `marcohost33-maker/nigin-engine/contracts` | WIT, capability-grant schemas, compatibility matrix | external engine/plugin adapter inspiration | Nigin G1 DRAFT, no full host/adapter |
-| `marcohost33-maker/browser-nigin` `src/mcp/mcp-contract-validator.mjs` | strict JSON schema subset fail-closed | contract conformance test pattern | only pinned scheme supported |
-| `marcohost33-maker/veromode` `src/veromode/policy.py` and ledger | actor policy, append-only chain, postdecision receipts | future policy/receipt model | not ported, concurrency/anchoring caveats |
-| `007acc2/06_WISSEN` CodeFactory typed validation, bounded reader, exact-head evidence | reusable tests and patterns | prototype guard patterns | independently written, no license or execution import |
-| `007acc2` README | approved workspace layout | final knowledge-transfer location | no write to root; digest dedup if uploaded |
+| `marcohost33-maker/digi` (private, not publicly accessible) `docs/adr/ADR-0002-zones-as-ports-and-adapters.md` | core-owned ports, per-platform guarantees | independent adapter contract | design reuse only, no code linked |
+| Digi (private, not publicly accessible) `digi/stage3/registry.py` | typed capability manifests, strict verdict mapping | capability discovery and default-deny | synthetic ecosystem manifest ≠ OS rights |
+| Digi (private, not publicly accessible) `digi/stage3/guard.py` | fixed action/flag checks | validate checked operation before action | never directly execute checked CLI argv |
+| Digi (private, not publicly accessible) `digi/authority.py`, `docs/architecture/ARCHITECTURE.md` | probabilistic proposer / deterministic admission | optional Digi client with extra gate | no Digi runtime import or authority inheritance |
+| `marcohost33-maker/nigin-engine/contracts` (private, not publicly accessible) | WIT, capability-grant schemas, compatibility matrix | external engine/plugin adapter inspiration | Nigin G1 DRAFT, no full host/adapter |
+| `marcohost33-maker/browser-nigin` (private, not publicly accessible) `src/mcp/mcp-contract-validator.mjs` | strict JSON schema subset fail-closed | contract conformance test pattern | only pinned scheme supported |
+| `marcohost33-maker/veromode` (private, not publicly accessible) `src/veromode/policy.py` and ledger | actor policy, append-only chain, postdecision receipts | future policy/receipt model | not ported, concurrency/anchoring caveats |
+| `007acc2/06_WISSEN` (private workspace, not publicly accessible) CodeFactory typed validation, bounded reader, exact-head evidence | reusable tests and patterns | prototype guard patterns | independently written, no license or execution import |
+| `007acc2` README (private workspace, not publicly accessible) | approved workspace layout | final knowledge-transfer location | no write to root; digest dedup if uploaded |
 
 ## Reviewed external engineering references (URLs)
 

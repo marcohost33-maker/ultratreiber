@@ -36,7 +36,7 @@ py -3 tools/w15_windows_evidence.py --collect --repo . --timeout 300 --output "$
 py -3 tools/w15_windows_evidence.py --verify "$env:TEMP\udx_native.json" --repo .
 ```
 
-The collector needs a full clone (it checks that the audited W14 baseline `26309e9` is an ancestor of `HEAD`) and byte-exact sources (`.gitattributes` disables line-ending conversion). Exit code 0 with verdict `UNTRUSTED_REPORT_SCHEMA_VALID` means the 47 pinned tests passed on that machine — nothing more. Wave-by-wave design notes, audits and gates are in [`docs/`](docs/) (start with `W12_WINDOWS_LANE.md`, `W16_FAIL_CLOSED_EVIDENCE_HARDENING.md`, `ROADMAP.md`).
+`SHA256SUMS_W12` is the current manifest (all tracked files except the two manifests); `SHA256SUMS` is the historical W11 import manifest, kept unchanged as a record and intentionally no longer current. The collector needs a full clone (it checks that the audited W14 baseline `26309e9` is an ancestor of `HEAD`) and byte-exact sources (`.gitattributes` disables line-ending conversion). Exit code 0 with verdict `UNTRUSTED_REPORT_SCHEMA_VALID` means the 47 pinned tests passed on that machine — nothing more. Wave-by-wave design notes, audits and gates are in [`docs/`](docs/) (start with `W12_WINDOWS_LANE.md`, `W16_FAIL_CLOSED_EVIDENCE_HARDENING.md`, `ROADMAP.md`).
 
 ## Citation, license, provenance
 

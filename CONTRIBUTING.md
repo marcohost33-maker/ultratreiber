@@ -29,8 +29,8 @@ On Windows additionally run the native evidence collector (see `README.md`).
       is removed (fail-closed first, happy path second).
 - [ ] The full suite passes on the platforms you touched; state platform, Python
       version and the exact `Ran N ... OK` line in the PR.
-- [ ] `SHA256SUMS_W12` is regenerated over all tracked files except itself
-      (`git ls-files | grep -vx SHA256SUMS_W12 | xargs sha256sum -b > SHA256SUMS_W12`
+- [ ] `SHA256SUMS_W12` is regenerated over all tracked files except the two manifests
+      (`git ls-files | grep -v -x -e SHA256SUMS -e SHA256SUMS_W12 | xargs sha256sum -b > SHA256SUMS_W12`
       in a checkout without line-ending conversion).
 - [ ] Changes to pinned sources (`udx_ref/windows_pipe.py`, `windows/*.cpp`,
       `tests/test_w12_windows_pipe.py`) update the pins in
