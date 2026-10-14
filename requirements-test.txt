@@ -1,0 +1,3 @@
+# Test-only dependency: JSON Schema 2020-12 conformance lane (tests/test_contracts.py).
+# The runtime (udx_ref/) uses the Python standard library only.
+jsonschema==4.26.0

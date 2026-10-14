@@ -16,13 +16,14 @@ Ultratreiber (UDX, *Universal Driver & eXchange*) is a research demonstrator of 
 
 ## Quick start
 
-Requires Python 3.13 or newer (CI: 3.13 and 3.14) and, for the cross-runtime interop tests, Node.js 22 or newer (those tests skip when `node` is absent). No third-party Python packages.
+Requires Python 3.13 or newer (CI: 3.13 and 3.14). The runtime (`udx_ref/`) uses the standard library only; the tests additionally use `jsonschema` (`requirements-test.txt`; without it the contract-conformance tests skip as "NOT green") and Node.js 22 or newer for the cross-runtime interop tests (they skip when `node` is absent).
 
 Linux shell (run as a normal user, not root):
 
 ```sh
 git clone https://github.com/marcohost33-maker/ultratreiber.git && cd ultratreiber
-PYTHONPATH=. python3 -m unittest discover -s tests -v
+python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements-test.txt
+PYTHONPATH=. python -m unittest discover -s tests -v
 sha256sum -c SHA256SUMS_W12
 ```
 
@@ -30,6 +31,7 @@ Windows (PowerShell, standard user):
 
 ```powershell
 git clone https://github.com/marcohost33-maker/ultratreiber.git; cd ultratreiber
+py -3 -m pip install -r requirements-test.txt
 $env:PYTHONPATH = '.'
 py -3 -m unittest discover -s tests -v
 py -3 tools/w15_windows_evidence.py --collect --repo . --timeout 300 --output "$env:TEMP\udx_native.json"

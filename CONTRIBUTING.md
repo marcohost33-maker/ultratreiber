@@ -14,7 +14,8 @@ bar for changes is evidence, not volume.
 
 ## Development setup
 
-Python 3.13 or newer, no third-party packages; Node.js 22+ for the interop tests.
+Python 3.13 or newer; runtime is standard library only, tests need `pip install -r requirements-test.txt`
+(jsonschema); Node.js 22+ for the interop tests.
 
 ```sh
 PYTHONPATH=. python -m unittest discover -s tests -v   # Linux: run as a normal user, not root
@@ -41,5 +42,5 @@ On Windows additionally run the native evidence collector (see `README.md`).
 
 ## Style
 
-Standard library only, small explicit functions, typed denial codes instead of
+Runtime code: standard library only; small explicit functions, typed denial codes instead of
 generic exceptions, deterministic tests (fixed seeds, bounded timeouts).
