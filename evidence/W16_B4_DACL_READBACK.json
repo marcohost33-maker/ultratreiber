@@ -1,0 +1,96 @@
+{
+ "schema": "udx_w16_b4_native_readback_v1",
+ "date": "2026-10-14",
+ "head": "284515ce9d86596d04a3ba3b9c8e0441871f0f0e",
+ "host": "Windows 11 Home 10.0.26200, single account, not elevated, Python 3.14.4",
+ "release_authorized": false,
+ "method": "real CLI server (python -m udx_ref.windows_pipe server) in process A; independent ctypes reader (no udx_ref import) in process B: CreateFileW(READ_CONTROL) -> GetSecurityInfo(SE_KERNEL_OBJECT, OWNER|GROUP|DACL|LABEL) -> SDDL; AccessCheck(MAXIMUM_ALLOWED, FILE generic mapping) with own identification token; second run CreateFileW(READ_CONTROL|WRITE_DAC). User SID redacted as <USER>.",
+ "reader_script_sha256": "f1fe408958b33c6e77e67d3905ec597b2d6ff9831a78dd8d499326cf0f7407ad",
+ "orchestrator_sha256": "ebdbe88488d209ff32869b81ba1bfc21bc20f5fb3a50ecbeb910913c1958dc4b",
+ "readback": {
+  "server_listening_line_ok": true,
+  "server_exit": 20,
+  "server_result": {
+   "verdict": "DENIED",
+   "reason": "READ_FAILED",
+   "winerror": 109,
+   "client_pid": null,
+   "client_sid": null,
+   "impersonation_level": null,
+   "response_sent": false,
+   "response_drained": false,
+   "elapsed_s": 0.2582830000001195
+  },
+  "server_stderr_tail": "",
+  "reader_exit": 0,
+  "reader": {
+   "mode": "readback",
+   "map_generic_GRGW_file": "0x12019f",
+   "GetSecurityInfo_rc": 0,
+   "sddl_full": "O:<USER>G:<USER>D:P(A;;0x12019f;;;SY)(A;;0x12019f;;;<USER>)S:AI(ML;;NWNR;;;ME)",
+   "sddl_dacl_label": "D:P(A;;0x12019f;;;SY)(A;;0x12019f;;;<USER>)S:AI(ML;;NWNR;;;ME)",
+   "accesscheck_max_allowed": {
+    "call_ok": true,
+    "winerror": 0,
+    "status": true,
+    "granted": "0x16019f",
+    "has_READ_CONTROL": true,
+    "has_WRITE_DAC": true,
+    "has_WRITE_OWNER": false,
+    "has_FILE_CREATE_PIPE_INSTANCE_0x4": true
+   }
+  },
+  "build_sddl_user": "D:P(A;;GRGW;;;SY)(A;;GRGW;;;<USER>)S:(ML;;NWNR;;;ME)"
+ },
+ "writedac": {
+  "server_listening_line_ok": true,
+  "server_exit": 20,
+  "server_result": {
+   "verdict": "DENIED",
+   "reason": "READ_FAILED",
+   "winerror": 109,
+   "client_pid": null,
+   "client_sid": null,
+   "impersonation_level": null,
+   "response_sent": false,
+   "response_drained": false,
+   "elapsed_s": 0.3012192000005598
+  },
+  "server_stderr_tail": "",
+  "reader_exit": 0,
+  "reader": {
+   "mode": "writedac",
+   "map_generic_GRGW_file": "0x12019f",
+   "open_read_control_write_dac": {
+    "ok": true,
+    "winerror": 0
+   },
+   "open_write_owner_after": {
+    "ok": false,
+    "winerror": 5
+   }
+  },
+  "build_sddl_user": "D:P(A;;GRGW;;;SY)(A;;GRGW;;;<USER>)S:(ML;;NWNR;;;ME)"
+ },
+ "udx14_07_fault_injection": {
+  "tests": {
+   "WindowsPipeFaultInjection::test_client_pid_failure_injected": "PASS",
+   "WindowsPipeRuntime::test_server_pid_is_logged_not_decisive": "PASS"
+  },
+  "observed": {
+   "server_verdict": "DENIED",
+   "reason": "CLIENT_PID_FAILED",
+   "winerror": 5,
+   "response_sent": false,
+   "client_response": "",
+   "client_reason": "READ_FAILED",
+   "call_order": [
+    "OpenThreadToken",
+    "ReadFile",
+    "GetNamedPipeClientProcessId->FAIL(5)"
+   ],
+   "impersonate_called": false,
+   "thread_impersonating_after": false
+  }
+ }
+}
