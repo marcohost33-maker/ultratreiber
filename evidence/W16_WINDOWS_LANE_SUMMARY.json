@@ -30,6 +30,20 @@
       "report_sha256": "2f4c4e42346a3f6ff37110a45ef9ae95d6fc131d900ddf34efa562cde6d737f4",
       "validator_negatives_rc2": ["skip_one", "drop_one", "array_id", "release_true", "gate_pass", "rename_test"]
     },
+    "final_on_26309e9_plus_patches_tree_equal_ba5a4d6": {
+      "tree_equal_to_commit": "ba5a4d60640968a21a7cdc8f63d20559a1483485",
+      "exit": 0, "tests_run": 47, "pass": 47, "classes": {"WindowsPipeRuntime": 23, "WindowsPipeFaultInjection": 24},
+      "verify_exit": 0, "verify_verdict": "UNTRUSTED_REPORT_SCHEMA_VALID",
+      "report": "evidence/W16_NATIVE_WINDOWS_REPORT_FINAL.json",
+      "report_sha256": "54976a1036262d70cf73c3254aefb127a18949823382fc573e991d0271dfeee2"
+    },
+    "final_suite_ba5a4d6": {
+      "unittest_discover": {"ran": 271, "failures": 1, "errors": 1, "skipped": 82, "exit": 1},
+      "pytest_capture_sys": {"failed": 2, "passed": 187, "skipped": 82, "subtests_passed": 1561, "exit": 1},
+      "pytest_default_fd_capture": {"failed": 5, "passed": 184, "skipped": 82, "exit": 1, "extra_fails": "3x test_node_interop WinError 6 (pre-existing harness)"},
+      "sha256sums_w12": "117/117 OK"
+    },
+    "diskriminierung": {"run_id": "DK-20261014T121042-2c849191f22c", "spec": "evidence/w16_dk_spec.json", "result": "5/5 DISKRIMINIERT", "head": "ba5a4d60640968a21a7cdc8f63d20559a1483485", "provenienz_klasse": "VOLL"},
     "manual_gates": "7/7 NOT_EXECUTED (second account, AppContainer/Low-IL real token, elevated owner/AccessCheck, service, remote host, C++ binary, independent review)"
   }
 }
