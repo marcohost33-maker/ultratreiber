@@ -55,7 +55,10 @@ int wmain() {
     LPWSTR sid_text = nullptr;
     if (!ConvertSidToStringSidW(server_sid, &sid_text)) return 12;
     // Protected DACL: LocalSystem and the exact current user SID. No Everyone.
-    // W13 (UNCOMPILED): user ACE GRGW (least privilege) + Medium label NW|NR,
+    // W14 (UNCOMPILED): user/SYSTEM ACEs GRGW instead of GA; GRGW is NOT
+    // client-least-privilege: FILE_APPEND_DATA = FILE_CREATE_PIPE_INSTANCE (0x4).
+    // The 1-instance FIRST_PIPE_INSTANCE design limits live additional instances,
+    // but NOT same-SID squatting before server startup. Medium label NW|NR,
     // so a Low-IL process cannot even open the single instance for reading.
     std::wstring sddl = L"D:P(A;;GRGW;;;SY)(A;;GRGW;;;";
     sddl += sid_text;

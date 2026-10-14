@@ -16,7 +16,7 @@
 This directory contains two Win32 C++ **research-only source candidates**, not a UDX broker:
 
 - `udx_sid_probe.cpp`: one-shot Named-Pipe server; DACL only `SY` plus exact current user SID; `FILE_FLAG_FIRST_PIPE_INSTANCE`; `PIPE_REJECT_REMOTE_CLIENTS`; reads one byte before `ImpersonateNamedPipeClient`; opens thread token and requires SID match; `RevertToSelf` before a fixed `PEER_OK` response; no device capabilities or host actions.
-- `udx_sid_client.cpp`: connects with `SECURITY_SQOS_PRESENT | SECURITY_IMPERSONATION`, sends a byte and checks the response.
+- `udx_sid_client.cpp`: **W13/W14** connects with `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION | SECURITY_EFFECTIVE_ONLY` and performs a pipe-owner check before sending. Earlier references to `SECURITY_IMPERSONATION` are historical W4 text, not current behavior.
 
 Candidate build on **real Windows** (Visual Studio Developer Command Prompt):
 

@@ -149,9 +149,12 @@ def build_sddl(sid_text: str) -> str:
     * user ACE GRGW instead of GA (Aegis P3-e: the ACE grants no WRITE_DAC/
       WRITE_OWNER). The same-user client is the pipe's owner and still holds
       READ_CONTROL/WRITE_DAC implicitly through owner rights; accepted, because
-      the same user is trusted by design (Equalita W14, measured). GW still contains FILE_APPEND_DATA == FILE_CREATE_PIPE_INSTANCE;
-      moot here because the pipe has exactly one instance (FIRST_PIPE_INSTANCE,
-      nMaxInstances=1).
+      the same user is trusted by design (Equalita W14, measured). GW still
+      contains FILE_APPEND_DATA == FILE_CREATE_PIPE_INSTANCE (0x4): the pipe is
+      NOT client-least-privilege in a same-SID adversary model. FIRST_PIPE_INSTANCE
+      and nMaxInstances=1 limit additional instances while the real server is
+      live; they do not prevent another same-SID process from squatting on the
+      pipe name BEFORE server startup. Do not silently treat the 0x4 bit as moot.
     * SY ACE narrowed to GRGW as well (W14; C++ parity; not testable as a client
       on this host, and a SYSTEM client is refused anyway: SESSION/SID mismatch).
     * explicit Medium mandatory label No-Write-Up + No-Read-Up: measured, a

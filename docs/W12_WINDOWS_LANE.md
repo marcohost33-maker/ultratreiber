@@ -196,3 +196,38 @@ when the provider DLL was not loaded yet, and refused with `PIPE_OWNER_FAILED`.
 - AppContainer, other-session and Low-IL **token** paths are evidenced by injection
   only; the real Low-IL client is blocked earlier by the mandatory label.
 - C++ sources remain uncompiled; no cross-family review of W13 yet.
+
+
+## 2026-10-13 W14 independent cross-family caveat (Linux/static scope)
+
+The W14 protected DACL is narrower than W12/W13, but **GRGW is not a
+client-only minimal mask** for a named pipe: `FILE_APPEND_DATA` and
+`FILE_CREATE_PIPE_INSTANCE` both refer to bit `0x4`. Therefore the one-instance
+server is a **compensating concurrency restriction, not an ACL separation**.
+First-instance exclusivity is not protection against an untrusted process
+which acquired the target name *before* the real server started.
+
+For the current same-user-trusted RESEARCH model, this is an explicitly accepted
+limitation, not evidence of exploitation. Separating server instance-creation
+rights from client data rights would require a new identity/bootstrap design;
+removing the bit from the *only* same-SID ACE without OS tests can break
+`CreateNamedPipeW` itself.
+
+The pipe object's **owner** has Windows implicit `READ_CONTROL` / `WRITE_DAC`
+rights unless an OWNER RIGHTS (`S-1-3-4`) ACE changes the mapping. `GRGW`
+itself additionally provides `READ_CONTROL`, so adding an `OW` ACE does **not**
+necessarily remove the owner's effective ability to read the security descriptor.
+Any OW proposal must be independently tested for DACL modification and
+recovery by `AccessCheck` and actual Win32 handles. SYSTEM privileges and
+other rights can independently affect the effective access decision.
+
+`tools/w14_acl_static_gate.py` is a portable **structural diagnostic** only.
+Green means that a few W14 source invariants are present; the output
+**always** has `merge_release_authorized=false`, and is not a security
+attestation or a substitute for genuine Win11 alternate-account/UAC/service
+probes.
+
+Primary Windows references:
+https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights
+https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createnamedpipew
+https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers
