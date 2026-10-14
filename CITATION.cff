@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Ultratreiber (UDX)"
+abstract: >-
+  Research demonstrator of an isolated, read-only access broker with
+  fail-closed request parsing, OS-credential-bound peer identity and
+  evidence-gated Linux and Windows named-pipe lanes. Not production ready.
+authors:
+  - family-names: "Hostettler"
+    given-names: "Marco"
+    affiliation: "Coworker Research (Coworkerz)"
+version: "0.16.0"
+license: Apache-2.0
+repository-code: "https://github.com/marcohost33-maker/ultratreiber"
+keywords:
+  - access-broker
+  - least-privilege
+  - fail-closed
+  - named-pipes
+  - ipc-security
+  - research-prototype
