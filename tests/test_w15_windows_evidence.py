@@ -284,6 +284,17 @@ class PublicPrepAncestryAndPinTests(unittest.TestCase):
         with mock.patch.object(W15.subprocess, 'run', side_effect=OSError('no git')):
             self.assertFalse(W15.descends_from_baseline(ROOT, W15.BASELINE_HEAD))
 
+    def test_symbolic_and_abbreviated_refs_rejected(self):
+        # git itself would resolve all of these to the descendant B; only the
+        # full-40-hex format check keeps a report from naming a moving ref.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, a, b, _c = make_lineage(tmp)
+            with mock.patch.object(W15, 'BASELINE_HEAD', a):
+                self.assertTrue(W15.descends_from_baseline(repo, b))  # positive control
+                for ref in ('HEAD', 'HEAD~0', b[:12]):
+                    with self.subTest(ref=ref):
+                        self.assertFalse(W15.descends_from_baseline(repo, ref))
+
     def test_replace_graft_cannot_fake_ancestry(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo, a, _b, c = make_lineage(tmp)

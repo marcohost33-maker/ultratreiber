@@ -111,6 +111,15 @@ class W14AncestryAndPinTests(unittest.TestCase):
         with mock.patch.object(GATE.subprocess, 'run', side_effect=OSError('no git')):
             self.assertFalse(GATE.baseline_is_ancestor(ROOT, GATE.EXPECTED_HEAD))
 
+    def test_symbolic_and_abbreviated_refs_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, a, b, _c = make_lineage(tmp)
+            with mock.patch.object(GATE, 'EXPECTED_HEAD', a):
+                self.assertTrue(GATE.baseline_is_ancestor(repo, b))  # positive control
+                for ref in ('HEAD', 'HEAD~0', b[:12]):
+                    with self.subTest(ref=ref):
+                        self.assertFalse(GATE.baseline_is_ancestor(repo, ref))
+
     def test_replace_graft_cannot_fake_ancestry(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo, a, _b, c = make_lineage(tmp)

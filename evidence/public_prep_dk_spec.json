@@ -29,11 +29,11 @@
    "test": "tests/test_w15_windows_evidence.py::PublicPrepAncestryAndPinTests::test_replace_graft_cannot_fake_ancestry"
   },
   {
-   "name": "PP-DK4 W15 ancestry: commit-SHA format check removed ('HEAD' symbolic ref accepted)",
+   "name": "PP-DK4 W15 ancestry: commit-SHA format check removed (symbolic/abbreviated refs accepted)",
    "datei": "tools/w15_windows_evidence.py",
    "alt": "    if type(head) is not str or _COMMIT_RE.fullmatch(head) is None:\n        return False\n    try:\n        proc = subprocess.run(\n            # --no-replace-objects",
    "neu": "    try:\n        proc = subprocess.run(\n            # --no-replace-objects",
-   "test": "tests/test_w15_windows_evidence.py::PublicPrepAncestryAndPinTests::test_malformed_heads_and_missing_git_fail_closed"
+   "test": "tests/test_w15_windows_evidence.py::PublicPrepAncestryAndPinTests::test_symbolic_and_abbreviated_refs_rejected"
   },
   {
    "name": "PP-DK5 W15 collect: pinned-source gate removed (modified windows_pipe.py would be tested)",
@@ -90,6 +90,13 @@
    "alt": "    check('SOURCE_HASH_DRIFT', not drift,",
    "neu": "    check('SOURCE_HASH_DRIFT', True,",
    "test": "tests/test_w14_acl_static_gate.py::W14AncestryAndPinTests::test_source_hash_drift_blocks"
+  },
+  {
+   "name": "PP-DK13 W14 gate: commit-SHA format check removed (symbolic/abbreviated refs accepted)",
+   "datei": "tools/w14_acl_static_gate.py",
+   "alt": "    if type(head) is not str or _COMMIT_RE.fullmatch(head) is None:\n        return False\n",
+   "neu": "",
+   "test": "tests/test_w14_acl_static_gate.py::W14AncestryAndPinTests::test_symbolic_and_abbreviated_refs_rejected"
   }
  ]
 }
