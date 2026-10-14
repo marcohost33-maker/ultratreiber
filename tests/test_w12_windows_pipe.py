@@ -35,6 +35,33 @@ def _name() -> str:
     return wp.PIPE_PREFIX + 'UDX_W12_' + uuid.uuid4().hex
 
 
+def _canonical_sddl(sddl: str) -> str:
+    """Round-trip an SDDL string through Windows (string -> descriptor -> string).
+
+    The readback abbreviates well-known SIDs to their SDDL aliases: on a hosted
+    CI runner the current user is the built-in Administrator (RID 500) and comes
+    back as ``LA``. Comparing against the canonical form of the expected string
+    keeps the exact-text check without hand-maintaining the alias table.
+    """
+    api = wp.default_api()
+    sd = ctypes.c_void_p()
+    if not api.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl, wp.SDDL_REVISION_1, ctypes.byref(sd), None):
+        raise OSError(api.last_error(), 'ConvertStringSecurityDescriptorToSecurityDescriptorW failed')
+    try:
+        text = wp.wintypes.LPWSTR()
+        if not api.ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                sd, wp.SDDL_REVISION_1, wp.DACL_SECURITY_INFORMATION | wp.LABEL_SECURITY_INFORMATION,
+                ctypes.byref(text), None):
+            raise OSError(api.last_error(), 'ConvertSecurityDescriptorToStringSecurityDescriptorW failed')
+        try:
+            return text.value
+        finally:
+            api.LocalFree(text)
+    finally:
+        api.LocalFree(sd)
+
+
 def _remote(name: str) -> str:
     return BS + BS + 'localhost' + BS + 'pipe' + BS + name[len(wp.PIPE_PREFIX):]
 
@@ -346,7 +373,8 @@ class WindowsPipeRuntime(unittest.TestCase):
                           (wp.ACCESS_ALLOWED_ACE_TYPE, 0, FILE_GENERIC_READ_WRITE)])
         self.assertFalse(info.aces[0].mask & (WRITE_DAC | WRITE_OWNER))
         self.assertFalse(info.aces[1].mask & (WRITE_DAC | WRITE_OWNER))
-        self.assertEqual(info.sddl, 'D:P(A;;0x12019f;;;SY)(A;;0x12019f;;;' + self.sid + ')S:AI(ML;;NWNR;;;ME)')
+        expected = 'D:P(A;;0x12019f;;;SY)(A;;0x12019f;;;' + self.sid + ')S:AI(ML;;NWNR;;;ME)'
+        self.assertEqual(info.sddl, _canonical_sddl(expected))
 
     # (e) absolute deadline
     def test_silent_client_hits_deadline_without_hang(self):
