@@ -1,4 +1,53 @@
-# UDX Standalone W11 v0.11 — isolated read-only broker research
+# Ultratreiber (UDX)
+
+[![CI](https://github.com/marcohost33-maker/ultratreiber/actions/workflows/ci.yml/badge.svg)](https://github.com/marcohost33-maker/ultratreiber/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+![Status: research demonstrator](https://img.shields.io/badge/status-research%20demonstrator-orange.svg)
+
+Ultratreiber (UDX, *Universal Driver & eXchange*) is a research demonstrator of an isolated, read-only access broker: a fail-closed request parser, OS-credential-bound peer identity and evidence-gated Linux (AF_UNIX) and Windows (named pipe) transport lanes, with no dependency on any client or model runtime.
+
+> **Status: RESEARCH DEMONSTRATOR — NOT PRODUCTION READY.** Current wave: W16 (version 0.16.0). No release, no security approval.
+>
+> **Evidenced (local, not independently attested):**
+> - Portable + Linux test suite, run without root (`python -m unittest discover -s tests`); per-wave logs in `evidence/*_NONROOT_TESTS.log`.
+> - Native Windows 11 lane: the 47 pinned named-pipe tests of `tests/test_w12_windows_pipe.py` (23 runtime + 24 fault-injection) passed 47/47 on 2026-10-14 (Windows 11 Home 10.0.26200, Python 3.14.4, one standard account, not elevated): [`evidence/W16_NATIVE_WINDOWS_REPORT_FINAL.json`](evidence/W16_NATIVE_WINDOWS_REPORT_FINAL.json), summary in [`evidence/W16_WINDOWS_LANE_SUMMARY.json`](evidence/W16_WINDOWS_LANE_SUMMARY.json). The collector verdict `UNTRUSTED_REPORT_SCHEMA_VALID` is a syntax and local-hash check, not an attestation.
+>
+> **NOT evidenced:** denial against a real second Windows account; real AppContainer / Low-IL tokens; service-account sessions; elevated owner / AccessCheck matrix; a second (remote) host; a compiled C++ binary (`windows/*.cpp` has never been built); independent security review or attestation; authentic portal consent; Android/iOS.
+
+## Quick start
+
+Requires Python 3.13 or newer (CI: 3.13 and 3.14) and, for the cross-runtime interop tests, Node.js 22 or newer (those tests skip when `node` is absent). No third-party Python packages.
+
+Linux shell (run as a normal user, not root):
+
+```sh
+git clone https://github.com/marcohost33-maker/ultratreiber.git && cd ultratreiber
+PYTHONPATH=. python3 -m unittest discover -s tests -v
+sha256sum -c SHA256SUMS_W12
+```
+
+Windows (PowerShell, standard user):
+
+```powershell
+git clone https://github.com/marcohost33-maker/ultratreiber.git; cd ultratreiber
+$env:PYTHONPATH = '.'
+py -3 -m unittest discover -s tests -v
+py -3 tools/w15_windows_evidence.py --collect --repo . --timeout 300 --output "$env:TEMP\udx_native.json"
+py -3 tools/w15_windows_evidence.py --verify "$env:TEMP\udx_native.json" --repo .
+```
+
+The collector needs a full clone (it checks that the audited W14 baseline `26309e9` is an ancestor of `HEAD`) and byte-exact sources (`.gitattributes` disables line-ending conversion). Exit code 0 with verdict `UNTRUSTED_REPORT_SCHEMA_VALID` means the 47 pinned tests passed on that machine — nothing more. Wave-by-wave design notes, audits and gates are in [`docs/`](docs/) (start with `W12_WINDOWS_LANE.md`, `W16_FAIL_CLOSED_EVIDENCE_HARDENING.md`, `ROADMAP.md`).
+
+## Citation, license, provenance
+
+- Cite via [`CITATION.cff`](CITATION.cff) (GitHub: "Cite this repository").
+- Licensed under the [Apache License 2.0](LICENSE); see [`NOTICE`](NOTICE). Copyright 2026 Marco Hostettler / Coworker Research (Coworkerz).
+- Developed with the DI (digital intelligence) Coworker system — Coworker Research. Names such as Digi, Nigin, Vero, CodeFactory or `007acc2` in `docs/` refer to private Coworker Research projects and workspaces that are not publicly accessible.
+- Security reports: [`SECURITY.md`](SECURITY.md). Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+
+---
+
+## UDX Standalone W11 v0.11 — isolated read-only broker research (historical wave notes)
 
 **Status: WORKING RESEARCH DEMONSTRATOR, NOT PRODUCTION READY.** The platform-independent UDX and Linux IPC path remain standalone. No Digi/Nigin dependency. No GUI portal authorization, unrestricted device access or Windows runtime proof.
 
