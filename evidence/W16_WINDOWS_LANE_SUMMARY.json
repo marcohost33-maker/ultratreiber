@@ -1,0 +1,35 @@
+{
+  "schema": "udx_w16_windows_lane_summary_v1",
+  "date": "2026-10-14",
+  "host": "Windows 11 Home 10.0.26200, single local account, Python 3.14.4 (pythoncore-3.14-64)",
+  "producer": "Codie (Claude), local; NOT independent, NOT a release attestation",
+  "release_authorized": false,
+  "baseline_26309e9": {
+    "unittest_discover": {"ran": 239, "skipped": 82, "result": "OK", "exit": 0},
+    "pytest_default_capture": {"failed": 3, "passed": 154, "skipped": 82, "exit": 1,
+      "failed_cause": "test_node_interop WinError 6 DuplicateHandle(stderr) under pytest fd-capture; pre-existing, harness"}
+  },
+  "w16_commit_21af522": {
+    "unittest_discover": {"ran": 269, "failures": 1, "errors": 1, "skipped": 82, "exit": 1},
+    "pytest_capture_sys": {"failed": 2, "passed": 185, "skipped": 82, "subtests_passed": 1561, "exit": 1},
+    "fails": {
+      "test_w14_acl_static_gate::test_current_structural_contract_never_approves_release": "TEST: HEAD pin 26309e9 -> HEAD_UNVERIFIED as soon as the patch is committed (6/6 OK uncommitted)",
+      "test_w15_windows_evidence::W16AdversarialTests::test_source_hash_symlink_blocked": "ENV/TEST: WinError 1314, no symlink privilege for a standard user without Developer Mode"
+    },
+    "skips_82": "all Linux/POSIX-only (w10 21, w8 16, w9 12, linux_ipc 15, w6 8, w7 6, w5 3, w11 1)"
+  },
+  "native_collector": {
+    "at_21af522_committed": {"exit": 2, "error": "W14_ORIGINAL_HEAD_REQUIRED"},
+    "w16_as_shipped_on_26309e9_plus_patches": {"exit": 2, "subprocess_exitcode": 1, "diagnostic_code": "WORKER_EXIT_NONZERO",
+      "root_cause": "unittest discover(top_level_dir=repo) with tests/ not a package -> ImportError; fixed in 88168de (W16b)"},
+    "w16b_on_26309e9_plus_W14_W15_W16_W16b_uncommitted": {
+      "tree_equal_to_commit": "88168dec57dd565a39f749ad88b169d1dba48328",
+      "exit": 0, "tests_run": 47, "pass": 47, "classes": {"WindowsPipeRuntime": 23, "WindowsPipeFaultInjection": 24},
+      "verify_exit": 0, "verify_verdict": "UNTRUSTED_REPORT_SCHEMA_VALID",
+      "report": "evidence/W16_NATIVE_WINDOWS_REPORT.json",
+      "report_sha256": "2f4c4e42346a3f6ff37110a45ef9ae95d6fc131d900ddf34efa562cde6d737f4",
+      "validator_negatives_rc2": ["skip_one", "drop_one", "array_id", "release_true", "gate_pass", "rename_test"]
+    },
+    "manual_gates": "7/7 NOT_EXECUTED (second account, AppContainer/Low-IL real token, elevated owner/AccessCheck, service, remote host, C++ binary, independent review)"
+  }
+}
