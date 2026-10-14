@@ -19,7 +19,8 @@ def _git(repo, *args):
     env = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1'}
     return subprocess.check_output(
         ['git', '-C', str(repo), '-c', 'user.name=t', '-c', 'user.email=t@example.invalid',
-         '-c', 'commit.gpgsign=false', *args], text=True, env=env, stderr=subprocess.DEVNULL).strip()
+         '-c', 'commit.gpgsign=false', *args], text=True, env=env,
+        stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL).strip()
 
 
 def make_lineage(tmp):

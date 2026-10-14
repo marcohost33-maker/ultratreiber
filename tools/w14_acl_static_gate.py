@@ -91,7 +91,8 @@ def baseline_is_ancestor(repo: pathlib.Path, head: object) -> bool:
         proc = subprocess.run(
             ['git', '--no-replace-objects', '-C', str(repo), 'merge-base', '--is-ancestor',
              EXPECTED_HEAD, head],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=False,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return False
@@ -152,7 +153,7 @@ def audit(repo: pathlib.Path) -> dict:
           'Expected GRGW mask rights have changed')
     try:
         head = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True,
-                                       stderr=subprocess.DEVNULL).strip()
+                                       stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL).strip()
     except (OSError, subprocess.CalledProcessError):
         head = None
     check('HEAD_UNVERIFIED', baseline_is_ancestor(repo, head),
@@ -161,7 +162,8 @@ def audit(repo: pathlib.Path) -> dict:
     check('SOURCE_HASH_DRIFT', not drift,
           'Audited sources differ from the reviewed bytes: ' + ', '.join(drift))
     try:
-        dirty = bool(subprocess.check_output(['git', '-C', str(repo), 'status', '--porcelain'], text=True).strip())
+        dirty = bool(subprocess.check_output(['git', '-C', str(repo), 'status', '--porcelain'], text=True,
+                                                    stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL).strip())
     except (OSError, subprocess.CalledProcessError):
         dirty = True
     return {

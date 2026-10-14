@@ -121,7 +121,7 @@ def current_head(repo: pathlib.Path) -> str | None:
     try:
         return subprocess.check_output(
             ['git', '-C', str(repo), 'rev-parse', 'HEAD'],
-            text=True, stderr=subprocess.DEVNULL, timeout=5,
+            text=True, stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5,
         ).strip()
     except (OSError, subprocess.SubprocessError):
         return None
@@ -142,7 +142,8 @@ def descends_from_baseline(repo: pathlib.Path, head: object) -> bool:
             # --no-replace-objects: a local ``git replace --graft`` must not fake ancestry.
             ['git', '--no-replace-objects', '-C', str(repo), 'merge-base', '--is-ancestor',
              BASELINE_HEAD, head],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=False,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return False
@@ -364,7 +365,7 @@ def collect(repo: pathlib.Path, *, timeout: int = 300) -> dict:
     args = [sys.executable, str(pathlib.Path(__file__).resolve()), '--worker', '--repo', str(repo)]
     now = time.time()
     try:
-        proc = subprocess.run(args, cwd=repo, text=True, stdout=subprocess.PIPE,
+        proc = subprocess.run(args, cwd=repo, text=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, timeout=timeout, check=False,
                               env={**os.environ, 'PYTHONPATH': str(repo)})
         rc = proc.returncode
