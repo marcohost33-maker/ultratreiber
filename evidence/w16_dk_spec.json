@@ -1,0 +1,46 @@
+{
+ "repo": "C:/Users/marco/dev/_wt/udx-w16",
+ "test_befehl": [
+  "python",
+  "-m",
+  "pytest"
+ ],
+ "timeout_s": 120,
+ "faelle": [
+  {
+   "name": "W16-DK1 Array/Nicht-String-Test-ID: INVALID_CASE_ID_TYPE entfernt -> Bericht mit id=[] waere schema-gueltig (fail-open)",
+   "datei": "tools/w15_windows_evidence.py",
+   "alt": "                issues.append('INVALID_CASE_ID_TYPE')",
+   "neu": "                pass",
+   "test": "tests/test_w15_windows_evidence.py::W16AdversarialTests::test_type_confusion_malformed_cases_never_raise"
+  },
+  {
+   "name": "W16-DK2 exakte 47-Testnamen-Bindung: NATIVE_TEST_ID_SET_DRIFT entfernt",
+   "datei": "tools/w15_windows_evidence.py",
+   "alt": "                    issues.append('NATIVE_TEST_ID_SET_DRIFT')",
+   "neu": "                    pass",
+   "test": "tests/test_w15_windows_evidence.py::W16AdversarialTests::test_exact_test_ids_not_just_count_and_class_names"
+  },
+  {
+   "name": "W16-DK3 Quell-SHA-Pin der nativen Testdatei im Validator entfernt",
+   "datei": "tools/w15_windows_evidence.py",
+   "alt": "            issues.append('NATIVE_TEST_SOURCE_NOT_PINNED')",
+   "neu": "            pass",
+   "test": "tests/test_w15_windows_evidence.py::W16AdversarialTests::test_invalid_signed_like_source_claims_fail"
+  },
+  {
+   "name": "W16b-DK4 Worker-Discovery zurueck auf top_level_dir=repo (Original-W16-Defekt, ImportError)",
+   "datei": "tools/w15_windows_evidence.py",
+   "alt": "                                     top_level_dir=str(repo / 'tests'))",
+   "neu": "                                     top_level_dir=str(repo))",
+   "test": "tests/test_w15_windows_evidence.py::W16AdversarialTests::test_worker_discovery_yields_exact_pinned_ids"
+  },
+  {
+   "name": "W16b-DK5 Pin-Pruefung vor Import entfernt (fremder Testcode wuerde importiert/ausgefuehrt)",
+   "datei": "tools/w15_windows_evidence.py",
+   "alt": "    if sha256_file(repo / 'tests/test_w12_windows_pipe.py') != PINNED_NATIVE_TEST_SHA256:\n        raise RuntimeError('NATIVE_TEST_SOURCE_NOT_PINNED')\n    loader = unittest.TestLoader()",
+   "neu": "    loader = unittest.TestLoader()",
+   "test": "tests/test_w15_windows_evidence.py::W16AdversarialTests::test_worker_discovery_checks_pin_before_import"
+  }
+ ]
+}
