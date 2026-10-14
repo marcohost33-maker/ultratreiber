@@ -87,6 +87,15 @@ jobs:
         run: |
           python tools/w15_windows_evidence.py --collect --repo . --timeout 300 --output "$env:RUNNER_TEMP\udx_native.json"
           if ($LASTEXITCODE -ne 0) { Get-Content "$env:RUNNER_TEMP\udx_native.json"; exit $LASTEXITCODE }
+      # The report deliberately carries no raw test output. When the worker
+      # fails, run it once directly so the failing case or the setup error is
+      # visible in this (public, synthetic-data-only) CI log.
+      - name: Diagnose a failed worker (only on failure)
+        if: failure()
+        run: |
+          $env:PYTHONPATH = (Get-Location).Path
+          python tools/w15_windows_evidence.py --worker --repo . 2>&1 | Select-Object -Last 40
+          python -m unittest discover -s tests -p test_w12_windows_pipe.py -v 2>&1 | Select-String -Pattern 'FAIL|ERROR|Error|Traceback' | Select-Object -First 40
       - name: Verify report against this checkout
         run: |
           python tools/w15_windows_evidence.py --verify "$env:RUNNER_TEMP\udx_native.json" --repo .
