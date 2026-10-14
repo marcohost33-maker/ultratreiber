@@ -42,3 +42,25 @@ Das Skript bleibt ein lokaler Sammler mit `release_authorized=false`. `UNTRUSTED
 - https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-impersonatenamedpipeclient
 - https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md
 - https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches
+
+## Public prep (2026-10-14): ancestry + pinned sources instead of a hard HEAD pin
+
+The hard `HEAD == 26309e9` pin (collector `W14_ORIGINAL_HEAD_REQUIRED`, gate `HEAD_UNVERIFIED`)
+could never hold for any commit after the baseline, so the collector was unusable at every
+committed state and `test_current_structural_contract_never_approves_release` failed at every
+committed head. Replaced by two checks that must BOTH hold:
+
+1. **Ancestry:** `git --no-replace-objects merge-base --is-ancestor 26309e9 HEAD` must exit 0
+   (`W14_BASELINE_NOT_ANCESTOR` / `HEAD_MISMATCH` / `HEAD_UNVERIFIED` otherwise). Malformed heads,
+   a missing baseline object (shallow clone), missing git and `git replace --graft` lies all fail closed.
+2. **Exact sources:** `udx_ref/windows_pipe.py`, `windows/udx_sid_probe.cpp`,
+   `windows/udx_sid_client.cpp` and `tests/test_w12_windows_pipe.py` must be byte-identical to the
+   reviewed W14+W16 bytes (values from `evidence/W16_NATIVE_WINDOWS_REPORT_FINAL.json`;
+   `PINNED_SOURCE_DRIFT` / `SOURCE_HASH_DRIFT` otherwise).
+
+The structural gate test is decoupled from the checkout's git state (ancestry mocked; covered by
+temp-repo tests). The symlink guard test simulates `is_symlink` so it runs without symlink privilege;
+a real-link variant skips with `SYMLINK_PRIVILEGE_UNAVAILABLE`. Discrimination spec:
+`evidence/public_prep_dk_spec.json`. `.gitattributes` (`* -text`) keeps checkouts byte-exact.
+Note: `evidence/W16_NATIVE_WINDOWS_REPORT_FINAL.json` records the pre-change collector hashes; verifying
+it against a later tree reports `SOURCE_CHANGED:tools/...` by design - it attests nothing about later trees.

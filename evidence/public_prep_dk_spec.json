@@ -1,0 +1,95 @@
+{
+ "repo": ".",
+ "test_befehl": [
+  "python",
+  "-m",
+  "pytest"
+ ],
+ "timeout_s": 180,
+ "faelle": [
+  {
+   "name": "PP-DK1 W15 ancestry: merge-base exit code ignored (descends_from_baseline always True)",
+   "datei": "tools/w15_windows_evidence.py",
+   "alt": "    return proc.returncode == 0",
+   "neu": "    return True",
+   "test": "tests/test_w15_windows_evidence.py::PublicPrepAncestryAndPinTests::test_baseline_must_be_ancestor"
+  },
+  {
+   "name": "PP-DK2 W15 collect: ancestry gate removed (foreign lineage without 26309e9 would be collected)",
+   "datei": "tools/w15_windows_evidence.py",
+   "alt": "    if not descends_from_baseline(repo, head_before):\n        raise RuntimeError('W14_BASELINE_NOT_ANCESTOR')\n",
+   "neu": "",
+   "test": "tests/test_w15_windows_evidence.py::PublicPrepAncestryAndPinTests::test_collect_rejects_foreign_lineage"
+  },
+  {
+   "name": "PP-DK3 W15 ancestry: --no-replace-objects removed (local git replace --graft fakes ancestry)",
+   "datei": "tools/w15_windows_evidence.py",
+   "alt": "['git', '--no-replace-objects', '-C', str(repo), 'merge-base', '--is-ancestor',",
+   "neu": "['git', '-C', str(repo), 'merge-base', '--is-ancestor',",
+   "test": "tests/test_w15_windows_evidence.py::PublicPrepAncestryAndPinTests::test_replace_graft_cannot_fake_ancestry"
+  },
+  {
+   "name": "PP-DK4 W15 ancestry: commit-SHA format check removed ('HEAD' symbolic ref accepted)",
+   "datei": "tools/w15_windows_evidence.py",
+   "alt": "    if type(head) is not str or _COMMIT_RE.fullmatch(head) is None:\n        return False\n    try:\n        proc = subprocess.run(\n            # --no-replace-objects",
+   "neu": "    try:\n        proc = subprocess.run(\n            # --no-replace-objects",
+   "test": "tests/test_w15_windows_evidence.py::PublicPrepAncestryAndPinTests::test_malformed_heads_and_missing_git_fail_closed"
+  },
+  {
+   "name": "PP-DK5 W15 collect: pinned-source gate removed (modified windows_pipe.py would be tested)",
+   "datei": "tools/w15_windows_evidence.py",
+   "alt": "    if pinned_source_drift(hashes_before):\n        raise RuntimeError('PINNED_SOURCE_DRIFT')\n",
+   "neu": "",
+   "test": "tests/test_w15_windows_evidence.py::PublicPrepAncestryAndPinTests::test_collect_rejects_pinned_source_drift"
+  },
+  {
+   "name": "PP-DK6 W15 verify: pinned-source drift no longer reported",
+   "datei": "tools/w15_windows_evidence.py",
+   "alt": "        issues.extend('PINNED_SOURCE_DRIFT:' + name for name in pinned_source_drift(hashes))",
+   "neu": "        pass",
+   "test": "tests/test_w15_windows_evidence.py::PublicPrepAncestryAndPinTests::test_report_pinned_source_drift_rejected"
+  },
+  {
+   "name": "PP-DK7 W15 verify: repo ancestry check of git_head disabled",
+   "datei": "tools/w15_windows_evidence.py",
+   "alt": "        if not descends_from_baseline(repo, head):",
+   "neu": "        if False:",
+   "test": "tests/test_w15_windows_evidence.py::PublicPrepAncestryAndPinTests::test_report_with_repo_checks_ancestry"
+  },
+  {
+   "name": "PP-DK8 W15 symlink guard: is_symlink half removed (simulated link, no privilege needed)",
+   "datei": "tools/w15_windows_evidence.py",
+   "alt": "        if path.is_symlink() or not path.resolve(strict=True).is_relative_to(base):",
+   "neu": "        if not path.resolve(strict=True).is_relative_to(base):",
+   "test": "tests/test_w15_windows_evidence.py::W16AdversarialTests::test_source_hash_symlink_blocked"
+  },
+  {
+   "name": "PP-DK9 W14 gate: merge-base exit code ignored (baseline_is_ancestor always True)",
+   "datei": "tools/w14_acl_static_gate.py",
+   "alt": "    return proc.returncode == 0",
+   "neu": "    return True",
+   "test": "tests/test_w14_acl_static_gate.py::W14AncestryAndPinTests::test_baseline_must_be_ancestor_of_head"
+  },
+  {
+   "name": "PP-DK10 W14 gate: HEAD_UNVERIFIED finding never raised",
+   "datei": "tools/w14_acl_static_gate.py",
+   "alt": "    check('HEAD_UNVERIFIED', baseline_is_ancestor(repo, head),",
+   "neu": "    check('HEAD_UNVERIFIED', True,",
+   "test": "tests/test_w14_acl_static_gate.py::W14AncestryAndPinTests::test_audit_blocks_foreign_lineage"
+  },
+  {
+   "name": "PP-DK11 W14 gate: --no-replace-objects removed (graft fakes ancestry)",
+   "datei": "tools/w14_acl_static_gate.py",
+   "alt": "['git', '--no-replace-objects', '-C', str(repo), 'merge-base', '--is-ancestor',",
+   "neu": "['git', '-C', str(repo), 'merge-base', '--is-ancestor',",
+   "test": "tests/test_w14_acl_static_gate.py::W14AncestryAndPinTests::test_replace_graft_cannot_fake_ancestry"
+  },
+  {
+   "name": "PP-DK12 W14 gate: SOURCE_HASH_DRIFT finding never raised",
+   "datei": "tools/w14_acl_static_gate.py",
+   "alt": "    check('SOURCE_HASH_DRIFT', not drift,",
+   "neu": "    check('SOURCE_HASH_DRIFT', True,",
+   "test": "tests/test_w14_acl_static_gate.py::W14AncestryAndPinTests::test_source_hash_drift_blocks"
+  }
+ ]
+}

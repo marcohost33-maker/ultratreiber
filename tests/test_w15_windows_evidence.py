@@ -1,7 +1,10 @@
 """Portable, negative-first validation of W15 witness/claim boundary."""
 import copy
 import importlib.util
+import os
 import pathlib
+import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -12,14 +15,36 @@ W15 = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(W15)
 
 
+def _git(repo, *args):
+    # Isolated from the developer's global/system git config (signing, hooks).
+    env = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1'}
+    return subprocess.check_output(
+        ['git', '-C', str(repo), '-c', 'user.name=t', '-c', 'user.email=t@example.invalid',
+         '-c', 'commit.gpgsign=false', *args], text=True, env=env, stderr=subprocess.DEVNULL).strip()
+
+
+def make_lineage(tmp):
+    """Temp repo: A -> B (B descends from A) plus an orphan C. Returns (repo, A, B, C)."""
+    if shutil.which('git') is None:
+        raise unittest.SkipTest('GIT_NOT_AVAILABLE')
+    repo = pathlib.Path(tmp) / 'lineage'
+    repo.mkdir()
+    _git(repo, 'init', '-q')
+    _git(repo, 'commit', '-q', '--allow-empty', '-m', 'a')
+    a = _git(repo, 'rev-parse', 'HEAD')
+    _git(repo, 'commit', '-q', '--allow-empty', '-m', 'b')
+    b = _git(repo, 'rev-parse', 'HEAD')
+    c = _git(repo, 'commit-tree', a + '^{tree}', '-m', 'orphan')
+    return repo, a, b, c
+
+
 def sample():
     return {
         'schema': 'UDX_W15_NATIVE_EVIDENCE_V1',
         'collector_platform': 'win32',
         'git_head': W15.BASELINE_HEAD,
         'subprocess_exitcode': 0,
-        'source_sha256': {x: (W15.PINNED_NATIVE_TEST_SHA256 if x == 'tests/test_w12_windows_pipe.py' else '0'*64)
-                          for x in W15.SOURCE_FILES},
+        'source_sha256': {x: W15.PINNED_SOURCE_SHA256.get(x, '0'*64) for x in W15.SOURCE_FILES},
         'native_suite': {
             'tests_run': 47, 'success': True, 'all_native_cases_pass': True,
             'cases': [{'id': test_id, 'status': 'PASS', 'elapsed_seconds': 0.01}
@@ -175,6 +200,24 @@ class W16AdversarialTests(unittest.TestCase):
         self.assertIn("'diagnostic_code':", source)
 
     def test_source_hash_symlink_blocked(self):
+        # The guard is exercised on every platform: ``is_symlink`` is simulated for
+        # one regular in-tree file, so no symlink privilege is needed (a standard
+        # Windows user gets WinError 1314 for a real link). Only the is_symlink
+        # half can trigger here; the resolve-escape half is the real-link test below.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = pathlib.Path(tmp) / 'repo';repo.mkdir()
+            for item in W15.SOURCE_FILES:
+                q = repo / item;q.parent.mkdir(parents=True, exist_ok=True)
+                q.write_text('fixture', encoding='utf-8')
+            self.assertEqual(set(W15.source_hashes(repo)), set(W15.SOURCE_FILES))  # positive control
+            flagged = repo / W15.SOURCE_FILES[0]
+            real_is_symlink = pathlib.Path.is_symlink
+            with mock.patch.object(pathlib.Path, 'is_symlink', autospec=True,
+                                   side_effect=lambda p: p == flagged or real_is_symlink(p)):
+                with self.assertRaisesRegex(RuntimeError, 'UNSAFE_SOURCE_PATH'):
+                    W15.source_hashes(repo)
+
+    def test_source_hash_real_symlink_blocked(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = pathlib.Path(tmp) / 'repo';repo.mkdir()
             secret = pathlib.Path(tmp) / 'secret';secret.write_text('do not read', encoding='utf-8')
@@ -182,7 +225,11 @@ class W16AdversarialTests(unittest.TestCase):
                 q = repo / item;q.parent.mkdir(parents=True, exist_ok=True)
                 q.write_text('fixture', encoding='utf-8')
             (repo/W15.SOURCE_FILES[0]).unlink()
-            (repo/W15.SOURCE_FILES[0]).symlink_to(secret)
+            try:
+                (repo/W15.SOURCE_FILES[0]).symlink_to(secret)
+            except OSError as exc:
+                self.skipTest('SYMLINK_PRIVILEGE_UNAVAILABLE: %s (guard covered by the simulated test)'
+                              % type(exc).__name__)
             with self.assertRaisesRegex(RuntimeError, 'UNSAFE_SOURCE_PATH'):
                 W15.source_hashes(repo)
 
@@ -212,6 +259,91 @@ class W16AdversarialTests(unittest.TestCase):
         with mock.patch.object(W15, 'is_windows', return_value=False):
             with self.assertRaisesRegex(RuntimeError, 'NATIVE_WINDOWS_REQUIRED'):
                 W15.collect(ROOT)
+
+
+class PublicPrepAncestryAndPinTests(unittest.TestCase):
+    """Hard ``HEAD == 26309e9`` pin replaced by ancestry + exact pinned source bytes."""
+
+    def test_baseline_must_be_ancestor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, a, b, c = make_lineage(tmp)
+            with mock.patch.object(W15, 'BASELINE_HEAD', a):
+                self.assertTrue(W15.descends_from_baseline(repo, b))
+                self.assertTrue(W15.descends_from_baseline(repo, a))
+                self.assertFalse(W15.descends_from_baseline(repo, c))
+            with mock.patch.object(W15, 'BASELINE_HEAD', b):
+                self.assertFalse(W15.descends_from_baseline(repo, a))
+            # The real W14 baseline object is absent here (like a shallow clone).
+            self.assertFalse(W15.descends_from_baseline(repo, b))
+
+    def test_malformed_heads_and_missing_git_fail_closed(self):
+        for bad in (None, '', 'HEAD', '--help', 'A' * 40, '0' * 39, 17, ['x']):
+            with self.subTest(bad=repr(bad)):
+                self.assertFalse(W15.descends_from_baseline(ROOT, bad))
+        with mock.patch.object(W15.subprocess, 'run', side_effect=OSError('no git')):
+            self.assertFalse(W15.descends_from_baseline(ROOT, W15.BASELINE_HEAD))
+
+    def test_replace_graft_cannot_fake_ancestry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, a, _b, c = make_lineage(tmp)
+            _git(repo, 'replace', '--graft', c, a)
+            self.assertEqual(_git(repo, 'merge-base', a, c), a)  # the graft is active for plain git
+            with mock.patch.object(W15, 'BASELINE_HEAD', a):
+                self.assertFalse(W15.descends_from_baseline(repo, c))
+
+    def test_collect_rejects_foreign_lineage(self):
+        # A checkout whose history does not contain 26309e9 stays rejected, before any test runs.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, _a, _b, _c = make_lineage(tmp)
+            with mock.patch.object(W15, 'is_windows', return_value=True), \
+                    mock.patch.object(W15.subprocess, 'run', wraps=W15.subprocess.run) as run:
+                with self.assertRaisesRegex(RuntimeError, 'W14_BASELINE_NOT_ANCESTOR'):
+                    W15.collect(repo)
+            self.assertFalse(any('--worker' in call.args[0] for call in run.call_args_list))
+
+    def test_collect_rejects_pinned_source_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = pathlib.Path(tmp)
+            for name in W15.SOURCE_FILES:
+                (repo / name).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ROOT / name, repo / name)
+            target = repo / 'udx_ref' / 'windows_pipe.py'
+            target.write_bytes(target.read_bytes() + b'\n')
+            with mock.patch.object(W15, 'is_windows', return_value=True), \
+                    mock.patch.object(W15, 'current_head', return_value='a' * 40), \
+                    mock.patch.object(W15, 'descends_from_baseline', return_value=True), \
+                    mock.patch.object(W15.subprocess, 'run') as run:
+                with self.assertRaisesRegex(RuntimeError, 'PINNED_SOURCE_DRIFT'):
+                    W15.collect(repo)
+            run.assert_not_called()
+
+    def test_report_with_repo_checks_ancestry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, a, b, c = make_lineage(tmp)
+            with mock.patch.object(W15, 'BASELINE_HEAD', a):
+                d = sample(); d['git_head'] = c
+                self.assertIn('HEAD_MISMATCH', W15._check_report(d, repo=repo)['issues'])
+                d = sample(); d['git_head'] = b
+                self.assertNotIn('HEAD_MISMATCH', W15._check_report(d, repo=repo)['issues'])
+        d = sample(); d['git_head'] = 'b' * 40   # no repo: only the baseline itself is confirmable
+        self.assertIn('HEAD_MISMATCH', W15._check_report(d)['issues'])
+
+    def test_report_pinned_source_drift_rejected(self):
+        d = sample(); d['source_sha256']['udx_ref/windows_pipe.py'] = '1' * 64
+        verdict = W15._check_report(d)
+        self.assertIn('PINNED_SOURCE_DRIFT:udx_ref/windows_pipe.py', verdict['issues'])
+        self.assertEqual(verdict['verdict'], 'BLOCKED')
+
+    def test_pinned_sources_match_current_tree(self):
+        self.assertEqual(W15.pinned_source_drift(W15.source_hashes(ROOT)), [])
+
+    def test_pins_agree_with_w14_gate(self):
+        spec = importlib.util.spec_from_file_location('w14_gate_pins', ROOT / 'tools' / 'w14_acl_static_gate.py')
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        self.assertEqual(gate.EXPECTED_HEAD, W15.BASELINE_HEAD)
+        for name, digest in gate.PINNED_SOURCE_SHA256.items():
+            self.assertEqual(W15.PINNED_SOURCE_SHA256[name], digest, name)
 
 
 if __name__ == '__main__':

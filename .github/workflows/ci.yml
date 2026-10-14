@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: suite (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.13", "3.14"]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # actions/checkout v7.0.1; full history: the W14 gate and the collector
+      # verify that the audited baseline 26309e9 is an ancestor of HEAD.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # actions/setup-python v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: ${{ matrix.python }}
+      # actions/setup-node v7.1.0 (cross-runtime interop tests need node)
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - name: Toolchain
+        run: |
+          python --version
+          node --version
+          git --version
+      - name: Unit test suite
+        env:
+          PYTHONPATH: .
+        run: python -m unittest discover -s tests -v
+      - name: Manifest (SHA256SUMS_W12)
+        run: sha256sum -c --strict SHA256SUMS_W12
+      - name: W14 portable ACL gate (advisory, never a release approval)
+        env:
+          PYTHONPATH: .
+        run: python tools/w14_acl_static_gate.py
+
+  windows-native-evidence:
+    name: native evidence collector (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # actions/setup-python v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+      - name: OS under test (hosted runner = Windows Server, not Windows 11)
+        run: |
+          [System.Environment]::OSVersion.VersionString
+          python --version
+      - name: Collect (47 pinned named-pipe tests)
+        run: |
+          python tools/w15_windows_evidence.py --collect --repo . --timeout 300 --output "$env:RUNNER_TEMP\udx_native.json"
+          if ($LASTEXITCODE -ne 0) { Get-Content "$env:RUNNER_TEMP\udx_native.json"; exit $LASTEXITCODE }
+      - name: Verify report against this checkout
+        run: |
+          python tools/w15_windows_evidence.py --verify "$env:RUNNER_TEMP\udx_native.json" --repo .
+          exit $LASTEXITCODE

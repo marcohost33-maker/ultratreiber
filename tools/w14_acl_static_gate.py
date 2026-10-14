@@ -8,12 +8,24 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import pathlib
+import re
 import subprocess
 import sys
 
+# Audited W14 baseline. Public prep: it must be an ANCESTOR of HEAD (a hard
+# ``HEAD ==`` pin can never hold for any later commit), and the audited sources
+# must be byte-identical to the reviewed bytes below. Keep in sync with
+# tools/w15_windows_evidence.py PINNED_SOURCE_SHA256 (a test compares both).
 EXPECTED_HEAD = '26309e997fea1ac90edba8a51e457fd494cac978'
+PINNED_SOURCE_SHA256 = {
+    'udx_ref/windows_pipe.py': '3952c0b1f5722bd6cc07ac8b4e582665dd14181abd4fa6f07eebcd6a5dbd28ea',
+    'windows/udx_sid_probe.cpp': '4ea51f360f85f9f4d8016736ddc995751fe3c0a7932bc48627c32e25aa082772',
+    'windows/udx_sid_client.cpp': 'bf62f1deadffa79aad0afaca5abfd67e556fd79c0dbf03b15431c1b1913eb49a',
+}
+_COMMIT_RE = re.compile('[0-9a-f]{40}')
 EXPECTED_SID = 'S-1-5-21-1234-5678-9012-1001'
 # Windows FILE_GENERIC_READ | FILE_GENERIC_WRITE; do not confuse with least privilege.
 GRGW_MASK = 0x0012019F
@@ -71,6 +83,36 @@ def _find_server_flags(tree, constants):
     return calls[0]
 
 
+def baseline_is_ancestor(repo: pathlib.Path, head: object) -> bool:
+    """git-confirmed ``EXPECTED_HEAD`` ancestor-of ``head``; every error is False (fail-closed)."""
+    if type(head) is not str or _COMMIT_RE.fullmatch(head) is None:
+        return False
+    try:
+        proc = subprocess.run(
+            ['git', '--no-replace-objects', '-C', str(repo), 'merge-base', '--is-ancestor',
+             EXPECTED_HEAD, head],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0
+
+
+def source_hash_drift(repo: pathlib.Path) -> list[str]:
+    """Pinned sources that are missing, symlinked or not byte-identical to the reviewed bytes."""
+    drift = []
+    for name, digest in PINNED_SOURCE_SHA256.items():
+        path = repo / name
+        try:
+            ok = (path.is_file() and not path.is_symlink()
+                  and hashlib.sha256(path.read_bytes()).hexdigest() == digest)
+        except OSError:
+            ok = False
+        if not ok:
+            drift.append(name)
+    return drift
+
+
 def audit(repo: pathlib.Path) -> dict:
     findings = []
     def check(code, ok, explanation):
@@ -109,10 +151,15 @@ def audit(repo: pathlib.Path) -> dict:
           (GRGW_MASK & (WRITE_DAC | WRITE_OWNER | DELETE)) == 0,
           'Expected GRGW mask rights have changed')
     try:
-        head = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
+        head = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True,
+                                       stderr=subprocess.DEVNULL).strip()
     except (OSError, subprocess.CalledProcessError):
         head = None
-    check('HEAD_UNVERIFIED', head == EXPECTED_HEAD, 'Source ancestry not pinned to the audited W14 baseline')
+    check('HEAD_UNVERIFIED', baseline_is_ancestor(repo, head),
+          'HEAD does not descend from the audited W14 baseline (or ancestry is unverifiable)')
+    drift = source_hash_drift(repo)
+    check('SOURCE_HASH_DRIFT', not drift,
+          'Audited sources differ from the reviewed bytes: ' + ', '.join(drift))
     try:
         dirty = bool(subprocess.check_output(['git', '-C', str(repo), 'status', '--porcelain'], text=True).strip())
     except (OSError, subprocess.CalledProcessError):

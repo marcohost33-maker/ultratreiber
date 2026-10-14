@@ -1,0 +1,4 @@
+# Byte-exact checkouts on every platform: no line-ending conversion.
+# The evidence collector pins source SHA-256 values and SHA256SUMS_W12 hashes
+# raw bytes; core.autocrlf=true on Windows would otherwise change them.
+* -text

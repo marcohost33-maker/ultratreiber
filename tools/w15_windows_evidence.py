@@ -35,6 +35,19 @@ EXPECTED_NATIVE_CLASSES = ('WindowsPipeRuntime', 'WindowsPipeFaultInjection')
 EXPECTED_NATIVE_COUNT = 47  # 23 runtime + 24 fault-injection tests pinned to W14
 # W16: bytes pinned to reviewed original W14 test source. Use autocrlf=false in Windows checkout.
 PINNED_NATIVE_TEST_SHA256 = '30cfbd31ba7b856df7dd3ff525cb2ab0908e1b2a2ca74d89709c4d9ce1a88aff'
+# Public prep (replaces the hard ``HEAD == BASELINE_HEAD`` pin, which no commit
+# after the baseline could ever satisfy): the checkout must DESCEND from the
+# audited W14 baseline AND the code under test must be byte-identical to the
+# reviewed W14+W16 sources (values = W16_NATIVE_WINDOWS_REPORT_FINAL.json).
+# The collector and its own test file stay recorded-only: they evolve, and a
+# script cannot meaningfully pin itself.
+PINNED_SOURCE_SHA256 = {
+    'udx_ref/windows_pipe.py': '3952c0b1f5722bd6cc07ac8b4e582665dd14181abd4fa6f07eebcd6a5dbd28ea',
+    'windows/udx_sid_probe.cpp': '4ea51f360f85f9f4d8016736ddc995751fe3c0a7932bc48627c32e25aa082772',
+    'windows/udx_sid_client.cpp': 'bf62f1deadffa79aad0afaca5abfd67e556fd79c0dbf03b15431c1b1913eb49a',
+    'tests/test_w12_windows_pipe.py': PINNED_NATIVE_TEST_SHA256,
+}
+_COMMIT_RE = re.compile('[0-9a-f]{40}')
 EXPECTED_NATIVE_TEST_IDS = frozenset((
     'test_w12_windows_pipe.WindowsPipeFaultInjection.test_anonymous_level_value_denied',
     'test_w12_windows_pipe.WindowsPipeFaultInjection.test_appcontainer_token_denied',
@@ -112,6 +125,33 @@ def current_head(repo: pathlib.Path) -> str | None:
         ).strip()
     except (OSError, subprocess.SubprocessError):
         return None
+
+
+def descends_from_baseline(repo: pathlib.Path, head: object) -> bool:
+    """True only if git positively confirms BASELINE_HEAD is an ancestor of ``head``.
+
+    Fail-closed: a malformed head, an unknown object (e.g. a shallow clone that
+    lacks the baseline), a missing git or a timeout all yield False.  Exit code 1
+    of ``merge-base --is-ancestor`` (not an ancestor) is the only "no" git gives;
+    every other non-zero code is an error and is treated the same way.
+    """
+    if type(head) is not str or _COMMIT_RE.fullmatch(head) is None:
+        return False
+    try:
+        proc = subprocess.run(
+            # --no-replace-objects: a local ``git replace --graft`` must not fake ancestry.
+            ['git', '--no-replace-objects', '-C', str(repo), 'merge-base', '--is-ancestor',
+             BASELINE_HEAD, head],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0
+
+
+def pinned_source_drift(hashes: dict) -> list[str]:
+    """Names of pinned sources whose recorded hash differs from the reviewed bytes."""
+    return [name for name, digest in PINNED_SOURCE_SHA256.items() if hashes.get(name) != digest]
 
 
 def is_windows() -> bool:
@@ -239,7 +279,13 @@ def _check_report(data: object, *, repo: pathlib.Path | None = None) -> dict:
                 'release_authorized': False, 'verdict': 'BLOCKED'}
     if data.get('schema') != 'UDX_W15_NATIVE_EVIDENCE_V1':
         issues.append('SCHEMA_MISMATCH')
-    if data.get('git_head') != BASELINE_HEAD:
+    # HEAD_MISMATCH = the head is not a CONFIRMED descendant of the W14 baseline.
+    # Without a repository only the baseline itself is confirmable (fail-closed).
+    head = data.get('git_head')
+    if repo is not None:
+        if not descends_from_baseline(repo, head):
+            issues.append('HEAD_MISMATCH')
+    elif head != BASELINE_HEAD:
         issues.append('HEAD_MISMATCH')
     if data.get('collector_platform') != 'win32':
         issues.append('NO_WINDOWS_RUN')
@@ -280,6 +326,7 @@ def _check_report(data: object, *, repo: pathlib.Path | None = None) -> dict:
     else:
         if hashes['tests/test_w12_windows_pipe.py'] != PINNED_NATIVE_TEST_SHA256:
             issues.append('NATIVE_TEST_SOURCE_NOT_PINNED')
+        issues.extend('PINNED_SOURCE_DRIFT:' + name for name in pinned_source_drift(hashes))
     if type(hashes) is dict and set(hashes) == set(SOURCE_FILES) and repo is not None:
         for name in SOURCE_FILES:
             file = repo / name
@@ -304,13 +351,16 @@ def _check_report(data: object, *, repo: pathlib.Path | None = None) -> dict:
 def collect(repo: pathlib.Path, *, timeout: int = 300) -> dict:
     if not is_windows():
         raise RuntimeError('NATIVE_WINDOWS_REQUIRED')
-    if current_head(repo) != BASELINE_HEAD:
-        raise RuntimeError('W14_ORIGINAL_HEAD_REQUIRED')
+    head_before = current_head(repo)
+    if not descends_from_baseline(repo, head_before):
+        raise RuntimeError('W14_BASELINE_NOT_ANCESTOR')
     if not all((repo / x).is_file() for x in SOURCE_FILES):
         raise RuntimeError('SOURCE_FILES_MISSING')
     hashes_before = source_hashes(repo)
     if hashes_before['tests/test_w12_windows_pipe.py'] != PINNED_NATIVE_TEST_SHA256:
         raise RuntimeError('NATIVE_TEST_SOURCE_NOT_PINNED')
+    if pinned_source_drift(hashes_before):
+        raise RuntimeError('PINNED_SOURCE_DRIFT')
     args = [sys.executable, str(pathlib.Path(__file__).resolve()), '--worker', '--repo', str(repo)]
     now = time.time()
     try:
@@ -329,7 +379,7 @@ def collect(repo: pathlib.Path, *, timeout: int = 300) -> dict:
             worker = None
     except subprocess.TimeoutExpired:
         worker, rc, diagnostic = None, 124, 'WIN32_SUITE_TIMEOUT'
-    if source_hashes(repo) != hashes_before or current_head(repo) != BASELINE_HEAD:
+    if source_hashes(repo) != hashes_before or current_head(repo) != head_before:
         raise RuntimeError('SOURCE_CHANGED_DURING_TEST')
     report = {
         'schema': 'UDX_W15_NATIVE_EVIDENCE_V1',
@@ -369,6 +419,8 @@ def main(argv=None) -> int:
     repo = args.repo.resolve()
     if args.schema:
         payload = {'schema': 'UDX_W15_NATIVE_EVIDENCE_V1', 'baseline_head': BASELINE_HEAD,
+                   'baseline_rule': 'baseline_head must be an ancestor of git_head',
+                   'pinned_source_sha256': PINNED_SOURCE_SHA256,
                    'manual_gates': MANUAL_GATES, 'release_authorized': False}
         code = 0
     elif args.verify:
@@ -392,8 +444,9 @@ def main(argv=None) -> int:
         except (RuntimeError, OSError) as exc:
             payload = {'schema': 'UDX_W15_NATIVE_EVIDENCE_V1',
                        'error': str(exc) if isinstance(exc, RuntimeError) and str(exc) in (
-                           'NATIVE_WINDOWS_REQUIRED', 'W14_ORIGINAL_HEAD_REQUIRED',
+                           'NATIVE_WINDOWS_REQUIRED', 'W14_BASELINE_NOT_ANCESTOR',
                            'SOURCE_FILES_MISSING', 'NATIVE_TEST_SOURCE_NOT_PINNED',
+                           'PINNED_SOURCE_DRIFT',
                            'SOURCE_CHANGED_DURING_TEST') else 'COLLECTOR_RUNTIME_ERROR',
                        'release_authorized': False, 'verdict': 'BLOCKED'}
             code = 2
