@@ -180,14 +180,31 @@ def _walk(suite):
             yield item
 
 
+def discover_native_cases(repo: pathlib.Path) -> list:
+    """Load exactly the pinned native test module, platform-independent.
+
+    W16b (Codie, Windows lane 2026-10-14): ``tests/`` is not a package (no
+    ``__init__.py``), so ``discover(start_dir=tests, top_level_dir=repo)`` raised
+    ``ImportError: Start directory is not importable`` on every Python version
+    and the worker never ran a single case.  The pinned IDs
+    (``test_w12_windows_pipe.<Class>.<method>``) presuppose ``tests/`` as the
+    top-level directory.  The source pin is checked BEFORE the import, so module
+    code that does not match the pinned bytes is never executed.
+    """
+    if sha256_file(repo / 'tests/test_w12_windows_pipe.py') != PINNED_NATIVE_TEST_SHA256:
+        raise RuntimeError('NATIVE_TEST_SOURCE_NOT_PINNED')
+    loader = unittest.TestLoader()
+    discovered = loader.discover(str(repo / 'tests'), pattern='test_w12_windows_pipe.py',
+                                 top_level_dir=str(repo / 'tests'))
+    if loader.errors:
+        raise RuntimeError('NATIVE_TEST_IMPORT_FAILED')
+    return [x for x in _walk(discovered) if x.__class__.__name__ in EXPECTED_NATIVE_CLASSES]
+
+
 def run_worker(repo: pathlib.Path) -> dict:
     if not is_windows():
         raise RuntimeError('NATIVE_WINDOWS_REQUIRED')
-    loader = unittest.TestLoader()
-    discovered = loader.discover(str(repo / 'tests'), pattern='test_w12_windows_pipe.py', top_level_dir=str(repo))
-    if sha256_file(repo / 'tests/test_w12_windows_pipe.py') != PINNED_NATIVE_TEST_SHA256:
-        raise RuntimeError('NATIVE_TEST_SOURCE_NOT_PINNED')
-    cases = [x for x in _walk(discovered) if x.__class__.__name__ in EXPECTED_NATIVE_CLASSES]
+    cases = discover_native_cases(repo)
     case_ids = [x.id() for x in cases]
     if len(case_ids) != len(EXPECTED_NATIVE_TEST_IDS) or set(case_ids) != EXPECTED_NATIVE_TEST_IDS:
         raise RuntimeError('NATIVE_TEST_ID_SET_DRIFT')

@@ -186,6 +186,25 @@ class W16AdversarialTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'UNSAFE_SOURCE_PATH'):
                 W15.source_hashes(repo)
 
+    def test_worker_discovery_yields_exact_pinned_ids(self):
+        # W16b: the worker's own discovery path must resolve the 47 pinned IDs on
+        # any platform (it raised ImportError before and never ran natively).
+        cases = W15.discover_native_cases(ROOT)
+        ids = [case.id() for case in cases]
+        self.assertEqual(len(ids), W15.EXPECTED_NATIVE_COUNT)
+        self.assertEqual(set(ids), W15.EXPECTED_NATIVE_TEST_IDS)
+
+    def test_worker_discovery_checks_pin_before_import(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = pathlib.Path(tmp)
+            (repo / 'tests').mkdir()
+            marker = repo / 'imported.marker'
+            (repo / 'tests' / 'test_w12_windows_pipe.py').write_text(
+                'import pathlib\npathlib.Path(%r).write_text("x")\n' % str(marker), encoding='utf-8')
+            with self.assertRaisesRegex(RuntimeError, 'NATIVE_TEST_SOURCE_NOT_PINNED'):
+                W15.discover_native_cases(repo)
+            self.assertFalse(marker.exists())
+
     def test_linux_collect_remains_denied(self):
         with mock.patch.object(W15, 'is_windows', return_value=False):
             with self.assertRaisesRegex(RuntimeError, 'NATIVE_WINDOWS_REQUIRED'):
