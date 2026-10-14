@@ -189,7 +189,10 @@ class W16AdversarialTests(unittest.TestCase):
     def test_worker_discovery_yields_exact_pinned_ids(self):
         # W16b: the worker's own discovery path must resolve the 47 pinned IDs on
         # any platform (it raised ImportError before and never ran natively).
-        cases = W15.discover_native_cases(ROOT)
+        try:
+            cases = W15.discover_native_cases(ROOT)
+        except RuntimeError as exc:          # typed fail-closed error = this guard's red
+            self.fail('worker discovery path broken: %s' % exc)
         ids = [case.id() for case in cases]
         self.assertEqual(len(ids), W15.EXPECTED_NATIVE_COUNT)
         self.assertEqual(set(ids), W15.EXPECTED_NATIVE_TEST_IDS)

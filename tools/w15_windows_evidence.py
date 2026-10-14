@@ -194,8 +194,11 @@ def discover_native_cases(repo: pathlib.Path) -> list:
     if sha256_file(repo / 'tests/test_w12_windows_pipe.py') != PINNED_NATIVE_TEST_SHA256:
         raise RuntimeError('NATIVE_TEST_SOURCE_NOT_PINNED')
     loader = unittest.TestLoader()
-    discovered = loader.discover(str(repo / 'tests'), pattern='test_w12_windows_pipe.py',
-                                 top_level_dir=str(repo / 'tests'))
+    try:
+        discovered = loader.discover(str(repo / 'tests'), pattern='test_w12_windows_pipe.py',
+                                     top_level_dir=str(repo / 'tests'))
+    except ImportError:
+        raise RuntimeError('NATIVE_TEST_IMPORT_FAILED') from None
     if loader.errors:
         raise RuntimeError('NATIVE_TEST_IMPORT_FAILED')
     return [x for x in _walk(discovered) if x.__class__.__name__ in EXPECTED_NATIVE_CLASSES]
