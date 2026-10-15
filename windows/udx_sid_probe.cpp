@@ -67,7 +67,8 @@ int wmain() {
     sddl += sid_text;
     sddl += L"D:P(A;;GRGW;;;SY)(A;;GRGW;;;";
     sddl += sid_text;
-    sddl += L")S:(ML;;NWNR;;;ME)";
+    // W17 (UNCOMPILED): OWNER RIGHTS ACE; the owner gets GRGW only, no implicit WRITE_DAC.
+    sddl += L")(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)";
     LocalFree(sid_text);
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &sd, nullptr)) return 13;

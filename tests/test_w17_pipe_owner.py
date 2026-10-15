@@ -24,6 +24,7 @@ import subprocess
 import sys
 import unittest
 import uuid
+from unittest import mock
 
 from udx_ref import windows_pipe as wp
 
@@ -31,6 +32,10 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 IS_WINDOWS = sys.platform == 'win32'
 
 PRE_W17_SDDL = 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;{sid})S:(ML;;NWNR;;;ME)'
+# W17 owner without the OWNER RIGHTS ACE: control for the OW test below.
+OWNER_NO_OW_SDDL = 'O:{sid}D:P(A;;GRGW;;;SY)(A;;GRGW;;;{sid})S:(ML;;NWNR;;;ME)'
+READ_CONTROL = 0x00020000
+WRITE_DAC = 0x00040000
 
 # Child: move TokenOwner, prove it moved, then control (pre-W17 SDDL) and fix.
 _CHILD = r'''
@@ -119,6 +124,12 @@ class PortableOwnerSddl(unittest.TestCase):
         self.assertEqual(sddl.count('O:'), 1)
         self.assertNotIn('G:', sddl)                      # primary group stays defaulted
 
+    def test_owner_rights_ace_present_once_with_grgw(self):
+        sddl = wp.build_sddl('S-1-5-21-1-2-3-1001')
+        self.assertEqual(sddl.count('(A;;GRGW;;;OW)'), 1)
+        self.assertEqual(sddl.count(';OW)'), 1)
+        self.assertLess(sddl.index('(A;;GRGW;;;OW)'), sddl.index('S:('))   # in the DACL, not the SACL
+
     def test_cpp_candidate_sets_the_same_owner(self):
         cpp = (REPO / 'windows' / 'udx_sid_probe.cpp').read_text()
         self.assertLess(cpp.index('L"O:"'), cpp.index('L"D:P(A;;GRGW;;;SY)(A;;GRGW;;;"'))
@@ -135,6 +146,33 @@ class WindowsPipeOwner(unittest.TestCase):
                 self.assertEqual(wp.sid_to_text(api, o), srv.server_sid)
             finally:
                 api.LocalFree(sd)
+
+    def _open(self, name, access):
+        """Win32 CreateFileW on a fresh server instance; (opened, winerror)."""
+        api = wp.default_api()
+        h = api.CreateFileW(name, access, 0, None, wp.OPEN_EXISTING, 0, None)
+        if h is None or h == wp.INVALID_HANDLE_VALUE:
+            return False, api.last_error()
+        api.CloseHandle(h)
+        return True, 0
+
+    def _try_with(self, sddl_template, access):
+        name = wp.PIPE_PREFIX + 'UDX_W17_' + uuid.uuid4().hex
+        if sddl_template is None:
+            with wp.OneShotPipeServer(name):
+                return self._open(name, access)
+        fake = lambda sid: sddl_template.format(sid=wp.validate_sid_text(sid))
+        with mock.patch.object(wp, 'build_sddl', fake), wp.OneShotPipeServer(name):
+            return self._open(name, access)
+
+    def test_owner_has_no_implicit_write_dac(self):
+        # Control (owner = user, no OW ACE): the owner's implicit WRITE_DAC
+        # lets a same-user handle be opened for WRITE_DAC (UDX14-01).
+        self.assertEqual(self._try_with(OWNER_NO_OW_SDDL, WRITE_DAC), (True, 0))
+        # W17: OW ACE replaces the implicit rights -> WRITE_DAC is refused.
+        self.assertEqual(self._try_with(None, WRITE_DAC), (False, wp.ERROR_ACCESS_DENIED))
+        # Positive control: READ_CONTROL (needed by the client's owner check) stays.
+        self.assertEqual(self._try_with(None, READ_CONTROL), (True, 0))
 
     def test_moved_default_owner_reproduces_issue_2_and_w17_fixes_it(self):
         env = dict(os.environ, PYTHONPATH=str(REPO))
