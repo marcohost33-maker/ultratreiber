@@ -17,7 +17,7 @@ Damit sind die drei Kandidaten aus Issue #2 entschieden: (1) Reihenfolge – nei
 
 ## Änderung
 
-- `udx_ref/windows_pipe.py` `build_sddl`: `O:<user SID>D:P(A;;GRGW;;;SY)(A;;GRGW;;;<user SID>)S:(ML;;NWNR;;;ME)`. Der Token-Benutzer ist immer als Owner zuweisbar, kein `ERROR_INVALID_OWNER` möglich. Owner-Rechte (implizit READ_CONTROL/WRITE_DAC) bleiben beim selben Benutzer wie bisher im Standardkonto – keine Rechteausweitung gegenüber der W14-Messung.
+- `udx_ref/windows_pipe.py` `build_sddl`: `O:<user SID>D:P(A;;GRGW;;;SY)(A;;GRGW;;;<user SID>)S:(ML;;NWNR;;;ME)`. Der Token-Benutzer ist immer als Owner zuweisbar, kein `ERROR_INVALID_OWNER` möglich. (Endstand inkl. OW-ACE: `O:<user SID>D:P(A;;GRGW;;;SY)(A;;GRGW;;;<user SID>)(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)`; die impliziten Owner-Rechte entfallen, siehe nächster Punkt.)
 - **OWNER-RIGHTS-ACE** `(A;;GRGW;;;OW)` (S-1-3-4), gleiche Welle. Selbstkritik am ersten W17-Kopf: Mit explizitem Owner = Benutzer wäre bei einem **erhöhten** Server ein nicht erhöhter Prozess desselben Benutzers Owner geworden und hätte über die impliziten Owner-Rechte `WRITE_DAC` erhalten (vorher war dort die Administratorgruppe Owner, die im gefilterten Token nur deny-only ist). Zugleich ist das der seit W14 gemessene Befund UDX14-01 (`AccessCheck(MAXIMUM_ALLOWED)` = 0x16019f). Liegt ein OW-ACE vor, erhält der Owner genau dessen Rechte statt READ_CONTROL|WRITE_DAC (Microsoft, "Security Identifiers New for Windows Vista"; V2). GRGW enthält READ_CONTROL, die Owner-Prüfung des Clients bleibt also möglich. Der eigene Handle des Servers behält die beim Anlegen gewährten Rechte.
 - Test dazu mit echten Win32-Handles, wie die W14-Auflage in `docs/W12_WINDOWS_LANE.md` verlangt: Kontrolle (Owner = Benutzer, ohne OW) ⇒ `CreateFileW(WRITE_DAC)` gelingt; W17 ⇒ `ERROR_ACCESS_DENIED`; Positivkontrolle `READ_CONTROL` gelingt. DACL-Readback-Test (gepinnt) erwartet jetzt drei ACEs.
 - `windows/udx_sid_probe.cpp`: gleiche Owner- und OW-Parität (weiterhin **nie kompiliert**).
@@ -32,8 +32,8 @@ Damit sind die drei Kandidaten aus Issue #2 entschieden: (1) Reihenfolge – nei
 |---|---|---|
 | `621dcc9` (Owner-Fix) | 38662557930 | Collector 46/47; rot nur `test_squatter_sees_only_identification` (Fixture, siehe oben); bash-Suite grün |
 | `1f12bd8` (+ Fixture) | 38662836905 | Collector 47/47 + `--verify` OK; Suite 294 Tests OK (82 skip) unter bash **und** pwsh, Python 3.13 und 3.14; Kindprozess-Test lief (nicht übersprungen) |
+| `4650688` (+ OW-ACE) | 38663706826 | Collector 47/47 + `--verify` OK, Bericht als Artefakt `udx-native-evidence-<sha>` (30 Tage); Suite 296 Tests OK (82 skip) unter bash und pwsh, 3.13/3.14; OW-Test (Kontrolle WRITE_DAC öffnet, W17 `ERROR_ACCESS_DENIED`) und 3-ACE-Readback grün |
 
-Der OW-Kopf wird im selben PR erneut gefahren; ab dann liegt der Collector-Bericht je Commit als Artefakt `udx-native-evidence-<sha>` vor (30 Tage).
 
 ## Negativ-Resultate / Grenzen
 
