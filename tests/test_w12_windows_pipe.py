@@ -221,7 +221,19 @@ class WindowsPipeRuntime(unittest.TestCase):
     # (i) Aegis p1 regression: a squatting pipe owner learns at most Identification
     def test_squatter_sees_only_identification(self):
         name = _name()
-        squat = self.api.CreateNamedPipeW(name, wp.PIPE_ACCESS_DUPLEX, 0, 255, 4096, 4096, 0, None)
+        # W17: a same-user squatter can pick the user as owner, which is the
+        # case the client's owner check cannot catch. Set it explicitly; the
+        # default owner of an elevated administrator is BUILTIN\Administrators
+        # (the client then refuses before writing, and this case never runs).
+        sd = ctypes.c_void_p()
+        self.assertTrue(self.api.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            'O:' + self.sid + 'D:(A;;GA;;;' + self.sid + ')', wp.SDDL_REVISION_1, ctypes.byref(sd), None))
+        try:
+            sa = wp.SECURITY_ATTRIBUTES(ctypes.sizeof(wp.SECURITY_ATTRIBUTES), sd, False)
+            squat = self.api.CreateNamedPipeW(name, wp.PIPE_ACCESS_DUPLEX, 0, 255, 4096, 4096, 0,
+                                              ctypes.byref(sa))
+        finally:
+            self.api.LocalFree(sd)
         self.assertNotIn(squat, (None, wp.INVALID_HANDLE_VALUE))
         try:
             client = _Client(wp.client_ping, name, response_timeout_s=1.0)

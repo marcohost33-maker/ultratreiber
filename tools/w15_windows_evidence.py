@@ -34,7 +34,7 @@ SOURCE_FILES = (
 EXPECTED_NATIVE_CLASSES = ('WindowsPipeRuntime', 'WindowsPipeFaultInjection')
 EXPECTED_NATIVE_COUNT = 47  # 23 runtime + 24 fault-injection tests pinned to W14
 # W16: bytes pinned to reviewed original W14 test source. Use autocrlf=false in Windows checkout.
-PINNED_NATIVE_TEST_SHA256 = '0c2fcfd1f554b32136092613619169c68e20777786ccff6233608c4525a5a450'
+PINNED_NATIVE_TEST_SHA256 = '62724f03bb2f9fe0c6468ea52cdb2f4e3803e4e63482cabd34ebe0fd89a33f38'
 # Public prep (replaces the hard ``HEAD == BASELINE_HEAD`` pin, which no commit
 # after the baseline could ever satisfy): the checkout must DESCEND from the
 # audited W14 baseline AND the code under test must be byte-identical to the
