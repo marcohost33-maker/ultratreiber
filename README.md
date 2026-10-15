@@ -6,11 +6,13 @@
 
 Ultratreiber (UDX, *Universal Driver & eXchange*) is a research demonstrator of an isolated, read-only access broker: a fail-closed request parser, OS-credential-bound peer identity and evidence-gated Linux (AF_UNIX) and Windows (named pipe) transport lanes, with no dependency on any client or model runtime.
 
-> **Status: RESEARCH DEMONSTRATOR — NOT PRODUCTION READY.** Current wave: W16 (version 0.16.0). No release, no security approval.
+> **Status: RESEARCH DEMONSTRATOR — NOT PRODUCTION READY.** Current wave: W17 (version 0.17.0). No release, no security approval.
 >
 > **Evidenced (local, not independently attested):**
 > - Portable + Linux test suite, run without root (`python -m unittest discover -s tests`); per-wave logs in `evidence/*_NONROOT_TESTS.log`.
 > - Native Windows 11 lane: the 47 pinned named-pipe tests of `tests/test_w12_windows_pipe.py` (23 runtime + 24 fault-injection) passed 47/47 on 2026-10-14 (Windows 11 Home 10.0.26200, Python 3.14.4, one standard account, not elevated): [`evidence/W16_NATIVE_WINDOWS_REPORT_FINAL.json`](evidence/W16_NATIVE_WINDOWS_REPORT_FINAL.json), summary in [`evidence/W16_WINDOWS_LANE_SUMMARY.json`](evidence/W16_WINDOWS_LANE_SUMMARY.json). The collector verdict `UNTRUSTED_REPORT_SCHEMA_VALID` is a syntax and local-hash check, not an attestation. Re-run on the same host at the public-prep commit `4b87f3b` (first run at a committed head; Python 3.14.4): 47/47, [`evidence/PUBLIC_PREP_NATIVE_WINDOWS_REPORT.json`](evidence/PUBLIC_PREP_NATIVE_WINDOWS_REPORT.json).
+>
+> - W17 (issue #2): the pipe owner is now set explicitly to the server user (`O:<SID>` in the SDDL). Before, an elevated administrator's pipe was owned by `BUILTIN\Administrators`, so the client's owner check refused it; Git Bash hid this because MSYS2/Cygwin rewrites the token's default owner. CI now runs the Windows suite under bash and pwsh, and the hosted-runner collector job is required (Windows Server, elevated Administrator — not standard-user evidence). The local Windows 11 reports above were taken on the pre-W17 source bytes; a fresh local collector run on W17 is pending. Details: [`docs/W17_PIPE_OWNER.md`](docs/W17_PIPE_OWNER.md).
 >
 > **NOT evidenced:** denial against a real second Windows account; real AppContainer / Low-IL tokens; service-account sessions; elevated owner / AccessCheck matrix; a second (remote) host; a compiled C++ binary (`windows/*.cpp` has never been built); independent security review or attestation; authentic portal consent; Android/iOS.
 
@@ -38,7 +40,7 @@ py -3 tools/w15_windows_evidence.py --collect --repo . --timeout 300 --output "$
 py -3 tools/w15_windows_evidence.py --verify "$env:TEMP\udx_native.json" --repo .
 ```
 
-`SHA256SUMS_W12` is the current manifest (all tracked files except the two manifests); `SHA256SUMS` is the historical W11 import manifest, kept unchanged as a record and intentionally no longer current. The collector needs a full clone (it checks that the audited W14 baseline `26309e9` is an ancestor of `HEAD`) and byte-exact sources (`.gitattributes` disables line-ending conversion). Exit code 0 with verdict `UNTRUSTED_REPORT_SCHEMA_VALID` means the 47 pinned tests passed on that machine — nothing more. On Windows use a base interpreter, not a virtual environment: a venv's `python.exe` is a redirector that starts the real interpreter as a child process, so `test_same_user_cross_process_peer_ok` sees a different client PID and fails (observed with Python 3.13.13). Wave-by-wave design notes, audits and gates are in [`docs/`](docs/) (start with `W12_WINDOWS_LANE.md`, `W16_FAIL_CLOSED_EVIDENCE_HARDENING.md`, `ROADMAP.md`).
+`SHA256SUMS_W12` is the current manifest (all tracked files except the two manifests); `SHA256SUMS` is the historical W11 import manifest, kept unchanged as a record and intentionally no longer current. The collector needs a full clone (it checks that the audited W14 baseline `26309e9` is an ancestor of `HEAD`) and byte-exact sources (`.gitattributes` disables line-ending conversion). Exit code 0 with verdict `UNTRUSTED_REPORT_SCHEMA_VALID` means the 47 pinned tests passed on that machine — nothing more. On Windows use a base interpreter, not a virtual environment: a venv's `python.exe` is a redirector that starts the real interpreter as a child process, so `test_same_user_cross_process_peer_ok` sees a different client PID and fails (observed with Python 3.13.13). Wave-by-wave design notes, audits and gates are in [`docs/`](docs/) (start with `W12_WINDOWS_LANE.md`, `W16_FAIL_CLOSED_EVIDENCE_HARDENING.md`, `W17_PIPE_OWNER.md`, `ROADMAP.md`).
 
 ## Citation, license, provenance
 

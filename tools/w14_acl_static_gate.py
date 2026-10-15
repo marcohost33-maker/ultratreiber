@@ -21,8 +21,8 @@ import sys
 # tools/w15_windows_evidence.py PINNED_SOURCE_SHA256 (a test compares both).
 EXPECTED_HEAD = '26309e997fea1ac90edba8a51e457fd494cac978'
 PINNED_SOURCE_SHA256 = {
-    'udx_ref/windows_pipe.py': '3952c0b1f5722bd6cc07ac8b4e582665dd14181abd4fa6f07eebcd6a5dbd28ea',
-    'windows/udx_sid_probe.cpp': '4ea51f360f85f9f4d8016736ddc995751fe3c0a7932bc48627c32e25aa082772',
+    'udx_ref/windows_pipe.py': 'ac9bc205969b9bc24a843c2d5a2ba6fedef5c753d2832d3a931f4b81ecf3f55e',
+    'windows/udx_sid_probe.cpp': '90ea55767ac4aa7bb67457ac5b564b204bd40d1224e972f6f8a4ff4f9d9b9910',
     'windows/udx_sid_client.cpp': 'bf62f1deadffa79aad0afaca5abfd67e556fd79c0dbf03b15431c1b1913eb49a',
 }
 _COMMIT_RE = re.compile('[0-9a-f]{40}')
@@ -127,9 +127,10 @@ def audit(repo: pathlib.Path) -> dict:
     sys.path.insert(0, str(repo))
     from udx_ref import windows_pipe as wp
     sys.path.pop(0)
-    expected = 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + EXPECTED_SID + ')S:(ML;;NWNR;;;ME)'
+    expected = ('O:' + EXPECTED_SID + 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + EXPECTED_SID
+                + ')S:(ML;;NWNR;;;ME)')
     check('SDDL_CHANGED', wp.build_sddl(EXPECTED_SID) == expected,
-          'W14 protected SY+user GRGW DACL and Medium NWNR SACL are required')
+          'W17 explicit user owner, W14 protected SY+user GRGW DACL and Medium NWNR SACL are required')
     flags, line = _find_server_flags(tree, constants)
     check('CREATE_NOT_FOUND', flags is not None, 'Call to CreateNamedPipeW not statically resolved')
     if flags:

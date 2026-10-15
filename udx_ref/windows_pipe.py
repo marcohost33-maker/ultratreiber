@@ -11,6 +11,8 @@ W13 (after the Aegis audit) supersedes parts of the W12 list below:
     gone) and checks integrity/AppContainer/restricted/session from the token
   * DACL user ACE GRGW instead of GA, explicit Medium label NW+NR (build_sddl)
   * W14 (E1010M-05): SYSTEM ACE also GRGW instead of GA (no WRITE_DAC/WRITE_OWNER)
+  * W17 (issue #2): explicit owner ``O:<user SID>`` instead of the token's
+    default owner (elevated administrators default to BUILTIN\\Administrators)
   * a fully written response counts as sent; every Win32 failure stays typed
 
 What is reproduced 1:1 from the C++ candidate (see docs/W12_WINDOWS_LANE.md):
@@ -144,7 +146,16 @@ def validate_sid_text(sid_text) -> str:
 
 
 def build_sddl(sid_text: str) -> str:
-    """W14 (E1010M-05): ``D:P(A;;GRGW;;;SY)(A;;GRGW;;;<sid>)S:(ML;;NWNR;;;ME)``.
+    """W17: ``O:<sid>D:P(A;;GRGW;;;SY)(A;;GRGW;;;<sid>)S:(ML;;NWNR;;;ME)``.
+
+    * W17 (issue #2): the OWNER is set explicitly to the server user. Without
+      ``O:`` the kernel takes the token's default owner (TokenOwner). For an
+      elevated administrator that is BUILTIN\\Administrators (S-1-5-32-544), not
+      the user, so the client's owner check refused the pipe (PIPE_OWNER_MISMATCH,
+      server READ_FAILED). Cygwin/MSYS2 shells (Git Bash) rewrite TokenOwner to the
+      user SID for their children, which hid the defect in bash-run CI. The token
+      user can always be assigned as owner, so this cannot fail with
+      ERROR_INVALID_OWNER.
 
     * user ACE GRGW instead of GA (Aegis P3-e: the ACE grants no WRITE_DAC/
       WRITE_OWNER). The same-user client is the pipe's owner and still holds
@@ -162,7 +173,8 @@ def build_sddl(sid_text: str) -> str:
       occupy the single instance (Aegis F-LOWIL).
     The SID text is validated first so no SDDL fragment can be smuggled in.
     """
-    return 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + validate_sid_text(sid_text) + ')S:(ML;;NWNR;;;ME)'
+    sid = validate_sid_text(sid_text)
+    return 'O:' + sid + 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + sid + ')S:(ML;;NWNR;;;ME)'
 
 
 def validate_deadline(deadline_s) -> float:
