@@ -11,6 +11,9 @@ W13 (after the Aegis audit) supersedes parts of the W12 list below:
     gone) and checks integrity/AppContainer/restricted/session from the token
   * DACL user ACE GRGW instead of GA, explicit Medium label NW+NR (build_sddl)
   * W14 (E1010M-05): SYSTEM ACE also GRGW instead of GA (no WRITE_DAC/WRITE_OWNER)
+  * W17 (issue #2): explicit owner ``O:<user SID>`` instead of the token's
+    default owner (elevated administrators default to BUILTIN\\Administrators),
+    plus an OWNER RIGHTS ACE so the owner has no implicit WRITE_DAC
   * a fully written response counts as sent; every Win32 failure stays typed
 
 What is reproduced 1:1 from the C++ candidate (see docs/W12_WINDOWS_LANE.md):
@@ -144,12 +147,29 @@ def validate_sid_text(sid_text) -> str:
 
 
 def build_sddl(sid_text: str) -> str:
-    """W14 (E1010M-05): ``D:P(A;;GRGW;;;SY)(A;;GRGW;;;<sid>)S:(ML;;NWNR;;;ME)``.
+    """W17: ``O:<sid>D:P(A;;GRGW;;;SY)(A;;GRGW;;;<sid>)(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)``.
+
+    * W17 (issue #2): the OWNER is set explicitly to the server user. Without
+      ``O:`` the kernel takes the token's default owner (TokenOwner). For an
+      elevated administrator that is BUILTIN\\Administrators (S-1-5-32-544), not
+      the user, so the client's owner check refused the pipe (PIPE_OWNER_MISMATCH,
+      server READ_FAILED). Cygwin/MSYS2 shells (Git Bash) rewrite TokenOwner to the
+      user SID for their children, which hid the defect in bash-run CI. The token
+      user can always be assigned as owner, so this cannot fail with
+      ERROR_INVALID_OWNER.
+    * W17: OWNER RIGHTS ACE ``(A;;GRGW;;;OW)`` (S-1-3-4). Without it the owner
+      holds READ_CONTROL|WRITE_DAC implicitly (UDX14-01, measured
+      AccessCheck(MAXIMUM_ALLOWED) = 0x16019f). With an OW ACE the owner gets
+      exactly that ACE's rights, so the owner keeps GRGW (incl. READ_CONTROL for
+      the client's owner check) but loses WRITE_DAC. This also matters because
+      of the explicit owner above: for an ELEVATED server, a non-elevated process
+      of the same user is now the owner and would otherwise be able to rewrite
+      the DACL. The server's own handle keeps the access granted at creation.
 
     * user ACE GRGW instead of GA (Aegis P3-e: the ACE grants no WRITE_DAC/
-      WRITE_OWNER). The same-user client is the pipe's owner and still holds
-      READ_CONTROL/WRITE_DAC implicitly through owner rights; accepted, because
-      the same user is trusted by design (Equalita W14, measured). GW still
+      WRITE_OWNER). Up to W16 the same-user client, as the pipe's owner, still
+      held READ_CONTROL/WRITE_DAC implicitly (accepted then; W17: OW ACE above
+      removes WRITE_DAC). GW still
       contains FILE_APPEND_DATA == FILE_CREATE_PIPE_INSTANCE (0x4): the pipe is
       NOT client-least-privilege in a same-SID adversary model. FIRST_PIPE_INSTANCE
       and nMaxInstances=1 limit additional instances while the real server is
@@ -162,7 +182,8 @@ def build_sddl(sid_text: str) -> str:
       occupy the single instance (Aegis F-LOWIL).
     The SID text is validated first so no SDDL fragment can be smuggled in.
     """
-    return 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + validate_sid_text(sid_text) + ')S:(ML;;NWNR;;;ME)'
+    sid = validate_sid_text(sid_text)
+    return 'O:' + sid + 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + sid + ')(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)'
 
 
 def validate_deadline(deadline_s) -> float:

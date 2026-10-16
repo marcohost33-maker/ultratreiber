@@ -55,6 +55,18 @@ jobs:
         env:
           PYTHONPATH: .
         run: python -m unittest discover -s tests -v
+      # Issue #2: Git Bash (MSYS2/Cygwin) rewrites the token's default owner to
+      # the user SID for every child process, which hid an owner defect that only
+      # shows under a native shell with the elevated runner token. Run the suite
+      # a second time from pwsh so both default-owner situations are covered.
+      - name: Unit test suite (pwsh, native token default owner)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PYTHONPATH: .
+        run: |
+          python -m unittest discover -s tests -v
+          exit $LASTEXITCODE
       - name: Manifest (SHA256SUMS_W12)
         run: sha256sum -c --strict SHA256SUMS_W12
       - name: W14 portable ACL gate (advisory, never a release approval)
@@ -63,12 +75,11 @@ jobs:
         run: python tools/w14_acl_static_gate.py
 
   windows-native-evidence:
-    name: native evidence collector (windows-latest, experimental)
+    name: native evidence collector (windows-latest)
     runs-on: windows-latest
-    # Experimental until issue #2 is resolved: on the hosted runner the pinned
-    # pipe module fails when run alone (READ_FAILED), while the same 47 cases
-    # pass in the suite jobs above and on a local Windows 11 machine.
-    continue-on-error: true
+    # Required since W17 (issue #2 fixed: explicit pipe owner). The hosted runner
+    # is Windows Server with an elevated built-in Administrator token, so this is
+    # NOT the standard-user Windows 11 evidence and never a release approval.
     timeout-minutes: 20
     defaults:
       run:
@@ -104,3 +115,15 @@ jobs:
         run: |
           python tools/w15_windows_evidence.py --verify "$env:RUNNER_TEMP\udx_native.json" --repo .
           exit $LASTEXITCODE
+      # Keep the (redacted, synthetic-data-only) report per commit so the
+      # hosted-runner evidence can be re-verified later with --verify.
+      # actions/upload-artifact v7.0.1 (pinned; v7.0.2 is younger than our
+      # dependency cooldown)
+      - name: Upload evidence report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: udx-native-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/udx_native.json
+          if-no-files-found: warn
+          retention-days: 30

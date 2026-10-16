@@ -60,9 +60,15 @@ int wmain() {
     // The 1-instance FIRST_PIPE_INSTANCE design limits live additional instances,
     // but NOT same-SID squatting before server startup. Medium label NW|NR,
     // so a Low-IL process cannot even open the single instance for reading.
-    std::wstring sddl = L"D:P(A;;GRGW;;;SY)(A;;GRGW;;;";
+    // W17 (UNCOMPILED, issue #2): explicit owner = current user. Without O: an
+    // elevated administrator's pipe is owned by BUILTIN\Administrators and the
+    // client's owner check refuses it.
+    std::wstring sddl = L"O:";
     sddl += sid_text;
-    sddl += L")S:(ML;;NWNR;;;ME)";
+    sddl += L"D:P(A;;GRGW;;;SY)(A;;GRGW;;;";
+    sddl += sid_text;
+    // W17 (UNCOMPILED): OWNER RIGHTS ACE; the owner gets GRGW only, no implicit WRITE_DAC.
+    sddl += L")(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)";
     LocalFree(sid_text);
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &sd, nullptr)) return 13;

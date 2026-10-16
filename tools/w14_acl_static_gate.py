@@ -21,8 +21,8 @@ import sys
 # tools/w15_windows_evidence.py PINNED_SOURCE_SHA256 (a test compares both).
 EXPECTED_HEAD = '26309e997fea1ac90edba8a51e457fd494cac978'
 PINNED_SOURCE_SHA256 = {
-    'udx_ref/windows_pipe.py': '3952c0b1f5722bd6cc07ac8b4e582665dd14181abd4fa6f07eebcd6a5dbd28ea',
-    'windows/udx_sid_probe.cpp': '4ea51f360f85f9f4d8016736ddc995751fe3c0a7932bc48627c32e25aa082772',
+    'udx_ref/windows_pipe.py': '596076bfc4d35b8976928d7886d788bdd748619cc77e0e13dda33a361be24b53',
+    'windows/udx_sid_probe.cpp': 'f810e03bfb15247e7faf4298aa03d799bd72284225ba6d9aca46e63800a4ab89',
     'windows/udx_sid_client.cpp': 'bf62f1deadffa79aad0afaca5abfd67e556fd79c0dbf03b15431c1b1913eb49a',
 }
 _COMMIT_RE = re.compile('[0-9a-f]{40}')
@@ -127,9 +127,10 @@ def audit(repo: pathlib.Path) -> dict:
     sys.path.insert(0, str(repo))
     from udx_ref import windows_pipe as wp
     sys.path.pop(0)
-    expected = 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + EXPECTED_SID + ')S:(ML;;NWNR;;;ME)'
+    expected = ('O:' + EXPECTED_SID + 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + EXPECTED_SID
+                + ')(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)')
     check('SDDL_CHANGED', wp.build_sddl(EXPECTED_SID) == expected,
-          'W14 protected SY+user GRGW DACL and Medium NWNR SACL are required')
+          'W17 explicit user owner + OWNER RIGHTS GRGW ACE, W14 protected SY+user GRGW DACL and Medium NWNR SACL are required')
     flags, line = _find_server_flags(tree, constants)
     check('CREATE_NOT_FOUND', flags is not None, 'Call to CreateNamedPipeW not statically resolved')
     if flags:
@@ -142,7 +143,7 @@ def audit(repo: pathlib.Path) -> dict:
               f'CreateNamedPipeW at {line}: REMOTE_REJECT absent')
         check('INSTANCE_COUNT_CHANGED', instances == 1, f'CreateNamedPipeW at {line}: instances={instances}')
     cpp = (repo / 'windows' / 'udx_sid_probe.cpp').read_text(encoding='utf-8')
-    check('CPP_SDDL_DRIFT', 'L"D:P(A;;GRGW;;;SY)(A;;GRGW;;;"' in cpp and 'L")S:(ML;;NWNR;;;ME)"' in cpp,
+    check('CPP_SDDL_DRIFT', 'L"D:P(A;;GRGW;;;SY)(A;;GRGW;;;"' in cpp and 'L")(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)"' in cpp,
           'Uncompiled C++ prototype SDDL differs from W14 research contract')
     check('CPP_PIPE_FLAGS_DRIFT', 'PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE' in cpp and
           'PIPE_REJECT_REMOTE_CLIENTS' in cpp, 'C++ pipe flags missing; source check only')
@@ -174,7 +175,9 @@ def audit(repo: pathlib.Path) -> dict:
                                'file_create_pipe_instance_allowed': True,
                                'explicit_write_dac_allowed': False,
                                'explicit_write_owner_allowed': False},
-        'owner_implicit_rights': 'UNVERIFIED_WINDOWS_RUNTIME',
+        # W17: an OW ACE replaces the implicit owner rights; the effect is a
+        # Windows runtime fact (tests/test_w17_pipe_owner.py), not shown here.
+        'owner_implicit_rights': 'REPLACED_BY_OW_ACE_RUNTIME_TEST_ONLY',
         'windows_second_account_access_check': 'NOT_EXECUTED',
         'windows_appcontainer_uac_and_service_matrix': 'NOT_EXECUTED',
         'cxx_binary_and_timing_parity': 'NOT_EXECUTED',
