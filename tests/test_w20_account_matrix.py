@@ -30,14 +30,15 @@ def good_report() -> dict:
     return {
         'release_authorized': False,
         'facts': {'A': dict(std, user_sid=A), 'B': dict(std, user_sid=B),
-                  'admin': {'user_sid': ADMIN, 'administrators_member': True, 'elevation_type': 2,
-                            'integrity_rid': 0x3000}},
+                  'admin': {'user_sid': ADMIN, 'administrators_member': True, 'administrators_deny_only': False,
+                            'elevation_type': 1, 'integrity_rid': 0x3000}},
         'cases': {'admin_open': {'opened': False, 'winerror': 5},
                   'second_account': {'reason': 'OPEN_FAILED', 'open_error': 5, 'sent': False},
                   'same_account': {'reason': 'OK', 'open_error': None, 'sent': True},
                   'server': {'verdict': 'PEER_OK', 'reason': 'OK', 'client_sid': A}},
         'collector': {'collect_exit': 0, 'verify_exit': 0, 'verify_verdict': 'UNTRUSTED_REPORT_SCHEMA_VALID',
-                      'cases': 47, 'passed': 47, 'run_as': 'A'},
+                      'cases': 47, 'passed': 47, 'run_as': 'A', 'facts_match': True, 'error': None},
+        'cleanup': {'A': 'deleted', 'B': 'deleted', 'rights_A': 'removed', 'rights_B': 'removed'},
     }
 
 
@@ -84,6 +85,19 @@ class EvaluateAccountMatrix(unittest.TestCase):
         self._blocked_with(lambda r: r['collector'].update(verify_exit=2), 'COLLECTOR_EXIT_NONZERO')
         self._blocked_with(lambda r: r['collector'].update(run_as='admin'), 'COLLECTOR_NOT_RUN_AS_A')
         self._blocked_with(lambda r: r.pop('collector'), 'COLLECTOR_MISSING')
+
+    def test_review_findings_block(self):
+        # collector identity comes from the observed token facts, not a literal
+        self._blocked_with(lambda r: r['collector'].update(facts_match=False), 'COLLECTOR_NOT_RUN_AS_A')
+        self._blocked_with(lambda r: r['collector'].update(error='AttributeError: x'), 'COLLECTOR_ERROR')
+        # a child error in any case blocks even if the other fields look right
+        self._blocked_with(lambda r: r['cases']['same_account'].update(error='OSError: 5'), 'CASE_ERROR:same_account')
+        # leftover accounts or logon rights block
+        self._blocked_with(lambda r: r['cleanup'].update(A='DELETE_FAILED'), 'CLEANUP_INCOMPLETE')
+        self._blocked_with(lambda r: r['cleanup'].pop('rights_B'), 'CLEANUP_INCOMPLETE')
+        # "elevated admin denied" needs an observed elevated token
+        self._blocked_with(lambda r: r['facts']['admin'].update(integrity_rid=0x2000), 'ADMIN_NOT_ELEVATED')
+        self._blocked_with(lambda r: r['facts']['admin'].update(administrators_deny_only=True), 'ADMIN_NOT_ELEVATED')
 
     def test_error_and_release_claim_block(self):
         self._blocked_with(lambda r: r.update(error='RuntimeError: X'), 'ORCHESTRATION_ERROR')

@@ -23,8 +23,9 @@ the job). The orchestrator
   6. deletes the tasks, removes the logon right and deletes both accounts.
 
 ``evaluate`` decides the verdict from the report alone and fails closed on any
-missing, extra or contradicting fact. Passwords are random, used only for task
-registration and never written to the report or the log.
+missing, extra or contradicting fact. Passwords are random, handed to NetUserAdd
+and (on stdin) to Register-ScheduledTask only, never on a command line, in the
+report or in a log.
 """
 from __future__ import annotations
 
@@ -46,6 +47,7 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 WORK = pathlib.Path(r'C:\udx_w20')
 ADMINISTRATORS_SID = 'S-1-5-32-544'
 MEDIUM_RID = 0x2000
+HIGH_RID = 0x3000
 ELEVATION_DEFAULT, ELEVATION_FULL, ELEVATION_LIMITED = 1, 2, 3
 ERROR_ACCESS_DENIED = 5
 EXPECTED_NATIVE_CASES = 47
@@ -83,6 +85,9 @@ def evaluate(report: dict) -> tuple[str, list[str]]:
     admin = facts.get('admin')
     if not isinstance(admin, dict) or admin.get('administrators_member') is not True:
         issues.append('ADMIN_FACTS_MISSING')
+    elif admin.get('administrators_deny_only') is not False or not isinstance(admin.get('integrity_rid'), int) \
+            or admin['integrity_rid'] < HIGH_RID:
+        issues.append('ADMIN_NOT_ELEVATED')
     if len(sids) == 2 and (sids['A'] == sids['B']
                            or (isinstance(admin, dict) and admin.get('user_sid') in sids.values())):
         issues.append('PRINCIPALS_NOT_DISTINCT')
@@ -90,6 +95,9 @@ def evaluate(report: dict) -> tuple[str, list[str]]:
     expected_cases = {'admin_open', 'second_account', 'same_account', 'server'}
     if set(cases) != expected_cases:
         issues.append('CASE_SET_DRIFT')
+    for name in sorted(expected_cases & set(cases)):
+        if not isinstance(cases[name], dict) or cases[name].get('error'):
+            issues.append('CASE_ERROR:' + name)
     c = cases.get('admin_open') or {}
     if c.get('opened') is not False or c.get('winerror') != ERROR_ACCESS_DENIED:
         issues.append('ADMIN_OPEN_NOT_DENIED')
@@ -112,8 +120,13 @@ def evaluate(report: dict) -> tuple[str, list[str]]:
             issues.append('COLLECTOR_VERIFY_VERDICT')
         if col.get('passed') != EXPECTED_NATIVE_CASES or col.get('cases') != EXPECTED_NATIVE_CASES:
             issues.append('COLLECTOR_NOT_47_OF_47')
-        if col.get('run_as') != 'A':
+        if col.get('run_as') != 'A' or col.get('facts_match') is not True:
             issues.append('COLLECTOR_NOT_RUN_AS_A')
+        if col.get('error'):
+            issues.append('COLLECTOR_ERROR')
+    cleanup = report.get('cleanup') if isinstance(report.get('cleanup'), dict) else {}
+    if cleanup != {'A': 'deleted', 'B': 'deleted', 'rights_A': 'removed', 'rights_B': 'removed'}:
+        issues.append('CLEANUP_INCOMPLETE')
     if report.get('release_authorized') is not False:
         issues.append('RELEASE_CLAIM')
     return ('STANDARD_ACCOUNT_LANE_OK' if not issues else 'BLOCKED'), issues
@@ -178,9 +191,10 @@ def run_child(args) -> int:
             suite = data.get('native_suite') if isinstance(data.get('native_suite'), dict) else {}
             cases = suite.get('cases') if isinstance(suite.get('cases'), list) else []
             try:
-                verdict = json.loads(v.stdout).get('verdict')
+                parsed = json.loads(v.stdout)
             except ValueError:
-                verdict = None
+                parsed = None
+            verdict = parsed.get('verdict') if isinstance(parsed, dict) else None
             out['result'] = {'collect_exit': c.returncode, 'verify_exit': v.returncode, 'verify_verdict': verdict,
                              'cases': len(cases),
                              'passed': sum(1 for x in cases if isinstance(x, dict) and x.get('status') == 'PASS'),
@@ -325,6 +339,31 @@ def _lock_dir(path: pathlib.Path, user: str | None, rights: str) -> None:
         raise RuntimeError('ICACLS_FAILED: ' + (r.stdout + r.stderr)[-300:])
 
 
+_TASK_XML = '''<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Principals>
+    <Principal id="Author">
+      <UserId>{user}</UserId>
+      <LogonType>Password</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT30M</ExecutionTimeLimit>
+    <Enabled>true</Enabled>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>{command}</Command>
+    </Exec>
+  </Actions>
+</Task>
+'''
+
+
 class _Tasks:
     def __init__(self, bindir: pathlib.Path):
         self.bindir, self.names = bindir, []
@@ -337,10 +376,19 @@ class _Tasks:
                 '--child', role, '--out', str(out), '--repo', str(WORK / 'repo')] + extra
         cmd.write_text('@echo off\r\n' + subprocess.list2cmdline(argv) + ' > "%s" 2>&1\r\n'
                        % (outdir / (role + '.log')), encoding='utf-8')
-        r = _run(['schtasks', '/Create', '/TN', tid, '/TR', str(cmd), '/SC', 'ONCE', '/ST', '23:59',
-                  '/RU', user, '/RP', password, '/RL', 'LIMITED', '/F'])
+        # No trigger at all: the task only runs on /Run (a time trigger could fire a
+        # second run of the same role). The password goes to Register-ScheduledTask
+        # on stdin, never onto a command line.
+        xml = self.bindir / (tid + '.xml')
+        xml.write_text(_TASK_XML.format(user=user, command=str(cmd)), encoding='utf-16')
+        script = ('$pw = [Console]::In.ReadLine(); '
+                  'Register-ScheduledTask -TaskName $env:UDX_TN -Xml (Get-Content -Raw $env:UDX_XML) '
+                  '-User $env:UDX_USER -Password $pw -Force | Out-Null')
+        r = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
+                           input=password + '\n', capture_output=True, text=True, timeout=120,
+                           env=dict(os.environ, UDX_TN=tid, UDX_XML=str(xml), UDX_USER=user))
         if r.returncode != 0:
-            raise RuntimeError('SCHTASKS_CREATE_FAILED: ' + (r.stdout + r.stderr).replace(password, '***')[-400:])
+            raise RuntimeError('TASK_REGISTER_FAILED: ' + (r.stdout + r.stderr).replace(password, '***')[-400:])
         self.names.append(tid)
         r = _run(['schtasks', '/Run', '/TN', tid])
         if r.returncode != 0:
@@ -369,7 +417,8 @@ def orchestrate(repo: pathlib.Path) -> dict:
     from udx_ref import windows_pipe as wp
     report = {'schema_version': 1, 'tool': 'W20_ACCOUNT_MATRIX', 'research_only': True,
               'release_authorized': False, 'facts': {}, 'cases': {}}
-    head = _run(['git', '-C', str(repo), 'rev-parse', 'HEAD']).stdout.strip()
+    r = _run(['git', '-C', str(repo), 'rev-parse', 'HEAD'])
+    head = r.stdout.strip()
     report['head'] = head
     users = {'A': 'udxw20a', 'B': 'udxw20b'}
     pw = {k: _password() for k in users}
@@ -378,6 +427,8 @@ def orchestrate(repo: pathlib.Path) -> dict:
     netuser, created = _NetUser(), set()
     tasks = _Tasks(WORK / 'bin')
     try:
+        if r.returncode != 0 or len(head) != 40:
+            raise RuntimeError('HEAD_UNKNOWN')
         if WORK.exists():
             shutil.rmtree(WORK)
         WORK.mkdir()
@@ -385,8 +436,12 @@ def orchestrate(repo: pathlib.Path) -> dict:
         r = _run(['git', 'clone', '--quiet', '--no-local', str(repo), str(WORK / 'repo')])
         if r.returncode != 0:
             raise RuntimeError('CLONE_FAILED: ' + r.stderr[-300:])
-        _run(['git', '-C', str(WORK / 'repo'), 'checkout', '--quiet', head])
-        _run(['git', 'config', '--system', '--add', 'safe.directory', str(WORK / 'repo').replace('\\', '/')])
+        for cmd in (['git', '-C', str(WORK / 'repo'), 'checkout', '--quiet', head],
+                    ['git', 'config', '--system', '--add', 'safe.directory', str(WORK / 'repo').replace('\\', '/')]):
+            if _run(cmd).returncode != 0:
+                raise RuntimeError('GIT_STEP_FAILED: ' + ' '.join(cmd[1:4]))
+        if _run(['git', '-C', str(WORK / 'repo'), 'rev-parse', 'HEAD']).stdout.strip() != head:
+            raise RuntimeError('CLONE_NOT_AT_HEAD')
         _lock_dir(WORK / 'bin', None, 'RX')
         report['facts']['admin'] = token_facts(wp)
         for k, u in users.items():
@@ -434,8 +489,9 @@ def orchestrate(repo: pathlib.Path) -> dict:
             if k in sids:
                 try:
                     lsa.remove(sids[k])
-                except OSError:
-                    pass
+                    report.setdefault('cleanup', {})['rights_' + k] = 'removed'
+                except OSError as exc:
+                    report.setdefault('cleanup', {})['rights_' + k] = 'REMOVE_FAILED:%s' % exc.errno
             if k in created:
                 report.setdefault('cleanup', {})[k] = 'deleted' if netuser.delete(u) == 0 else 'DELETE_FAILED'
     report['verdict'], report['issues'] = evaluate(report)

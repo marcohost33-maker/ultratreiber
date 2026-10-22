@@ -21,7 +21,7 @@ import sys
 # tools/w15_windows_evidence.py PINNED_SOURCE_SHA256 (a test compares both).
 EXPECTED_HEAD = '26309e997fea1ac90edba8a51e457fd494cac978'
 PINNED_SOURCE_SHA256 = {
-    'udx_ref/windows_pipe.py': '08e3b35a3260646b2626f394e43a3c6955dbcea2f666b656dd2b29677acb1d3b',
+    'udx_ref/windows_pipe.py': 'cca92b5308ed9bf49da3302e10bec7bc32c9939ca6a6dea17307d95a95f520aa',
     'windows/udx_sid_probe.cpp': '20216eb48c4abf0e2d33d19d2aff2ab29b08d6ba18f06ad00da971e4c58716f5',
     'windows/udx_sid_client.cpp': 'e97dc3b59cc436f914661036bf415eb7e7d8e5cb76554a45187b734d5245091e',
 }
@@ -59,6 +59,18 @@ def _constants(root: ast.Module) -> dict[str, int]:
             except ValueError:
                 pass
     return out
+
+
+def _client_open_access(tree):
+    """Name passed as dwDesiredAccess to the single CreateFileW in client_ping, else None."""
+    fn = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'client_ping'), None)
+    if fn is None:
+        return None
+    calls = [n for n in ast.walk(fn) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+             and n.func.attr == 'CreateFileW' and len(n.args) == 7]
+    if len(calls) != 1 or not isinstance(calls[0].args[1], ast.Name):
+        return None
+    return calls[0].args[1].id
 
 
 def _find_server_flags(tree, constants):
@@ -138,8 +150,9 @@ def audit(repo: pathlib.Path) -> dict:
           'W18 0x12008b ACE mask, W17 explicit user owner + OWNER RIGHTS ACE, protected SY+user DACL '
           'and Medium NWNR SACL are required')
     check('PY_CLIENT_ACCESS_DRIFT',
-          getattr(wp, 'CLIENT_ACCESS', None) == PIPE_ACE_MASK == getattr(wp, 'PIPE_ACE_MASK', None),
-          'W18: the Python client must open with exactly the ACE mask (no GENERIC_WRITE)')
+          getattr(wp, 'CLIENT_ACCESS', None) == PIPE_ACE_MASK == getattr(wp, 'PIPE_ACE_MASK', None)
+          and _client_open_access(tree) == 'CLIENT_ACCESS',
+          'W18: client_ping must pass CLIENT_ACCESS (== the ACE mask) to CreateFileW, never GENERIC_WRITE')
     flags, line = _find_server_flags(tree, constants)
     check('CREATE_NOT_FOUND', flags is not None, 'Call to CreateNamedPipeW not statically resolved')
     if flags:
@@ -166,8 +179,8 @@ def audit(repo: pathlib.Path) -> dict:
           (GRGW_MASK & FILE_CREATE_PIPE_INSTANCE) == FILE_CREATE_PIPE_INSTANCE and
           (PIPE_ACE_MASK & (FILE_CREATE_PIPE_INSTANCE | FILE_WRITE_EA | FILE_WRITE_ATTRIBUTES
                             | WRITE_DAC | WRITE_OWNER | DELETE)) == 0 and
-          (PIPE_ACE_MASK | GRGW_MASK) == GRGW_MASK,
-          'Expected ACE mask rights have changed')
+          (PIPE_ACE_MASK | GRGW_MASK) == GRGW_MASK and getattr(wp, 'PIPE_ACE_MASK', None) == PIPE_ACE_MASK,
+          'Expected ACE mask rights have changed (gate constant or udx_ref PIPE_ACE_MASK)')
     try:
         head = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True,
                                        stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL).strip()

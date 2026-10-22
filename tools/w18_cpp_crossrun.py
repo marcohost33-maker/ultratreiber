@@ -92,13 +92,15 @@ def _stop(proc) -> int | None:
         return None
 
 
-def run_cases(out: pathlib.Path) -> dict:
+def run_cases(out: pathlib.Path, cases: dict, spawned: list) -> dict:
+    """Fills ``cases`` in place; every started probe is appended to ``spawned``
+    so main() can kill leftovers if a step raises (timeout, missing pipe)."""
     from udx_ref import windows_pipe as wp
     probe, client = str(out / 'udx_sid_probe.exe'), str(out / 'udx_sid_client.exe')
-    cases = {}
 
     def cpp_server():
         proc = subprocess.Popen([probe], stdin=subprocess.DEVNULL)
+        spawned.append(proc)
         if not _wait_for_pipe(wp, time.monotonic() + TIMEOUT_S):
             proc.kill()
             proc.wait()
@@ -182,8 +184,18 @@ def main(argv=None) -> int:
                 report['verdict'] = 'BUILD_FAILED'
                 code = 1
             else:
-                report['cases'] = run_cases(out)
-                ok = all(c['ok'] for c in report['cases'].values())
+                report['cases'], spawned = {}, []
+                try:
+                    run_cases(out, report['cases'], spawned)
+                except Exception as exc:                    # report it, never lose the JSON
+                    report['error'] = '%s: %s' % (type(exc).__name__, exc)
+                finally:
+                    for proc in spawned:
+                        if proc.poll() is None:
+                            proc.kill()
+                            proc.wait()
+                ok = not report.get('error') and len(report['cases']) == 5 and all(
+                    c['ok'] for c in report['cases'].values())
                 report['verdict'] = 'CROSSRUN_OK' if ok else 'CROSSRUN_FAILED'
                 code = 0 if ok else 1
         report['host'] = {'platform': sys.platform, 'python': sys.version.split()[0],

@@ -92,6 +92,14 @@ class W14PortableGateTests(unittest.TestCase):
             result = GATE.audit(ROOT)
         self.assertIn('SDDL_CHANGED', {x['code'] for x in result['findings']})
 
+    def test_client_open_argument_is_read_from_source(self):
+        import ast
+        src = (ROOT/'udx_ref'/'windows_pipe.py').read_text(encoding='utf-8')
+        self.assertEqual(GATE._client_open_access(ast.parse(src)), 'CLIENT_ACCESS')
+        reverted = src.replace('api.CreateFileW(name, CLIENT_ACCESS, 0,', 'api.CreateFileW(name, GENERIC_ACCESS, 0,')
+        self.assertNotEqual(reverted, src)
+        self.assertEqual(GATE._client_open_access(ast.parse(reverted)), 'GENERIC_ACCESS')
+
     def test_generic_write_client_rollback_is_rejected(self):
         from udx_ref import windows_pipe as wp
         with mock.patch.object(wp, 'CLIENT_ACCESS', wp.GENERIC_READ | wp.GENERIC_WRITE):

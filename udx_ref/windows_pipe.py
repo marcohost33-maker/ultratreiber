@@ -1,5 +1,5 @@
 """W12/W13 Windows named-pipe peer-SID probe -- Python/ctypes runtime port of
-``windows/udx_sid_probe.cpp`` (W4 C++ candidate, still uncompiled).
+``windows/udx_sid_probe.cpp`` (W4 C++ candidate; first compiled in W18, MSVC CI job).
 
 RESEARCH ONLY. NOT a UDX broker, no OS action, no request/response protocol.
 The only positive observable is the fixed 7-byte handshake ``PEER_OK``.
@@ -21,8 +21,9 @@ W13 (after the Aegis audit) supersedes parts of the W12 list below:
   * a fully written response counts as sent; every Win32 failure stays typed
   * W19 (ADR-UDX-006, same-SID = trust domain): a pre-existing pipe name is
     reported as PipeNameOccupied / reason PIPE_NAME_OCCUPIED, CLI exit code 21
-    (NAME_OCCUPIED_EXIT), instead of a generic PipeSetupError / traceback. The
-    C++ probe still returns 14 for every CreateNamedPipeW failure (parity open)
+    (NAME_OCCUPIED_EXIT), instead of a generic PipeSetupError / traceback.
+    W20: the C++ probe exits 21 under the same condition (else 14), checked in
+    the MSVC cross-run (tools/w18_cpp_crossrun.py)
 
 What is reproduced 1:1 from the C++ candidate (see docs/W12_WINDOWS_LANE.md):
   * protected DACL ``D:P(A;;GA;;;SY)(A;;GA;;;<current user SID>)`` built via
