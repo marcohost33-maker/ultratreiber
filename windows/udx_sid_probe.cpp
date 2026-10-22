@@ -65,10 +65,14 @@ int wmain() {
     // client's owner check refuses it.
     std::wstring sddl = L"O:";
     sddl += sid_text;
-    sddl += L"D:P(A;;GRGW;;;SY)(A;;GRGW;;;";
+    // W18: every ACE grants 0x12008b = FILE_GENERIC_READ | FILE_WRITE_DATA
+    // instead of GRGW (0x12019f): no FILE_APPEND_DATA == FILE_CREATE_PIPE_INSTANCE
+    // (0x4), so no ACE lets anyone create a further instance of this pipe.
+    // Creating the first instance is not checked against this DACL.
+    sddl += L"D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;";
     sddl += sid_text;
-    // W17 (UNCOMPILED): OWNER RIGHTS ACE; the owner gets GRGW only, no implicit WRITE_DAC.
-    sddl += L")(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)";
+    // W17: OWNER RIGHTS ACE; the owner gets the ACE mask only, no implicit WRITE_DAC.
+    sddl += L")(A;;0x12008b;;;OW)S:(ML;;NWNR;;;ME)";
     LocalFree(sid_text);
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &sd, nullptr)) return 13;

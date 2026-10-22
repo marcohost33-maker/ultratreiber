@@ -14,6 +14,10 @@ W13 (after the Aegis audit) supersedes parts of the W12 list below:
   * W17 (issue #2): explicit owner ``O:<user SID>`` instead of the token's
     default owner (elevated administrators default to BUILTIN\\Administrators),
     plus an OWNER RIGHTS ACE so the owner has no implicit WRITE_DAC
+  * W18 (UDX14-01 instance bit): every ACE grants PIPE_ACE_MASK =
+    FILE_GENERIC_READ | FILE_WRITE_DATA (0x12008b) instead of GRGW (0x12019f),
+    i.e. no FILE_CREATE_PIPE_INSTANCE (== FILE_APPEND_DATA, 0x4); the client
+    opens with exactly that mask (CLIENT_ACCESS) instead of GENERIC_READ|GENERIC_WRITE
   * a fully written response counts as sent; every Win32 failure stays typed
 
 What is reproduced 1:1 from the C++ candidate (see docs/W12_WINDOWS_LANE.md):
@@ -69,6 +73,25 @@ PIPE_REJECT_REMOTE_CLIENTS = 0x00000008
 
 GENERIC_READ = 0x80000000
 GENERIC_WRITE = 0x40000000
+# W18: individual rights instead of GENERIC_WRITE. Microsoft: "Because
+# FILE_APPEND_DATA and FILE_CREATE_PIPE_INSTANCE have the same definition,
+# FILE_GENERIC_WRITE enables permission to create the pipe. To avoid this
+# problem, use the individual rights instead of using FILE_GENERIC_WRITE."
+FILE_READ_DATA = 0x0001
+FILE_WRITE_DATA = 0x0002
+FILE_CREATE_PIPE_INSTANCE = 0x0004                     # == FILE_APPEND_DATA
+FILE_READ_EA = 0x0008
+FILE_WRITE_EA = 0x0010
+FILE_READ_ATTRIBUTES = 0x0080
+FILE_WRITE_ATTRIBUTES = 0x0100
+READ_CONTROL = 0x00020000
+SYNCHRONIZE = 0x00100000
+FILE_GENERIC_READ = READ_CONTROL | FILE_READ_DATA | FILE_READ_ATTRIBUTES | FILE_READ_EA | SYNCHRONIZE
+# Granted by every ACE and requested by the client: read the response, write
+# the ping, READ_CONTROL for the owner check, SYNCHRONIZE. Nothing else.
+PIPE_ACE_MASK = FILE_GENERIC_READ | FILE_WRITE_DATA    # 0x0012008B
+PIPE_ACE_SDDL = '0x12008b'
+CLIENT_ACCESS = PIPE_ACE_MASK
 OPEN_EXISTING = 3
 SECURITY_SQOS_PRESENT = 0x00100000
 SECURITY_ANONYMOUS = 0 << 16
@@ -147,7 +170,21 @@ def validate_sid_text(sid_text) -> str:
 
 
 def build_sddl(sid_text: str) -> str:
-    """W17: ``O:<sid>D:P(A;;GRGW;;;SY)(A;;GRGW;;;<sid>)(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)``.
+    """W18: ``O:<sid>D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;<sid>)(A;;0x12008b;;;OW)S:(ML;;NWNR;;;ME)``.
+
+    * W18 (UDX14-01 instance bit, open since W14): all three ACEs grant
+      PIPE_ACE_MASK = FILE_GENERIC_READ | FILE_WRITE_DATA (0x12008b) instead of
+      GRGW (0x12019f). Dropped: FILE_APPEND_DATA == FILE_CREATE_PIPE_INSTANCE
+      (0x4), FILE_WRITE_EA (0x10), FILE_WRITE_ATTRIBUTES (0x100). Creating the
+      FIRST instance is not checked against this DACL (the new pipe takes it from
+      the security attributes); every FURTHER CreateNamedPipeW on the name is,
+      and needs 0x4, which no ACE grants any more. The server needs no further
+      instance (nMaxInstances=1). Clients must open with CLIENT_ACCESS: a legacy
+      GENERIC_READ|GENERIC_WRITE open maps to FILE_GENERIC_WRITE, contains 0x4
+      and is refused (measured, tests/test_w18_least_privilege.py). Unchanged:
+      this does not stop a same-SID process that creates the name BEFORE the
+      real server starts (UDX14-08, threat-model gate).
+    History (W17 wording below says GRGW; W18 replaced the mask, not the ACEs):
 
     * W17 (issue #2): the OWNER is set explicitly to the server user. Without
       ``O:`` the kernel takes the token's default owner (TokenOwner). For an
@@ -183,7 +220,9 @@ def build_sddl(sid_text: str) -> str:
     The SID text is validated first so no SDDL fragment can be smuggled in.
     """
     sid = validate_sid_text(sid_text)
-    return 'O:' + sid + 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + sid + ')(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)'
+    ace = PIPE_ACE_SDDL
+    return ('O:' + sid + 'D:P(A;;' + ace + ';;;SY)(A;;' + ace + ';;;' + sid + ')(A;;' + ace + ';;;OW)'
+            'S:(ML;;NWNR;;;ME)')
 
 
 def validate_deadline(deadline_s) -> float:
@@ -907,6 +946,7 @@ def client_ping(name: str = DEFAULT_PIPE_NAME, *, level: str = 'identification',
     """Port of udx_sid_client.cpp (W13 protocol).
 
     * SQOS: Identification + EFFECTIVE_ONLY, static tracking (never Impersonation)
+    * W18: opens with CLIENT_ACCESS (individual rights), never GENERIC_WRITE
     * BEFORE the first write: the pipe object's owner must equal
       ``expected_server_sid`` (default: this process' user SID); otherwise no
       byte is sent and a typed reason is returned. The server PID is logged only.
@@ -930,7 +970,7 @@ def client_ping(name: str = DEFAULT_PIPE_NAME, *, level: str = 'identification',
         raise ValueError('INVALID_EXPECTED_SID')
     try:
         while True:
-            h = api.CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, None, OPEN_EXISTING, flags, None)
+            h = api.CreateFileW(name, CLIENT_ACCESS, 0, None, OPEN_EXISTING, flags, None)
             if h is not None and h != INVALID_HANDLE_VALUE:
                 break
             err = api.last_error()

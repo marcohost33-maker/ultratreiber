@@ -48,9 +48,10 @@ class W14PortableGateTests(unittest.TestCase):
         self.assertFalse(info['merge_release_authorized'])
         self.assertEqual(info['verdict'], 'BLOCKED_NO_WINDOWS_EVIDENCE')
 
-    def test_aliased_instance_right_is_exposed(self):
+    def test_instance_right_no_longer_granted_since_w18(self):
         info = GATE.audit(ROOT)
-        self.assertTrue(info['rights_observation']['file_create_pipe_instance_allowed'])
+        self.assertEqual(info['rights_observation']['pipe_ace_mask'], '0x12008b')
+        self.assertFalse(info['rights_observation']['file_create_pipe_instance_allowed'])
         self.assertFalse(info['rights_observation']['explicit_write_dac_allowed'])
         self.assertFalse(info['rights_observation']['explicit_write_owner_allowed'])
 
@@ -77,6 +78,25 @@ class W14PortableGateTests(unittest.TestCase):
     def test_grgw_is_not_equivalent_to_explicit_client_least_privilege(self):
         self.assertEqual(GATE.GRGW_MASK & GATE.FILE_CREATE_PIPE_INSTANCE, 4)
         self.assertEqual(GATE.GRGW_MASK & (GATE.WRITE_DAC | GATE.WRITE_OWNER | GATE.DELETE), 0)
+
+    def test_w18_mask_drops_instance_bit_and_write_attributes(self):
+        self.assertEqual(GATE.PIPE_ACE_MASK & GATE.FILE_CREATE_PIPE_INSTANCE, 0)
+        self.assertEqual(GATE.GRGW_MASK & ~GATE.PIPE_ACE_MASK,
+                         GATE.FILE_CREATE_PIPE_INSTANCE | GATE.FILE_WRITE_EA | GATE.FILE_WRITE_ATTRIBUTES)
+
+    def test_grgw_rollback_is_rejected(self):
+        from udx_ref import windows_pipe as wp
+        sid = GATE.EXPECTED_SID
+        grgw = 'O:' + sid + 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + sid + ')(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)'
+        with mock.patch.object(wp, 'build_sddl', return_value=grgw):
+            result = GATE.audit(ROOT)
+        self.assertIn('SDDL_CHANGED', {x['code'] for x in result['findings']})
+
+    def test_generic_write_client_rollback_is_rejected(self):
+        from udx_ref import windows_pipe as wp
+        with mock.patch.object(wp, 'CLIENT_ACCESS', wp.GENERIC_READ | wp.GENERIC_WRITE):
+            result = GATE.audit(ROOT)
+        self.assertIn('PY_CLIENT_ACCESS_DRIFT', {x['code'] for x in result['findings']})
 
     def test_auditor_blocks_when_baseline_head_is_wrong(self):
         with mock.patch.object(GATE, 'EXPECTED_HEAD', '0'*40):

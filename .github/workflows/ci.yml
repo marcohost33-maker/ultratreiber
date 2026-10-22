@@ -127,3 +127,37 @@ jobs:
           path: ${{ runner.temp }}/udx_native.json
           if-no-files-found: warn
           retention-days: 30
+
+  cpp-candidate:
+    name: C++ candidate build + cross-run (windows-latest, MSVC)
+    runs-on: windows-latest
+    # W18 (UDX14-04, first step): the C++ sources had never been compiled.
+    # Builds both with cl /W4 /WX and runs the fixed-name handshake C++<->C++,
+    # C++<->Python in both directions, plus the W18 legacy-open refusal.
+    # Elevated hosted runner; NOT evidence for the open C++ deadline gaps.
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # actions/setup-python v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+      - name: Build and cross-run
+        run: |
+          python tools/w18_cpp_crossrun.py --output "$env:RUNNER_TEMP\udx_w18_cpp.json"
+          exit $LASTEXITCODE
+      # actions/upload-artifact v7.0.1
+      - name: Upload cross-run report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: udx-w18-cpp-crossrun-${{ github.sha }}
+          path: ${{ runner.temp }}/udx_w18_cpp.json
+          if-no-files-found: warn
+          retention-days: 30

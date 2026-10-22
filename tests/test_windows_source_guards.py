@@ -11,7 +11,7 @@ class WindowsCandidateSourceAudit(unittest.TestCase):
                          'ImpersonateNamedPipeClient', 'OpenThreadToken', 'EqualSid',
                          'RevertToSelf', 'ReadFile']:
             self.assertIn(expected,s)
-        self.assertIn('D:P(A;;GRGW;;;SY)',s)
+        self.assertIn('D:P(A;;0x12008b;;;SY)',s)     # W18 (was GRGW until W17)
     def test_explicit_client_impersonation_level(self):
         # W13 protocol inversion (Aegis P1-a): Identification + EFFECTIVE_ONLY,
         # static tracking; the client must never grant Impersonation.
@@ -24,3 +24,10 @@ class WindowsCandidateSourceAudit(unittest.TestCase):
         self.assertIn('OWNER_SECURITY_INFORMATION',s)
         self.assertLess(s.index('OWNER_SECURITY_INFORMATION'), s.index('WriteFile('))
         self.assertNotIn('GetNamedPipeServerProcessId',s)
+    def test_client_opens_with_individual_rights(self):
+        # W18: GENERIC_WRITE maps to FILE_GENERIC_WRITE, which contains
+        # FILE_APPEND_DATA == FILE_CREATE_PIPE_INSTANCE; the DACL no longer grants it.
+        s=(DIR/'udx_sid_client.cpp').read_text()
+        self.assertIn('constexpr DWORD access = FILE_GENERIC_READ | FILE_WRITE_DATA;',s)
+        self.assertIn('CreateFileW(name, access,',s)
+        self.assertNotIn('GENERIC_READ | GENERIC_WRITE',s)

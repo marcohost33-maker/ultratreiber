@@ -25,7 +25,6 @@ from udx_ref import windows_pipe as wp
 REPO = pathlib.Path(__file__).resolve().parents[1]
 IS_WINDOWS = sys.platform == 'win32'
 FILE_ALL_ACCESS = 0x001F01FF
-FILE_GENERIC_READ_WRITE = 0x0012019F
 WRITE_DAC = 0x00040000
 WRITE_OWNER = 0x00080000
 BS = chr(92)
@@ -92,14 +91,16 @@ class PortableParityAndValidation(unittest.TestCase):
     CPP = (REPO / 'windows' / 'udx_sid_probe.cpp').read_text()
 
     def test_sddl_prefix_identical_to_cpp(self):
-        # W13: GRGW + Medium NW|NR label in both the C++ source and the port.
+        # W13: Medium NW|NR label in both the C++ source and the port.
         # W17 (issue #2): explicit owner O:<user SID> in both.
-        self.assertIn('std::wstring sddl = L"O:";\n    sddl += sid_text;\n'
-                      '    sddl += L"D:P(A;;GRGW;;;SY)(A;;GRGW;;;";', self.CPP)
-        self.assertIn('sddl += L")(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)";', self.CPP)
+        # W18: ACE mask 0x12008b (FILE_GENERIC_READ|FILE_WRITE_DATA) instead of GRGW.
+        self.assertIn('std::wstring sddl = L"O:";\n    sddl += sid_text;\n', self.CPP)
+        self.assertIn('    sddl += L"D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;";\n    sddl += sid_text;\n', self.CPP)
+        self.assertIn('sddl += L")(A;;0x12008b;;;OW)S:(ML;;NWNR;;;ME)";', self.CPP)
         sid = 'S-1-5-21-1-2-3-1001'
         self.assertEqual(wp.build_sddl(sid),
-                         'O:' + sid + 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + sid + ')(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)')
+                         'O:' + sid + 'D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;' + sid
+                         + ')(A;;0x12008b;;;OW)S:(ML;;NWNR;;;ME)')
 
     def test_constants_identical_to_cpp(self):
         self.assertIn('UDX_W4_SID_PROBE', self.CPP)
@@ -194,7 +195,7 @@ class WindowsPipeRuntime(unittest.TestCase):
             box = {}
 
             def raw():
-                h = self.api.CreateFileW(name, wp.GENERIC_READ | wp.GENERIC_WRITE, 0, None, wp.OPEN_EXISTING,
+                h = self.api.CreateFileW(name, wp.CLIENT_ACCESS, 0, None, wp.OPEN_EXISTING,
                                          wp.SECURITY_SQOS_PRESENT | wp.SECURITY_IMPERSONATION, None)
                 buf = ctypes.create_string_buffer(b'U', 8)
                 n = ctypes.c_ulong(0)
@@ -382,14 +383,14 @@ class WindowsPipeRuntime(unittest.TestCase):
         self.assertEqual(len(info.aces), 3)
         # W17: third ACE = OWNER RIGHTS (S-1-3-4), replaces implicit owner rights.
         self.assertEqual([a.sid for a in info.aces], ['S-1-5-18', self.sid, 'S-1-3-4'])
-        # W14 (E1010M-05): SY and the user both get FILE_GENERIC_READ|
-        # FILE_GENERIC_WRITE only - no ACE carries WRITE_DAC/WRITE_OWNER.
+        # W14 (E1010M-05): no ACE carries WRITE_DAC/WRITE_OWNER. W18: every ACE
+        # is FILE_GENERIC_READ|FILE_WRITE_DATA, without the instance bit 0x4.
         self.assertEqual([(a.ace_type, a.ace_flags, a.mask) for a in info.aces],
-                         [(wp.ACCESS_ALLOWED_ACE_TYPE, 0, FILE_GENERIC_READ_WRITE)] * 3)
+                         [(wp.ACCESS_ALLOWED_ACE_TYPE, 0, wp.PIPE_ACE_MASK)] * 3)
         for ace in info.aces:
-            self.assertFalse(ace.mask & (WRITE_DAC | WRITE_OWNER))
-        expected = ('D:P(A;;0x12019f;;;SY)(A;;0x12019f;;;' + self.sid
-                    + ')(A;;0x12019f;;;OW)S:AI(ML;;NWNR;;;ME)')
+            self.assertFalse(ace.mask & (WRITE_DAC | WRITE_OWNER | wp.FILE_CREATE_PIPE_INSTANCE))
+        expected = ('D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;' + self.sid
+                    + ')(A;;0x12008b;;;OW)S:AI(ML;;NWNR;;;ME)')
         self.assertEqual(info.sddl, _canonical_sddl(expected))
 
     # (e) absolute deadline
@@ -420,7 +421,7 @@ class WindowsPipeRuntime(unittest.TestCase):
         name = _name()
         with wp.OneShotPipeServer(name) as srv:
             def raw():
-                h = self.api.CreateFileW(name, wp.GENERIC_READ | wp.GENERIC_WRITE, 0, None, wp.OPEN_EXISTING,
+                h = self.api.CreateFileW(name, wp.CLIENT_ACCESS, 0, None, wp.OPEN_EXISTING,
                                          wp.SECURITY_SQOS_PRESENT | wp.SECURITY_IMPERSONATION, None)
                 buf = ctypes.create_string_buffer(b'U', 1)
                 n = ctypes.c_ulong(0)
@@ -838,7 +839,7 @@ class WindowsPipeFaultInjection(unittest.TestCase):
                 out['err'] = api.last_error()
                 return
             try:
-                h = api.CreateFileW(name, wp.GENERIC_READ | wp.GENERIC_WRITE, 0, None, wp.OPEN_EXISTING,
+                h = api.CreateFileW(name, wp.CLIENT_ACCESS, 0, None, wp.OPEN_EXISTING,
                                     wp.client_sqos_flags(), None)
                 if h in (None, wp.INVALID_HANDLE_VALUE):
                     out['c'] = wp.ClientResult(api.last_error(), b'', False, 'OPEN_FAILED')

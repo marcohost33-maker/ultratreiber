@@ -124,15 +124,17 @@ class PortableOwnerSddl(unittest.TestCase):
         self.assertEqual(sddl.count('O:'), 1)
         self.assertNotIn('G:', sddl)                      # primary group stays defaulted
 
-    def test_owner_rights_ace_present_once_with_grgw(self):
+    def test_owner_rights_ace_present_once_with_ace_mask(self):
+        # W18: the OW ACE carries the same 0x12008b mask as the other ACEs (was GRGW).
         sddl = wp.build_sddl('S-1-5-21-1-2-3-1001')
-        self.assertEqual(sddl.count('(A;;GRGW;;;OW)'), 1)
+        ow = '(A;;' + wp.PIPE_ACE_SDDL + ';;;OW)'
+        self.assertEqual(sddl.count(ow), 1)
         self.assertEqual(sddl.count(';OW)'), 1)
-        self.assertLess(sddl.index('(A;;GRGW;;;OW)'), sddl.index('S:('))   # in the DACL, not the SACL
+        self.assertLess(sddl.index(ow), sddl.index('S:('))   # in the DACL, not the SACL
 
     def test_cpp_candidate_sets_the_same_owner(self):
         cpp = (REPO / 'windows' / 'udx_sid_probe.cpp').read_text()
-        self.assertLess(cpp.index('L"O:"'), cpp.index('L"D:P(A;;GRGW;;;SY)(A;;GRGW;;;"'))
+        self.assertLess(cpp.index('L"O:"'), cpp.index('L"D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;"'))
 
 
 @unittest.skipUnless(IS_WINDOWS, 'Windows runtime required')

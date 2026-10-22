@@ -38,7 +38,11 @@ int wmain() {
     std::vector<BYTE> self_buf;
     PSID self_sid = nullptr;
     if (!own_user_sid(self_buf, self_sid)) return 6;
-    HANDLE pipe = CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+    // W18: individual rights. GENERIC_WRITE maps to FILE_GENERIC_WRITE, which
+    // contains FILE_APPEND_DATA == FILE_CREATE_PIPE_INSTANCE; the server's DACL
+    // no longer grants that bit, so a GENERIC_WRITE open is refused.
+    constexpr DWORD access = FILE_GENERIC_READ | FILE_WRITE_DATA;
+    HANDLE pipe = CreateFileW(name, access, 0, nullptr,
         OPEN_EXISTING, SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION | SECURITY_EFFECTIVE_ONLY, nullptr);
     if (pipe == INVALID_HANDLE_VALUE) return 1;
     // Server identity BEFORE any byte is sent: owner of the pipe object.

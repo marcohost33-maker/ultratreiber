@@ -34,7 +34,7 @@ SOURCE_FILES = (
 EXPECTED_NATIVE_CLASSES = ('WindowsPipeRuntime', 'WindowsPipeFaultInjection')
 EXPECTED_NATIVE_COUNT = 47  # 23 runtime + 24 fault-injection tests pinned to W14
 # W16: bytes pinned to reviewed original W14 test source. Use autocrlf=false in Windows checkout.
-PINNED_NATIVE_TEST_SHA256 = '7c9b24ae04fc0a52ecf6a07f99e794cfea063b901ad0f3eb5e3ec8d635f115f5'
+PINNED_NATIVE_TEST_SHA256 = '5858e116582235487888807ef5ac07f42f3408715b0a2366759bd725301116e7'
 # Public prep (replaces the hard ``HEAD == BASELINE_HEAD`` pin, which no commit
 # after the baseline could ever satisfy): the checkout must DESCEND from the
 # audited W14 baseline AND the code under test must be byte-identical to the
@@ -42,9 +42,9 @@ PINNED_NATIVE_TEST_SHA256 = '7c9b24ae04fc0a52ecf6a07f99e794cfea063b901ad0f3eb5e3
 # The collector and its own test file stay recorded-only: they evolve, and a
 # script cannot meaningfully pin itself.
 PINNED_SOURCE_SHA256 = {
-    'udx_ref/windows_pipe.py': '596076bfc4d35b8976928d7886d788bdd748619cc77e0e13dda33a361be24b53',
-    'windows/udx_sid_probe.cpp': 'f810e03bfb15247e7faf4298aa03d799bd72284225ba6d9aca46e63800a4ab89',
-    'windows/udx_sid_client.cpp': 'bf62f1deadffa79aad0afaca5abfd67e556fd79c0dbf03b15431c1b1913eb49a',
+    'udx_ref/windows_pipe.py': '6a9791dbfbb1f095094ad19a44f1f9f0f5dfed316a1fac8ef808a41538ec37a3',
+    'windows/udx_sid_probe.cpp': '789eb785c3871367bf70d1ec7e2c76462642535e4f4688e985ac23e31e6fcef9',
+    'windows/udx_sid_client.cpp': 'e97dc3b59cc436f914661036bf415eb7e7d8e5cb76554a45187b734d5245091e',
     'tests/test_w12_windows_pipe.py': PINNED_NATIVE_TEST_SHA256,
 }
 _COMMIT_RE = re.compile('[0-9a-f]{40}')
