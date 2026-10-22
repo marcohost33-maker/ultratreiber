@@ -33,7 +33,7 @@ Auf derselben Seite steht auch: Wer `CreateNamedPipe` auf eine **bereits existie
 | Client-Open `CLIENT_ACCESS` | – | zugelassen (Positivkontrolle) |
 | `client_ping` fordert genau `CLIENT_ACCESS` an | – | aufgezeichnet, Handshake `PEER_OK` |
 
-**CI-Lauf 39760160792 (Kopf `6eef214`, Windows Server, erhöhter Administrator):** Alle 6 Jobs grün. Die drei W18-Windows-Tests liefen (nicht übersprungen). Suite unter bash und pwsh, Python 3.13 und 3.14. Der Collector lief mit 47/47 und `--verify` OK; der DACL-Readback zeigt drei ACEs mit `0x12008b`.
+**CI-Lauf 39760160792 (Branch-Kopf `3968d67`, geprüft als PR-Merge-Ref `6eef214`; Windows Server, erhöhter Administrator):** Alle 6 Jobs grün. Die drei W18-Windows-Tests liefen (nicht übersprungen). Suite unter bash und pwsh, Python 3.13 und 3.14. Der Collector lief mit 47/47 und `--verify` OK; der DACL-Readback zeigt drei ACEs mit `0x12008b`.
 
 **C++ (UDX14-04, erster Schritt):** Die Quellen `windows/*.cpp` sind seit W4 nie kompiliert worden. Neu ist `tools/w18_cpp_crossrun.py` mit dem CI-Job `cpp-candidate`: MSVC über vswhere, `cl /W4 /WX /EHsc /std:c++17`. Der Build lief ohne Warnungen; die SHA-256 der Binärdateien stehen im Artefakt-Bericht. Kreuzläufe auf dem festen Pipe-Namen:
 
