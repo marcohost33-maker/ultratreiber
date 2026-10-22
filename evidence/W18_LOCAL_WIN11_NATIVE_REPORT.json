@@ -1,0 +1,284 @@
+{
+  "collected_unix_utc": 1792707937.379,
+  "collector_platform": "win32",
+  "command_template": "python tools/w15_windows_evidence.py --worker --repo <audited_repo>",
+  "diagnostic_code": "OK",
+  "elapsed_wall_seconds": 13.234,
+  "git_head": "682ac68e6790bb6c748f83fcb0cd5b05e3a5d8ab",
+  "manual_gates": {
+    "CPP_NATIVE_BINARY_AND_TIMEOUT_PARITY": "NOT_EXECUTED",
+    "ELEVATED_OWNER_AND_EFFECTIVE_ACL": "NOT_EXECUTED",
+    "INDEPENDENT_SECURITY_REVIEW": "NOT_EXECUTED",
+    "REAL_APP_CONTAINER_AND_LOW_IL": "NOT_EXECUTED",
+    "REMOTE_SECOND_HOST": "NOT_EXECUTED",
+    "SECOND_ORDINARY_ACCOUNT_DENIAL": "NOT_EXECUTED",
+    "SERVICE_ACCOUNT_SESSION": "NOT_EXECUTED"
+  },
+  "native_suite": {
+    "all_native_cases_pass": true,
+    "cases": [
+      {
+        "elapsed_seconds": 0.00849,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_anonymous_level_value_denied",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.00349,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_appcontainer_token_denied",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.003175,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_async_exception_after_impersonation_still_reverts",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.003382,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_client_pid_failure_injected",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.003909,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_close_before_write_gives_no_peer_ok",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.303051,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_close_during_serve_defers_release_to_serving_thread",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.000917,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_close_releases_handle_even_if_disconnect_raises",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.006957,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_dropped_server_releases_pipe_name",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.001237,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_exception_during_pending_io_cancels_before_release",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 2.734617,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_failed_cancel_does_not_extend_deadline_unbounded",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.001721,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_foreign_expected_sid_requires_flag",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.046394,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_impersonate_failure_injected",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 1.371089,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_late_complete_write_counts_as_sent",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.051272,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_low_integrity_token_denied",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.002099,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_no_allocation_leak_when_server_sid_text_invalid",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.088554,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_open_thread_token_failure_after_impersonation_still_reverts",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.041439,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_other_session_denied",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.066086,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_read_happens_before_impersonation",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.033786,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_real_restricted_token_client_denied",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.124215,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_restricted_flag_denied",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.5516,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_revert_failure_terminates_process",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.01305,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_sid_text_failure_is_typed_denial",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.067546,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_single_use_and_invalid_override",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.007223,
+        "id": "test_w12_windows_pipe.WindowsPipeFaultInjection.test_token_query_failure_injected",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.004412,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_anonymous_level_denied",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.339804,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_cli_server_exit_codes_match_cpp",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.000556,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_client_cannot_request_impersonation",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 1.002364,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_client_never_reads_response_is_bounded",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.002636,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_client_owner_query_failure_is_typed",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.001525,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_client_refuses_foreign_owner_without_writing",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.002483,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_client_refuses_injected_foreign_owner",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.000867,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_dacl_exactly_system_and_current_user",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.002043,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_identification_level_peer_ok",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.001651,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_legacy_impersonation_level_client_still_accepted_by_server",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 1.505144,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_low_integrity_client_cannot_open_pipe",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.005438,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_low_integrity_read_only_open_denied",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.305985,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_no_client_connect_deadline",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.000753,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_reject_remote_flag_reaches_create_named_pipe",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.180823,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_same_user_cross_process_peer_ok",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.000702,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_second_own_instance_refused",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.001936,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_server_pid_is_logged_not_decisive",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.000338,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_server_thread_already_impersonating_refuses",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.001149,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_sid_mismatch_denied",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.508854,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_silent_client_hits_deadline_without_hang",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 2.023398,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_smb_loopback_client_rejected",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 0.000349,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_squatted_name_refused_by_first_pipe_instance",
+        "status": "PASS"
+      },
+      {
+        "elapsed_seconds": 1.009168,
+        "id": "test_w12_windows_pipe.WindowsPipeRuntime.test_squatter_sees_only_identification",
+        "status": "PASS"
+      }
+    ],
+    "output_redacted": true,
+    "raw_test_output_present": true,
+    "success": true,
+    "tests_run": 47
+  },
+  "platform_release": "11",
+  "platform_version": "10.0.26200",
+  "python": "3.14.4",
+  "python_executable_sha256": "7ca24f26d6e3f463419ee4f537ddd3acd312c38fe45e678cce08572f26a8bd1a",
+  "release_authorized": false,
+  "schema": "UDX_W15_NATIVE_EVIDENCE_V1",
+  "self_check": {
+    "issues": [],
+    "note": "This checks syntax and local hashes, not provenance or independent reviewer identity.",
+    "release_authorized": false,
+    "schema_ok": true,
+    "verdict": "UNTRUSTED_REPORT_SCHEMA_VALID"
+  },
+  "source_sha256": {
+    "tests/test_w12_windows_pipe.py": "5858e116582235487888807ef5ac07f42f3408715b0a2366759bd725301116e7",
+    "tests/test_w15_windows_evidence.py": "3cef428ea45a6c4b89c97908c10457453fc9bfa61eef36a2479bca36135a46dd",
+    "tools/w14_acl_static_gate.py": "e7760a2c7656a592de4d596014733c511ad3384f44ba9b7c3f263556ab14abe9",
+    "tools/w15_windows_evidence.py": "aa7b8f3c651a54a28a35f4b8ee1d3dcc134b41a9256dd2993aea5011b12af02d",
+    "udx_ref/windows_pipe.py": "6a9791dbfbb1f095094ad19a44f1f9f0f5dfed316a1fac8ef808a41538ec37a3",
+    "windows/udx_sid_client.cpp": "e97dc3b59cc436f914661036bf415eb7e7d8e5cb76554a45187b734d5245091e",
+    "windows/udx_sid_probe.cpp": "789eb785c3871367bf70d1ec7e2c76462642535e4f4688e985ac23e31e6fcef9"
+  },
+  "subprocess_exitcode": 0
+}
