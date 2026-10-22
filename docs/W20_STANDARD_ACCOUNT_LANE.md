@@ -42,6 +42,8 @@ Offen nach W19 (ROADMAP W19, Punkte 1–3):
 - Collector als A: 47 Fälle, 47 PASS, `diagnostic_code` `OK`, `--collect`/`--verify` mit Exit 0, Verdikt `UNTRUSTED_REPORT_SCHEMA_VALID`, Bericht-SHA-256 `ad081076…b0a4f6`.
 - Verdikt `STANDARD_ACCOUNT_LANE_OK`, `issues: []`; Aufräumen: A und B gelöscht.
 
+**Wiederholung nach dem Review (10 Befunde behoben, Lauf 39871135366, Branch-Kopf `3a5f883`):** 7/7 grün, Verdikt erneut `STANDARD_ACCOUNT_LANE_OK`; neue A- und B-SIDs (`…-1003`/`…-1004` auf einem frischen Runner); zusätzlich nachgewiesen: `facts_match: true` (das Token des Collector-Tasks entspricht dem von A), Admin-Token High (12288) und nicht deny-only, Aufräumen `A/B deleted`, `rights_A/rights_B removed`. Die Tasks laufen nun ohne Trigger (nur auf `/Run`), registriert per `Register-ScheduledTask` mit dem Passwort auf stdin.
+
 C++-Kreuzlauf im selben Lauf: `cpp_server_name_occupied` → `probe_exit` 21, Halter `PEER_OK`; die übrigen vier Fälle wie in W18; MSVC 19.51.36260, `/W4 /WX`.
 
 ## Grenzen
