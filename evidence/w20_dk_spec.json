@@ -1,0 +1,43 @@
+{
+ "repo": ".",
+ "test_befehl": ["python", "-m", "pytest"],
+ "timeout_s": 120,
+ "hinweis": "Portable Diskriminierung des W20-Verdikts und der C++-Paritaet (Linux ausfuehrbar). Die Laufzeitbelege selbst stehen im CI-Artefakt udx-w20-account-matrix-<sha>.",
+ "faelle": [
+  {
+   "name": "W20-DK1 Admin-Mitgliedschaft nicht mehr geprueft (gefiltertes Admin-Token wuerde als Standardkonto gelten)",
+   "datei": "tools/w20_account_matrix.py",
+   "alt": "        if f.get('administrators_member') is not False:\n            issues.append('NOT_STANDARD_ACCOUNT:' + who)\n",
+   "neu": "",
+   "test": "tests/test_w20_account_matrix.py::EvaluateAccountMatrix::test_filtered_admin_is_not_a_standard_account"
+  },
+  {
+   "name": "W20-DK2 Zweitkonto-Abweisung nur noch am Grund, nicht am Win32-Code",
+   "datei": "tools/w20_account_matrix.py",
+   "alt": "    if c.get('reason') != 'OPEN_FAILED' or c.get('open_error') != ERROR_ACCESS_DENIED or c.get('sent') is not False:",
+   "neu": "    if c.get('reason') not in ('OPEN_FAILED', 'PIPE_OWNER_MISMATCH'):",
+   "test": "tests/test_w20_account_matrix.py::EvaluateAccountMatrix::test_second_account_must_be_denied_at_open"
+  },
+  {
+   "name": "W20-DK3 Server-Identitaet nicht an A gebunden",
+   "datei": "tools/w20_account_matrix.py",
+   "alt": "    if c.get('verdict') != 'PEER_OK' or c.get('client_sid') != sids.get('A') or c.get('client_sid') is None:",
+   "neu": "    if c.get('verdict') != 'PEER_OK':",
+   "test": "tests/test_w20_account_matrix.py::EvaluateAccountMatrix::test_admin_open_and_controls"
+  },
+  {
+   "name": "W20-DK4 Collector-Zaehlung nicht mehr 47/47",
+   "datei": "tools/w20_account_matrix.py",
+   "alt": "        if col.get('passed') != EXPECTED_NATIVE_CASES or col.get('cases') != EXPECTED_NATIVE_CASES:",
+   "neu": "        if not col.get('passed'):",
+   "test": "tests/test_w20_account_matrix.py::EvaluateAccountMatrix::test_collector_must_be_47_of_47_as_a"
+  },
+  {
+   "name": "W20-DK5 C++: Fehlercode nach LocalFree gelesen (kann ueberschrieben sein)",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "    const DWORD create_error = GetLastError();      // before LocalFree can overwrite it\n    LocalFree(sd);\n",
+   "neu": "    LocalFree(sd);\n    const DWORD create_error = GetLastError();\n",
+   "test": "tests/test_windows_source_guards.py::WindowsCandidateSourceAudit::test_occupied_name_exit_code_parity"
+  }
+ ]
+}

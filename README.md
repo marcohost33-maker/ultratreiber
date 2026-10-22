@@ -6,7 +6,7 @@
 
 Ultratreiber (UDX, *Universal Driver & eXchange*) is a research demonstrator of an isolated, read-only access broker: a fail-closed request parser, OS-credential-bound peer identity and evidence-gated Linux (AF_UNIX) and Windows (named pipe) transport lanes, with no dependency on any client or model runtime.
 
-> **Status: RESEARCH DEMONSTRATOR — NOT PRODUCTION READY.** Current wave: W18 (version 0.18.0). No release, no security approval.
+> **Status: RESEARCH DEMONSTRATOR — NOT PRODUCTION READY.** Current wave: W20 (version 0.20.0). No release, no security approval.
 >
 > **Evidenced (local, not independently attested):**
 > - Portable + Linux test suite, run without root (`python -m unittest discover -s tests`); per-wave logs in `evidence/*_NONROOT_TESTS.log`.
@@ -16,7 +16,11 @@ Ultratreiber (UDX, *Universal Driver & eXchange*) is a research demonstrator of 
 >
 > - W18: no ACE of the pipe grants `FILE_CREATE_PIPE_INSTANCE` any more. GRGW (`0x12019f`) contains `FILE_APPEND_DATA`, which for named pipes is the instance-creation bit. Every ACE now grants `FILE_GENERIC_READ | FILE_WRITE_DATA` (`0x12008b`), and clients open with exactly that mask, so a `GENERIC_WRITE` open is refused. Discriminating Windows tests run against the W17 descriptor as a control (second instance and legacy open are admitted there, refused under W18). The C++ candidates are compiled for the first time (MSVC `cl /W4 /WX`, CI job `cpp-candidate`) and cross-run against the Python lane in both directions. Details: [`docs/W18_LEAST_PRIVILEGE_PIPE_ACL.md`](docs/W18_LEAST_PRIVILEGE_PIPE_ACL.md).
 >
-> **NOT evidenced:** denial against a real second Windows account; real AppContainer / Low-IL tokens; service-account sessions; elevated owner / AccessCheck matrix; a second (remote) host; C++ deadline/cancellation parity (W18: compiled and handshake-tested on the hosted runner only; still blocking I/O); independent security review or attestation; authentic portal consent; Android/iOS.
+> - W19: same user SID at the same integrity level is one trust domain ([`docs/ADR-UDX-006.md`](docs/ADR-UDX-006.md)); a pre-existing pipe name is reported as `PIPE_NAME_OCCUPIED` (CLI exit 21). Local Windows 11 run on the W18 bytes, Medium IL, UAC-filtered administrator token: 47/47 ([`docs/W18_LOCAL_WIN11_RUN.md`](docs/W18_LOCAL_WIN11_RUN.md)).
+>
+> - W20: **standard-account and second-account lane** in CI (`windows-account-matrix`). Two throwaway local accounts with no Administrators membership run as scheduled tasks. The second account and the elevated administrator are refused at open (`ERROR_ACCESS_DENIED`). The same-account control completes `PEER_OK` and the server identifies account A. The 47 pinned native tests pass as account A (47/47, `--verify` OK). The C++ probe now exits 21 for an occupied name, like the Python CLI. Details: [`docs/W20_STANDARD_ACCOUNT_LANE.md`](docs/W20_STANDARD_ACCOUNT_LANE.md).
+>
+> **NOT evidenced:** a second account in a different interactive session (W20 covers a second account via batch logon on the hosted Windows Server runner); real AppContainer / Low-IL tokens; service-account sessions; elevated owner / AccessCheck matrix; a second (remote) host; C++ deadline/cancellation parity (W18: compiled and handshake-tested on the hosted runner only; still blocking I/O); independent security review or attestation; authentic portal consent; Android/iOS.
 
 ## Quick start
 

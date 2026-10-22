@@ -10,7 +10,7 @@ authors:
   - family-names: "Hostettler"
     given-names: "Marco"
     affiliation: "Coworker Research (Coworkerz)"
-version: "0.18.0"
+version: "0.20.0"
 license: Apache-2.0
 repository-code: "https://github.com/marcohost33-maker/ultratreiber"
 keywords:

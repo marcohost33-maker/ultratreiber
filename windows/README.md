@@ -7,6 +7,9 @@
 > (no `FILE_CREATE_PIPE_INSTANCE`) and the client open to
 > `FILE_GENERIC_READ | FILE_WRITE_DATA`. Still open: blocking I/O without deadlines,
 > standard-user and second-account runs. The "uncompiled" notes below are history.
+> W20: `udx_sid_probe.exe` exits **21** when the pipe name is already listed in the
+> namespace (same code as the Python CLI's `PIPE_NAME_OCCUPIED`), else 14 on a
+> `CreateNamedPipeW` failure; checked in the MSVC cross-run.
 
 > **W13 update (2026-10-09, still UNCOMPILED — no C++ compiler on the test host).**
 > Protocol inverted after the Aegis audit: the client now connects with
