@@ -43,7 +43,7 @@ PINNED_NATIVE_TEST_SHA256 = '5858e116582235487888807ef5ac07f42f3408715b0a2366759
 # script cannot meaningfully pin itself.
 PINNED_SOURCE_SHA256 = {
     'udx_ref/windows_pipe.py': '08e3b35a3260646b2626f394e43a3c6955dbcea2f666b656dd2b29677acb1d3b',
-    'windows/udx_sid_probe.cpp': '789eb785c3871367bf70d1ec7e2c76462642535e4f4688e985ac23e31e6fcef9',
+    'windows/udx_sid_probe.cpp': '20216eb48c4abf0e2d33d19d2aff2ab29b08d6ba18f06ad00da971e4c58716f5',
     'windows/udx_sid_client.cpp': 'e97dc3b59cc436f914661036bf415eb7e7d8e5cb76554a45187b734d5245091e',
     'tests/test_w12_windows_pipe.py': PINNED_NATIVE_TEST_SHA256,
 }

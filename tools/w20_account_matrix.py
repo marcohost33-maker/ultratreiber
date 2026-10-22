@@ -272,13 +272,46 @@ class _Lsa:
         self._call(sid_text, False)
 
 
+class _NetUser:
+    """NetUserAdd / NetUserDel (netapi32). ``net user`` prompts (Y/N) for
+    passwords longer than 14 characters and would put the password on a command
+    line; the API does neither."""
+
+    def __init__(self):
+        from ctypes import wintypes
+        n = ctypes.WinDLL('netapi32')
+
+        class USER_INFO_1(ctypes.Structure):
+            _fields_ = [('name', wintypes.LPWSTR), ('password', wintypes.LPWSTR),
+                        ('password_age', wintypes.DWORD), ('priv', wintypes.DWORD),
+                        ('home_dir', wintypes.LPWSTR), ('comment', wintypes.LPWSTR),
+                        ('flags', wintypes.DWORD), ('script_path', wintypes.LPWSTR)]
+        self.UI1 = USER_INFO_1
+        n.NetUserAdd.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD)]
+        n.NetUserAdd.restype = wintypes.DWORD
+        n.NetUserDel.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
+        n.NetUserDel.restype = wintypes.DWORD
+        self.n, self.w = n, wintypes
+
+    def add(self, user: str, password: str) -> None:
+        # USER_PRIV_USER; UF_SCRIPT | UF_PASSWD_CANT_CHANGE | UF_DONT_EXPIRE_PASSWD
+        info = self.UI1(user, password, 0, 1, None, 'UDX W20 throwaway test account', 0x1 | 0x40 | 0x10000, None)
+        parm = self.w.DWORD(0)
+        st = self.n.NetUserAdd(None, 1, ctypes.byref(info), ctypes.byref(parm))
+        if st:
+            raise RuntimeError('NetUserAdd failed: status %d parm %d' % (st, parm.value))
+
+    def delete(self, user: str) -> int:
+        return self.n.NetUserDel(None, user)
+
+
 def _account_sid(user: str) -> str:
     r = _run(['powershell', '-NoProfile', '-Command',
               "(New-Object System.Security.Principal.NTAccount('%s')).Translate("
               "[System.Security.Principal.SecurityIdentifier]).Value" % user])
     sid = r.stdout.strip()
     if r.returncode != 0 or not sid.startswith('S-1-5-21-'):
-        raise RuntimeError('SID_LOOKUP_FAILED')
+        raise RuntimeError('SID_LOOKUP_FAILED: ' + (r.stdout + r.stderr)[-300:])
     return sid
 
 
@@ -289,7 +322,7 @@ def _lock_dir(path: pathlib.Path, user: str | None, rights: str) -> None:
     r = _run(['icacls', str(path), '/inheritance:r', '/grant:r', '*S-1-5-18:(OI)(CI)F',
               '*S-1-5-32-544:(OI)(CI)F', '%s:(OI)(CI)%s' % (grantee, rights)])
     if r.returncode != 0:
-        raise RuntimeError('ICACLS_FAILED')
+        raise RuntimeError('ICACLS_FAILED: ' + (r.stdout + r.stderr)[-300:])
 
 
 class _Tasks:
@@ -342,6 +375,7 @@ def orchestrate(repo: pathlib.Path) -> dict:
     pw = {k: _password() for k in users}
     sids = {}
     lsa = _Lsa()
+    netuser, created = _NetUser(), set()
     tasks = _Tasks(WORK / 'bin')
     try:
         if WORK.exists():
@@ -350,15 +384,14 @@ def orchestrate(repo: pathlib.Path) -> dict:
         _lock_dir(WORK, None, 'RX')
         r = _run(['git', 'clone', '--quiet', '--no-local', str(repo), str(WORK / 'repo')])
         if r.returncode != 0:
-            raise RuntimeError('CLONE_FAILED')
+            raise RuntimeError('CLONE_FAILED: ' + r.stderr[-300:])
         _run(['git', '-C', str(WORK / 'repo'), 'checkout', '--quiet', head])
         _run(['git', 'config', '--system', '--add', 'safe.directory', str(WORK / 'repo').replace('\\', '/')])
         _lock_dir(WORK / 'bin', None, 'RX')
         report['facts']['admin'] = token_facts(wp)
         for k, u in users.items():
-            r = _run(['net', 'user', u, pw[k], '/add', '/passwordchg:no', '/expires:never'])
-            if r.returncode != 0:
-                raise RuntimeError('USER_CREATE_FAILED:' + k)
+            netuser.add(u, pw[k])
+            created.add(k)
             sids[k] = _account_sid(u)
             lsa.add(sids[k])
             _lock_dir(WORK / ('out_' + k), u, 'M')
@@ -403,7 +436,8 @@ def orchestrate(repo: pathlib.Path) -> dict:
                     lsa.remove(sids[k])
                 except OSError:
                     pass
-            _run(['net', 'user', u, '/delete'])
+            if k in created:
+                report.setdefault('cleanup', {})[k] = 'deleted' if netuser.delete(u) == 0 else 'DELETE_FAILED'
     report['verdict'], report['issues'] = evaluate(report)
     return report
 

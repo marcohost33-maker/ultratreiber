@@ -31,3 +31,12 @@ class WindowsCandidateSourceAudit(unittest.TestCase):
         self.assertIn('constexpr DWORD access = FILE_GENERIC_READ | FILE_WRITE_DATA;',s)
         self.assertIn('CreateFileW(name, access,',s)
         self.assertNotIn('GENERIC_READ | GENERIC_WRITE',s)
+    def test_occupied_name_exit_code_parity(self):
+        # W20: same exit code 21 as the Python CLI (W19 PipeNameOccupied), only
+        # after the namespace listing confirms the name; the error is captured
+        # before LocalFree can overwrite it.
+        s=(DIR/'udx_sid_probe.cpp').read_text()
+        self.assertIn('const DWORD create_error = GetLastError();', s)
+        self.assertLess(s.index('const DWORD create_error = GetLastError();'), s.index('    LocalFree(sd);\n    if (pipe'))
+        self.assertIn('&& pipe_name_present(name, L"UDX_W4_SID_PROBE")) return 21;', s)
+        self.assertIn('_wcsicmp(data.cFileName, base) == 0', s)

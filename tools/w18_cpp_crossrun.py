@@ -7,6 +7,8 @@ runs the fixed-name handshake in every combination:
   cpp_server+cpp_client       C++ probe <-> C++ client
   cpp_server+py_client        C++ probe <-> udx_ref.windows_pipe.client_ping
   py_server+cpp_client        OneShotPipeServer <-> C++ client
+  cpp_server_name_occupied    W20: name held by the Python server -> C++ probe
+                              exits 21 (PIPE_NAME_OCCUPIED parity), holder still works
   cpp_server_legacy_open      against the C++ probe a GENERIC_READ|GENERIC_WRITE
                               open is refused (W18 DACL has no 0x4), and the
                               refused open does not consume the single instance:
@@ -126,6 +128,22 @@ def run_cases(out: pathlib.Path) -> dict:
                                      'server_reason': res.reason if res else None,
                                      'client_exit': cli.returncode,
                                      'ok': bool(res and res.ok) and cli.returncode == 0}
+
+    # W20: C++ parity of W19 PIPE_NAME_OCCUPIED. The name is held by the Python
+    # server; the C++ probe must exit 21 (not the generic 14), and the holder's
+    # instance stays usable (a client still completes the handshake with it).
+    box = {}
+    with wp.OneShotPipeServer(wp.DEFAULT_PIPE_NAME) as holder:
+        occupied = subprocess.run([probe], stdin=subprocess.DEVNULL, timeout=TIMEOUT_S)
+        t = threading.Thread(target=lambda: box.setdefault('r', holder.serve(TIMEOUT_S)), daemon=True)
+        t.start()
+        r = wp.client_ping(wp.DEFAULT_PIPE_NAME, connect_timeout_s=TIMEOUT_S, response_timeout_s=TIMEOUT_S)
+        t.join(TIMEOUT_S + 5)
+    held = box.get('r')
+    cases['cpp_server_name_occupied'] = {'probe_exit': occupied.returncode, 'holder_client_reason': r.reason,
+                                         'holder_verdict': held.verdict if held else None,
+                                         'ok': occupied.returncode == 21 and r.reason == 'OK'
+                                         and bool(held and held.ok)}
 
     srv = cpp_server()
     api = wp.default_api()
