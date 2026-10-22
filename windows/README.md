@@ -1,4 +1,12 @@
-# Windows W4 security handshake candidate — uncompiled
+# Windows W4 security handshake candidate
+
+> **W18 (2026-10-22): first compiled.** CI job `cpp-candidate` builds both sources with
+> MSVC `cl /nologo /W4 /WX /EHsc /std:c++17` on the hosted `windows-latest` runner
+> (`tools/w18_cpp_crossrun.py`) and runs the handshake C++<->C++, C++ server<->Python
+> client and Python server<->C++ client. W18 also changes the ACE mask to `0x12008b`
+> (no `FILE_CREATE_PIPE_INSTANCE`) and the client open to
+> `FILE_GENERIC_READ | FILE_WRITE_DATA`. Still open: blocking I/O without deadlines,
+> standard-user and second-account runs. The "uncompiled" notes below are history.
 
 > **W13 update (2026-10-09, still UNCOMPILED — no C++ compiler on the test host).**
 > Protocol inverted after the Aegis audit: the client now connects with

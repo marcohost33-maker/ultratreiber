@@ -1,0 +1,43 @@
+{
+ "repo": ".",
+ "test_befehl": ["python", "-m", "pytest"],
+ "timeout_s": 120,
+ "hinweis": "Portable Diskriminierung (Linux ausfuehrbar). Die Windows-Laufzeitfaelle (zweite Instanz, GENERIC_WRITE-Open) diskriminieren mit eigener Kontrolle im Test selbst (W17-Deskriptor zugelassen, W18 ERROR_ACCESS_DENIED).",
+ "faelle": [
+  {
+   "name": "W18-DK1 ACE-Maske zurueck auf GRGW (0x4 wieder gewaehrt)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    ace = PIPE_ACE_SDDL\n",
+   "neu": "    ace = 'GRGW'\n",
+   "test": "tests/test_w18_least_privilege.py::PortableLeastPrivilegeMask::test_every_ace_carries_the_mask"
+  },
+  {
+   "name": "W18-DK2 Python-Client wieder GENERIC_READ|GENERIC_WRITE",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "CLIENT_ACCESS = PIPE_ACE_MASK\n",
+   "neu": "CLIENT_ACCESS = GENERIC_READ | GENERIC_WRITE\n",
+   "test": "tests/test_w18_least_privilege.py::PortableLeastPrivilegeMask::test_mask_is_generic_read_plus_write_data_only"
+  },
+  {
+   "name": "W18-DK3 Maske um FILE_APPEND_DATA (= FILE_CREATE_PIPE_INSTANCE) erweitert",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "PIPE_ACE_MASK = FILE_GENERIC_READ | FILE_WRITE_DATA    # 0x0012008B\n",
+   "neu": "PIPE_ACE_MASK = FILE_GENERIC_READ | FILE_WRITE_DATA | FILE_CREATE_PIPE_INSTANCE\n",
+   "test": "tests/test_w18_least_privilege.py::PortableLeastPrivilegeMask::test_mask_is_generic_read_plus_write_data_only"
+  },
+  {
+   "name": "W18-DK4 C++-Client wieder GENERIC_READ|GENERIC_WRITE",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "    HANDLE pipe = CreateFileW(name, access, 0, nullptr,",
+   "neu": "    HANDLE pipe = CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, nullptr,",
+   "test": "tests/test_windows_source_guards.py::WindowsCandidateSourceAudit::test_client_opens_with_individual_rights"
+  },
+  {
+   "name": "W18-DK5 C++-Server-SDDL wieder GRGW (Statisches Gate)",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "    sddl += L\"D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;\";",
+   "neu": "    sddl += L\"D:P(A;;GRGW;;;SY)(A;;GRGW;;;\";",
+   "test": "tests/test_w12_windows_pipe.py::PortableParityAndValidation::test_sddl_prefix_identical_to_cpp"
+  }
+ ]
+}

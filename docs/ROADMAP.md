@@ -42,3 +42,9 @@ Research-only private `SCM_RIGHTS` handoff added via `udx_ref/fd_handoff.py` and
 - Added FileChooser Request correlation state machine; tests with injected bus metadata only, NO authenticated user session D-Bus interaction. Same-UID app isolation and genuine portal consent remain BLOCKED.
 - Added real Cross-UID Linux demo, abrupt-crash recovery demo, tests and journal microbenchmark. Evidence in `docs/W10_CRITICAL_AUDIT.md`, `evidence/W10_*`.
 - W11 priorities: live D-Bus/Flatpak integration with consent/revoke; supervised app isolation; Windows compiled probe; encrypted/retained journal + recovery adversarial tests. Digi optional; no GitHub writes.
+
+## W18 — 2026-10-22 (research only)
+
+- Closed the W14 instance-bit finding: every pipe ACE grants `0x12008b` (`FILE_GENERIC_READ | FILE_WRITE_DATA`) instead of GRGW, and clients open with the same mask. On the hosted runner, a further `CreateNamedPipeW` instance and a legacy `GENERIC_WRITE` open are refused, each with a W17 control in the same test. See `docs/W18_LEAST_PRIVILEGE_PIPE_ACL.md`.
+- First MSVC build of `windows/*.cpp` (`/W4 /WX`) plus C++/Python cross-run in CI (`cpp-candidate`).
+- Still open, in order: (1) local Windows 11 standard-account collector run on the W18 bytes; (2) second-account / AppContainer / Low-IL / service matrix; (3) UDX14-08 pre-start squatting (needs a server-identity/bootstrap design, not an ACL edit); (4) C++ overlapped I/O with deadlines (UDX14-04 remainder) or an explicit scope reduction to research-only; (5) UDX14-06 FD-handoff flake: not reproduced in W18 (0/25), keep under observation.

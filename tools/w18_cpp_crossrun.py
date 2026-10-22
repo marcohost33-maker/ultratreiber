@@ -51,15 +51,17 @@ def find_vcvars() -> pathlib.Path:
 
 def build(repo: pathlib.Path, out: pathlib.Path) -> dict:
     vcvars = find_vcvars()
-    result = {'flags': CL_FLAGS, 'binaries': {}}
+    # /nologo hides the banner, so ask cl once without arguments for its version.
+    banner = subprocess.run('cmd /d /s /c "call "' + str(vcvars) + '" >nul && cl"', stdin=subprocess.DEVNULL,
+                            capture_output=True, text=True, timeout=120).stderr
+    result = {'flags': CL_FLAGS, 'binaries': {},
+              'compiler': next((x.strip() for x in banner.splitlines() if 'Compiler Version' in x), None)}
     for key, src in SOURCES.items():
         exe = out / (pathlib.Path(src).stem + '.exe')
         line = (f'call "{vcvars}" >nul && cl {CL_FLAGS} /Fe"{exe}" /Fo"{out}\\\\" '
                 f'"{repo / src}" advapi32.lib')
         proc = subprocess.run('cmd /d /s /c "' + line + '"', stdin=subprocess.DEVNULL,
                               capture_output=True, text=True, timeout=300)
-        banner = next((x for x in proc.stderr.splitlines() if 'Compiler Version' in x), None)
-        result.setdefault('compiler', banner)
         if proc.returncode != 0 or not exe.is_file():
             result['error'] = {'source': src, 'exit': proc.returncode,
                                'output': (proc.stdout + proc.stderr)[-4000:]}
