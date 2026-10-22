@@ -40,6 +40,23 @@ static bool integrity_rid(HANDLE token, DWORD& rid) {
     return true;
 }
 
+// W20 (parity with udx_ref/windows_pipe.py W19 PipeNameOccupied): true only if
+// the pipe namespace lists exactly `base`. FindFirstFileW enumerates the
+// named-pipe file system directory without opening (and without consuming) the
+// instance; the API's wildcard match is not trusted, every entry is compared.
+static bool pipe_name_present(const wchar_t* full, const wchar_t* base) {
+    WIN32_FIND_DATAW data = {};
+    HANDLE h = FindFirstFileW(full, &data);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    bool found = false;
+    for (unsigned i = 0; i < 65536; ++i) {
+        if (_wcsicmp(data.cFileName, base) == 0) { found = true; break; }
+        if (!FindNextFileW(h, &data)) break;
+    }
+    FindClose(h);
+    return found;
+}
+
 int wmain() {
     constexpr wchar_t name[] = LR"(\\.\pipe\UDX_W4_SID_PROBE)";
     HANDLE server_token = nullptr;
@@ -65,10 +82,14 @@ int wmain() {
     // client's owner check refuses it.
     std::wstring sddl = L"O:";
     sddl += sid_text;
-    sddl += L"D:P(A;;GRGW;;;SY)(A;;GRGW;;;";
+    // W18: every ACE grants 0x12008b = FILE_GENERIC_READ | FILE_WRITE_DATA
+    // instead of GRGW (0x12019f): no FILE_APPEND_DATA == FILE_CREATE_PIPE_INSTANCE
+    // (0x4), so no ACE lets anyone create a further instance of this pipe.
+    // Creating the first instance is not checked against this DACL.
+    sddl += L"D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;";
     sddl += sid_text;
-    // W17 (UNCOMPILED): OWNER RIGHTS ACE; the owner gets GRGW only, no implicit WRITE_DAC.
-    sddl += L")(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)";
+    // W17: OWNER RIGHTS ACE; the owner gets the ACE mask only, no implicit WRITE_DAC.
+    sddl += L")(A;;0x12008b;;;OW)S:(ML;;NWNR;;;ME)";
     LocalFree(sid_text);
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &sd, nullptr)) return 13;
@@ -77,8 +98,15 @@ int wmain() {
         PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
         PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
         1, 4096, 4096, 0, &sa);
+    const DWORD create_error = GetLastError();      // before LocalFree can overwrite it
     LocalFree(sd);
-    if (pipe == INVALID_HANDLE_VALUE) return 14;
+    if (pipe == INVALID_HANDLE_VALUE) {
+        // W20: 21 = PIPE_NAME_OCCUPIED (same exit code as the Python CLI), only
+        // if the name is really listed; every other failure stays 14.
+        if ((create_error == ERROR_ACCESS_DENIED || create_error == ERROR_PIPE_BUSY)
+            && pipe_name_present(name, L"UDX_W4_SID_PROBE")) return 21;
+        return 14;
+    }
     bool connected = ConnectNamedPipe(pipe, nullptr) != 0;
     if (!connected && GetLastError() == ERROR_PIPE_CONNECTED) connected = true;
     if (!connected) {CloseHandle(pipe);return 15;}

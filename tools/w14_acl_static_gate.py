@@ -21,15 +21,20 @@ import sys
 # tools/w15_windows_evidence.py PINNED_SOURCE_SHA256 (a test compares both).
 EXPECTED_HEAD = '26309e997fea1ac90edba8a51e457fd494cac978'
 PINNED_SOURCE_SHA256 = {
-    'udx_ref/windows_pipe.py': '596076bfc4d35b8976928d7886d788bdd748619cc77e0e13dda33a361be24b53',
-    'windows/udx_sid_probe.cpp': 'f810e03bfb15247e7faf4298aa03d799bd72284225ba6d9aca46e63800a4ab89',
-    'windows/udx_sid_client.cpp': 'bf62f1deadffa79aad0afaca5abfd67e556fd79c0dbf03b15431c1b1913eb49a',
+    'udx_ref/windows_pipe.py': 'cca92b5308ed9bf49da3302e10bec7bc32c9939ca6a6dea17307d95a95f520aa',
+    'windows/udx_sid_probe.cpp': '20216eb48c4abf0e2d33d19d2aff2ab29b08d6ba18f06ad00da971e4c58716f5',
+    'windows/udx_sid_client.cpp': 'e97dc3b59cc436f914661036bf415eb7e7d8e5cb76554a45187b734d5245091e',
 }
 _COMMIT_RE = re.compile('[0-9a-f]{40}')
 EXPECTED_SID = 'S-1-5-21-1234-5678-9012-1001'
 # Windows FILE_GENERIC_READ | FILE_GENERIC_WRITE; do not confuse with least privilege.
+# Pre-W18 ACE mask, kept as the historical control value.
 GRGW_MASK = 0x0012019F
+# W18: FILE_GENERIC_READ | FILE_WRITE_DATA, the mask of every ACE and of the client open.
+PIPE_ACE_MASK = 0x0012008B
 FILE_CREATE_PIPE_INSTANCE = 0x0004
+FILE_WRITE_EA = 0x0010
+FILE_WRITE_ATTRIBUTES = 0x0100
 WRITE_DAC = 0x00040000
 WRITE_OWNER = 0x00080000
 DELETE = 0x00010000
@@ -54,6 +59,18 @@ def _constants(root: ast.Module) -> dict[str, int]:
             except ValueError:
                 pass
     return out
+
+
+def _client_open_access(tree):
+    """Name passed as dwDesiredAccess to the single CreateFileW in client_ping, else None."""
+    fn = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'client_ping'), None)
+    if fn is None:
+        return None
+    calls = [n for n in ast.walk(fn) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+             and n.func.attr == 'CreateFileW' and len(n.args) == 7]
+    if len(calls) != 1 or not isinstance(calls[0].args[1], ast.Name):
+        return None
+    return calls[0].args[1].id
 
 
 def _find_server_flags(tree, constants):
@@ -127,10 +144,15 @@ def audit(repo: pathlib.Path) -> dict:
     sys.path.insert(0, str(repo))
     from udx_ref import windows_pipe as wp
     sys.path.pop(0)
-    expected = ('O:' + EXPECTED_SID + 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + EXPECTED_SID
-                + ')(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)')
+    expected = ('O:' + EXPECTED_SID + 'D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;' + EXPECTED_SID
+                + ')(A;;0x12008b;;;OW)S:(ML;;NWNR;;;ME)')
     check('SDDL_CHANGED', wp.build_sddl(EXPECTED_SID) == expected,
-          'W17 explicit user owner + OWNER RIGHTS GRGW ACE, W14 protected SY+user GRGW DACL and Medium NWNR SACL are required')
+          'W18 0x12008b ACE mask, W17 explicit user owner + OWNER RIGHTS ACE, protected SY+user DACL '
+          'and Medium NWNR SACL are required')
+    check('PY_CLIENT_ACCESS_DRIFT',
+          getattr(wp, 'CLIENT_ACCESS', None) == PIPE_ACE_MASK == getattr(wp, 'PIPE_ACE_MASK', None)
+          and _client_open_access(tree) == 'CLIENT_ACCESS',
+          'W18: client_ping must pass CLIENT_ACCESS (== the ACE mask) to CreateFileW, never GENERIC_WRITE')
     flags, line = _find_server_flags(tree, constants)
     check('CREATE_NOT_FOUND', flags is not None, 'Call to CreateNamedPipeW not statically resolved')
     if flags:
@@ -143,15 +165,22 @@ def audit(repo: pathlib.Path) -> dict:
               f'CreateNamedPipeW at {line}: REMOTE_REJECT absent')
         check('INSTANCE_COUNT_CHANGED', instances == 1, f'CreateNamedPipeW at {line}: instances={instances}')
     cpp = (repo / 'windows' / 'udx_sid_probe.cpp').read_text(encoding='utf-8')
-    check('CPP_SDDL_DRIFT', 'L"D:P(A;;GRGW;;;SY)(A;;GRGW;;;"' in cpp and 'L")(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)"' in cpp,
-          'Uncompiled C++ prototype SDDL differs from W14 research contract')
+    check('CPP_SDDL_DRIFT', 'L"D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;"' in cpp
+          and 'L")(A;;0x12008b;;;OW)S:(ML;;NWNR;;;ME)"' in cpp,
+          'C++ prototype SDDL differs from the W18 research contract')
+    cpp_client = (repo / 'windows' / 'udx_sid_client.cpp').read_text(encoding='utf-8')
+    check('CPP_CLIENT_ACCESS_DRIFT', 'constexpr DWORD access = FILE_GENERIC_READ | FILE_WRITE_DATA;' in cpp_client
+          and 'CreateFileW(name, access,' in cpp_client and 'GENERIC_READ | GENERIC_WRITE' not in cpp_client,
+          'W18: the C++ client must open with individual rights, never GENERIC_WRITE')
     check('CPP_PIPE_FLAGS_DRIFT', 'PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE' in cpp and
           'PIPE_REJECT_REMOTE_CLIENTS' in cpp, 'C++ pipe flags missing; source check only')
     # Explicitly surface the privilege alias even in structurally successful builds.
     check('MASK_UNEXPECTED',
           (GRGW_MASK & FILE_CREATE_PIPE_INSTANCE) == FILE_CREATE_PIPE_INSTANCE and
-          (GRGW_MASK & (WRITE_DAC | WRITE_OWNER | DELETE)) == 0,
-          'Expected GRGW mask rights have changed')
+          (PIPE_ACE_MASK & (FILE_CREATE_PIPE_INSTANCE | FILE_WRITE_EA | FILE_WRITE_ATTRIBUTES
+                            | WRITE_DAC | WRITE_OWNER | DELETE)) == 0 and
+          (PIPE_ACE_MASK | GRGW_MASK) == GRGW_MASK and getattr(wp, 'PIPE_ACE_MASK', None) == PIPE_ACE_MASK,
+          'Expected ACE mask rights have changed (gate constant or udx_ref PIPE_ACE_MASK)')
     try:
         head = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True,
                                        stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL).strip()
@@ -171,8 +200,11 @@ def audit(repo: pathlib.Path) -> dict:
         'schema_version': 1, 'gate': 'W14_PORTABLE_DIAGNOSTIC_ONLY',
         'head': head, 'working_tree_dirty': dirty,
         'diagnostic_ok': not findings, 'findings': findings,
-        'rights_observation': {'grgw_access_mask': hex(GRGW_MASK),
-                               'file_create_pipe_instance_allowed': True,
+        'rights_observation': {'pipe_ace_mask': hex(PIPE_ACE_MASK),
+                               'pre_w18_grgw_access_mask': hex(GRGW_MASK),
+                               # W18: no ACE grants 0x4; the refusal itself is a
+                               # Windows runtime fact (tests/test_w18_least_privilege.py).
+                               'file_create_pipe_instance_allowed': False,
                                'explicit_write_dac_allowed': False,
                                'explicit_write_owner_allowed': False},
         # W17: an OW ACE replaces the implicit owner rights; the effect is a

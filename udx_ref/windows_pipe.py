@@ -1,5 +1,5 @@
 """W12/W13 Windows named-pipe peer-SID probe -- Python/ctypes runtime port of
-``windows/udx_sid_probe.cpp`` (W4 C++ candidate, still uncompiled).
+``windows/udx_sid_probe.cpp`` (W4 C++ candidate; first compiled in W18, MSVC CI job).
 
 RESEARCH ONLY. NOT a UDX broker, no OS action, no request/response protocol.
 The only positive observable is the fixed 7-byte handshake ``PEER_OK``.
@@ -14,7 +14,16 @@ W13 (after the Aegis audit) supersedes parts of the W12 list below:
   * W17 (issue #2): explicit owner ``O:<user SID>`` instead of the token's
     default owner (elevated administrators default to BUILTIN\\Administrators),
     plus an OWNER RIGHTS ACE so the owner has no implicit WRITE_DAC
+  * W18 (UDX14-01 instance bit): every ACE grants PIPE_ACE_MASK =
+    FILE_GENERIC_READ | FILE_WRITE_DATA (0x12008b) instead of GRGW (0x12019f),
+    i.e. no FILE_CREATE_PIPE_INSTANCE (== FILE_APPEND_DATA, 0x4); the client
+    opens with exactly that mask (CLIENT_ACCESS) instead of GENERIC_READ|GENERIC_WRITE
   * a fully written response counts as sent; every Win32 failure stays typed
+  * W19 (ADR-UDX-006, same-SID = trust domain): a pre-existing pipe name is
+    reported as PipeNameOccupied / reason PIPE_NAME_OCCUPIED, CLI exit code 21
+    (NAME_OCCUPIED_EXIT), instead of a generic PipeSetupError / traceback.
+    W20: the C++ probe exits 21 under the same condition (else 14), checked in
+    the MSVC cross-run (tools/w18_cpp_crossrun.py)
 
 What is reproduced 1:1 from the C++ candidate (see docs/W12_WINDOWS_LANE.md):
   * protected DACL ``D:P(A;;GA;;;SY)(A;;GA;;;<current user SID>)`` built via
@@ -58,6 +67,9 @@ RESPONSE = b'PEER_OK'
 MAX_DEADLINE_S = 300.0
 TOKEN_INFO_MAX = 65536                                 # C++ query_sid cap
 REVERT_FAILURE_EXIT = 30                               # C++ TerminateProcess code
+NAME_OCCUPIED_EXIT = 21                                # W19: CLI server, name already exists
+PIPE_NAME_OCCUPIED = 'PIPE_NAME_OCCUPIED'
+MAX_PIPE_LISTING = 65536                               # bound for the namespace scan
 
 PIPE_ACCESS_DUPLEX = 0x00000003
 FILE_FLAG_FIRST_PIPE_INSTANCE = 0x00080000
@@ -69,6 +81,25 @@ PIPE_REJECT_REMOTE_CLIENTS = 0x00000008
 
 GENERIC_READ = 0x80000000
 GENERIC_WRITE = 0x40000000
+# W18: individual rights instead of GENERIC_WRITE. Microsoft: "Because
+# FILE_APPEND_DATA and FILE_CREATE_PIPE_INSTANCE have the same definition,
+# FILE_GENERIC_WRITE enables permission to create the pipe. To avoid this
+# problem, use the individual rights instead of using FILE_GENERIC_WRITE."
+FILE_READ_DATA = 0x0001
+FILE_WRITE_DATA = 0x0002
+FILE_CREATE_PIPE_INSTANCE = 0x0004                     # == FILE_APPEND_DATA
+FILE_READ_EA = 0x0008
+FILE_WRITE_EA = 0x0010
+FILE_READ_ATTRIBUTES = 0x0080
+FILE_WRITE_ATTRIBUTES = 0x0100
+READ_CONTROL = 0x00020000
+SYNCHRONIZE = 0x00100000
+FILE_GENERIC_READ = READ_CONTROL | FILE_READ_DATA | FILE_READ_ATTRIBUTES | FILE_READ_EA | SYNCHRONIZE
+# Granted by every ACE and requested by the client: read the response, write
+# the ping, READ_CONTROL for the owner check, SYNCHRONIZE. Nothing else.
+PIPE_ACE_MASK = FILE_GENERIC_READ | FILE_WRITE_DATA    # 0x0012008B
+PIPE_ACE_SDDL = '0x12008b'
+CLIENT_ACCESS = PIPE_ACE_MASK
 OPEN_EXISTING = 3
 SECURITY_SQOS_PRESENT = 0x00100000
 SECURITY_ANONYMOUS = 0 << 16
@@ -140,6 +171,16 @@ class PipeSetupError(OSError):
     """Pipe could not be created; carries the Win32 error code."""
 
 
+class PipeNameOccupied(PipeSetupError):
+    """W19 (ADR-UDX-006 section 4): the server refused to start because the pipe
+    name already exists. ``CreateNamedPipeW`` with FILE_FLAG_FIRST_PIPE_INSTANCE
+    failed with ERROR_ACCESS_DENIED or ERROR_PIPE_BUSY AND the name is listed in
+    the pipe namespace. Fail-closed availability signal, never an authentication
+    result: the server cannot tell a same-SID squatter from a second legitimate
+    instance or a stale process, hence "occupied", not "squatted"."""
+    reason = PIPE_NAME_OCCUPIED
+
+
 def validate_sid_text(sid_text) -> str:
     if type(sid_text) is not str or not _SID_TEXT.fullmatch(sid_text):
         raise ValueError('INVALID_SID_TEXT')
@@ -147,7 +188,21 @@ def validate_sid_text(sid_text) -> str:
 
 
 def build_sddl(sid_text: str) -> str:
-    """W17: ``O:<sid>D:P(A;;GRGW;;;SY)(A;;GRGW;;;<sid>)(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)``.
+    """W18: ``O:<sid>D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;<sid>)(A;;0x12008b;;;OW)S:(ML;;NWNR;;;ME)``.
+
+    * W18 (UDX14-01 instance bit, open since W14): all three ACEs grant
+      PIPE_ACE_MASK = FILE_GENERIC_READ | FILE_WRITE_DATA (0x12008b) instead of
+      GRGW (0x12019f). Dropped: FILE_APPEND_DATA == FILE_CREATE_PIPE_INSTANCE
+      (0x4), FILE_WRITE_EA (0x10), FILE_WRITE_ATTRIBUTES (0x100). Creating the
+      FIRST instance is not checked against this DACL (the new pipe takes it from
+      the security attributes); every FURTHER CreateNamedPipeW on the name is,
+      and needs 0x4, which no ACE grants any more. The server needs no further
+      instance (nMaxInstances=1). Clients must open with CLIENT_ACCESS: a legacy
+      GENERIC_READ|GENERIC_WRITE open maps to FILE_GENERIC_WRITE, contains 0x4
+      and is refused (measured, tests/test_w18_least_privilege.py). Unchanged:
+      this does not stop a same-SID process that creates the name BEFORE the
+      real server starts (UDX14-08, threat-model gate).
+    History (W17 wording below says GRGW; W18 replaced the mask, not the ACEs):
 
     * W17 (issue #2): the OWNER is set explicitly to the server user. Without
       ``O:`` the kernel takes the token's default owner (TokenOwner). For an
@@ -183,7 +238,9 @@ def build_sddl(sid_text: str) -> str:
     The SID text is validated first so no SDDL fragment can be smuggled in.
     """
     sid = validate_sid_text(sid_text)
-    return 'O:' + sid + 'D:P(A;;GRGW;;;SY)(A;;GRGW;;;' + sid + ')(A;;GRGW;;;OW)S:(ML;;NWNR;;;ME)'
+    ace = PIPE_ACE_SDDL
+    return ('O:' + sid + 'D:P(A;;' + ace + ';;;SY)(A;;' + ace + ';;;' + sid + ')(A;;' + ace + ';;;OW)'
+            'S:(ML;;NWNR;;;ME)')
 
 
 def validate_deadline(deadline_s) -> float:
@@ -272,6 +329,13 @@ if sys.platform == 'win32':
         _fields_ = [('AceType', ctypes.c_ubyte), ('AceFlags', ctypes.c_ubyte),
                     ('AceSize', wintypes.WORD), ('Mask', wintypes.DWORD), ('SidStart', wintypes.DWORD)]
 
+    class WIN32_FIND_DATAW(ctypes.Structure):
+        _fields_ = [('dwFileAttributes', wintypes.DWORD), ('ftCreationTime', wintypes.FILETIME),
+                    ('ftLastAccessTime', wintypes.FILETIME), ('ftLastWriteTime', wintypes.FILETIME),
+                    ('nFileSizeHigh', wintypes.DWORD), ('nFileSizeLow', wintypes.DWORD),
+                    ('dwReserved0', wintypes.DWORD), ('dwReserved1', wintypes.DWORD),
+                    ('cFileName', wintypes.WCHAR * 260), ('cAlternateFileName', wintypes.WCHAR * 14)]
+
     INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 
     def _fn(dll, name, restype, *argtypes):
@@ -308,6 +372,9 @@ if sys.platform == 'win32':
             self.LocalFree = _fn(k, 'LocalFree', P, P)
             self.CreateFileW = _fn(k, 'CreateFileW', H, wintypes.LPCWSTR, D, D, P, D, D, H)
             self.WaitNamedPipeW = _fn(k, 'WaitNamedPipeW', B, wintypes.LPCWSTR, D)
+            self.FindFirstFileW = _fn(k, 'FindFirstFileW', H, wintypes.LPCWSTR, ctypes.POINTER(WIN32_FIND_DATAW))
+            self.FindNextFileW = _fn(k, 'FindNextFileW', B, H, ctypes.POINTER(WIN32_FIND_DATAW))
+            self.FindClose = _fn(k, 'FindClose', B, H)
             self.OpenProcessToken = _fn(a, 'OpenProcessToken', B, H, D, ctypes.POINTER(H))
             self.OpenThreadToken = _fn(a, 'OpenThreadToken', B, H, D, B, ctypes.POINTER(H))
             self.GetTokenInformation = _fn(a, 'GetTokenInformation', B, H, ctypes.c_int, P, D, ctypes.POINTER(D))
@@ -605,6 +672,34 @@ def _overlapped_io(api, handle, start, deadline: float, *, lock=None, aborted=No
             api.CloseHandle(event)
 
 
+def pipe_name_present(api, name) -> bool:
+    """W19: True only if the pipe namespace lists exactly ``name``.
+
+    FindFirstFileW on ``\\\\.\\pipe\\<name>`` enumerates the named-pipe file
+    system directory; it does not open the pipe, so it neither connects to the
+    owner nor uses up an instance (tests/test_w19_same_sid_trust_domain.py checks
+    that a client can still connect afterwards). The pattern match of the API is
+    not trusted: ``*``/``?`` in a name would match other pipes, so every entry is
+    compared exactly (case-insensitive, like the pipe namespace). Any failure,
+    no match, or more than MAX_PIPE_LISTING entries -> False (the caller then
+    keeps the generic error; the label never claims more than was observed).
+    """
+    base = validate_pipe_name(name)[len(PIPE_PREFIX):].upper()
+    data = WIN32_FIND_DATAW()
+    h = api.FindFirstFileW(name, ctypes.byref(data))
+    if h is None or h == INVALID_HANDLE_VALUE:
+        return False
+    try:
+        for _ in range(MAX_PIPE_LISTING):
+            if data.cFileName.upper() == base:
+                return True
+            if not api.FindNextFileW(h, ctypes.byref(data)):
+                return False
+        return False
+    finally:
+        api.FindClose(h)
+
+
 class OneShotPipeServer:
     """One pipe instance, one connection, one decision. Single use.
 
@@ -650,7 +745,14 @@ class OneShotPipeServer:
                                      PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,
                                      pipe_mode, 1, 4096, 4096, 0, ctypes.byref(sa))
             if h is None or h == INVALID_HANDLE_VALUE:
-                raise PipeSetupError(api.last_error(), 'CreateNamedPipeW failed')
+                err = api.last_error()                 # before any further Win32 call
+                # W19 (ADR-UDX-006 section 4): FIRST_PIPE_INSTANCE refuses an
+                # existing name with ACCESS_DENIED (foreign pipe with free
+                # instances) or PIPE_BUSY (all instances in use). Only with the
+                # name confirmed in the namespace is that reported as occupied.
+                if err in (ERROR_ACCESS_DENIED, ERROR_PIPE_BUSY) and pipe_name_present(api, self.name):
+                    raise PipeNameOccupied(err, PIPE_NAME_OCCUPIED)
+                raise PipeSetupError(err, 'CreateNamedPipeW failed')
             self._handle = h
         except BaseException:
             if self._expected_bin.value:
@@ -907,6 +1009,7 @@ def client_ping(name: str = DEFAULT_PIPE_NAME, *, level: str = 'identification',
     """Port of udx_sid_client.cpp (W13 protocol).
 
     * SQOS: Identification + EFFECTIVE_ONLY, static tracking (never Impersonation)
+    * W18: opens with CLIENT_ACCESS (individual rights), never GENERIC_WRITE
     * BEFORE the first write: the pipe object's owner must equal
       ``expected_server_sid`` (default: this process' user SID); otherwise no
       byte is sent and a typed reason is returned. The server PID is logged only.
@@ -930,7 +1033,7 @@ def client_ping(name: str = DEFAULT_PIPE_NAME, *, level: str = 'identification',
         raise ValueError('INVALID_EXPECTED_SID')
     try:
         while True:
-            h = api.CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, None, OPEN_EXISTING, flags, None)
+            h = api.CreateFileW(name, CLIENT_ACCESS, 0, None, OPEN_EXISTING, flags, None)
             if h is not None and h != INVALID_HANDLE_VALUE:
                 break
             err = api.last_error()
@@ -987,7 +1090,15 @@ def main(argv=None) -> int:
     c.add_argument('--silent-hold', type=float, default=None)
     args = p.parse_args(argv)
     if args.cmd == 'server':
-        with OneShotPipeServer(args.name) as srv:
+        try:
+            srv = OneShotPipeServer(args.name)
+        except PipeNameOccupied as exc:
+            # W19: loud, typed and distinct from every other failure (a traceback
+            # would exit with 1 like any crash). Nothing was created or joined.
+            print(json.dumps({'verdict': 'DENIED', 'reason': exc.reason, 'winerror': exc.errno,
+                              'name': args.name}), flush=True)
+            return NAME_OCCUPIED_EXIT
+        with srv:
             print(json.dumps({'listening': srv.name}), flush=True)
             r = srv.serve(args.deadline)
         print(json.dumps(asdict(r)), flush=True)

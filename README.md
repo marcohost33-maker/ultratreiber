@@ -6,7 +6,7 @@
 
 Ultratreiber (UDX, *Universal Driver & eXchange*) is a research demonstrator of an isolated, read-only access broker: a fail-closed request parser, OS-credential-bound peer identity and evidence-gated Linux (AF_UNIX) and Windows (named pipe) transport lanes, with no dependency on any client or model runtime.
 
-> **Status: RESEARCH DEMONSTRATOR — NOT PRODUCTION READY.** Current wave: W17 (version 0.17.0). No release, no security approval.
+> **Status: RESEARCH DEMONSTRATOR — NOT PRODUCTION READY.** Current wave: W20 (version 0.20.0). No release, no security approval.
 >
 > **Evidenced (local, not independently attested):**
 > - Portable + Linux test suite, run without root (`python -m unittest discover -s tests`); per-wave logs in `evidence/*_NONROOT_TESTS.log`.
@@ -14,7 +14,13 @@ Ultratreiber (UDX, *Universal Driver & eXchange*) is a research demonstrator of 
 >
 > - W17 (issue #2): the pipe owner is now set explicitly to the server user (`O:<SID>` in the SDDL). Before, an elevated administrator's pipe was owned by `BUILTIN\Administrators`, so the client's owner check refused it; Git Bash hid this because MSYS2/Cygwin rewrites the token's default owner. An OWNER RIGHTS ACE (`OW`) removes the owner's implicit `WRITE_DAC` (W14 finding UDX14-01). CI now runs the Windows suite under bash and pwsh, and the hosted-runner collector job is required (Windows Server, elevated Administrator — not standard-user evidence). The local Windows 11 reports above were taken on the pre-W17 source bytes; a fresh local collector run on W17 is pending. Details: [`docs/W17_PIPE_OWNER.md`](docs/W17_PIPE_OWNER.md).
 >
-> **NOT evidenced:** denial against a real second Windows account; real AppContainer / Low-IL tokens; service-account sessions; elevated owner / AccessCheck matrix; a second (remote) host; a compiled C++ binary (`windows/*.cpp` has never been built); independent security review or attestation; authentic portal consent; Android/iOS.
+> - W18: no ACE of the pipe grants `FILE_CREATE_PIPE_INSTANCE` any more. GRGW (`0x12019f`) contains `FILE_APPEND_DATA`, which for named pipes is the instance-creation bit. Every ACE now grants `FILE_GENERIC_READ | FILE_WRITE_DATA` (`0x12008b`), and clients open with exactly that mask, so a `GENERIC_WRITE` open is refused. Discriminating Windows tests run against the W17 descriptor as a control (second instance and legacy open are admitted there, refused under W18). The C++ candidates are compiled for the first time (MSVC `cl /W4 /WX`, CI job `cpp-candidate`) and cross-run against the Python lane in both directions. Details: [`docs/W18_LEAST_PRIVILEGE_PIPE_ACL.md`](docs/W18_LEAST_PRIVILEGE_PIPE_ACL.md).
+>
+> - W19: same user SID at the same integrity level is one trust domain ([`docs/ADR-UDX-006.md`](docs/ADR-UDX-006.md)); a pre-existing pipe name is reported as `PIPE_NAME_OCCUPIED` (CLI exit 21). Local Windows 11 run on the W18 bytes, Medium IL, UAC-filtered administrator token: 47/47 ([`docs/W18_LOCAL_WIN11_RUN.md`](docs/W18_LOCAL_WIN11_RUN.md)).
+>
+> - W20: **standard-account and second-account lane** in CI (`windows-account-matrix`). Two throwaway local accounts with no Administrators membership run as scheduled tasks. The second account and the elevated administrator are refused at open (`ERROR_ACCESS_DENIED`). The same-account control completes `PEER_OK` and the server identifies account A. The 47 pinned native tests pass as account A (47/47, `--verify` OK). The C++ probe now exits 21 for an occupied name, like the Python CLI. Details: [`docs/W20_STANDARD_ACCOUNT_LANE.md`](docs/W20_STANDARD_ACCOUNT_LANE.md).
+>
+> **NOT evidenced:** a second account in a different interactive session (W20 covers a second account via batch logon on the hosted Windows Server runner); real AppContainer / Low-IL tokens; service-account sessions; elevated owner / AccessCheck matrix; a second (remote) host; C++ deadline/cancellation parity (W18: compiled and handshake-tested on the hosted runner only; still blocking I/O); independent security review or attestation; authentic portal consent; Android/iOS.
 
 ## Quick start
 
@@ -40,7 +46,7 @@ py -3 tools/w15_windows_evidence.py --collect --repo . --timeout 300 --output "$
 py -3 tools/w15_windows_evidence.py --verify "$env:TEMP\udx_native.json" --repo .
 ```
 
-`SHA256SUMS_W12` is the current manifest (all tracked files except the two manifests); `SHA256SUMS` is the historical W11 import manifest, kept unchanged as a record and intentionally no longer current. The collector needs a full clone (it checks that the audited W14 baseline `26309e9` is an ancestor of `HEAD`) and byte-exact sources (`.gitattributes` disables line-ending conversion). Exit code 0 with verdict `UNTRUSTED_REPORT_SCHEMA_VALID` means the 47 pinned tests passed on that machine — nothing more. On Windows use a base interpreter, not a virtual environment: a venv's `python.exe` is a redirector that starts the real interpreter as a child process, so `test_same_user_cross_process_peer_ok` sees a different client PID and fails (observed with Python 3.13.13). Wave-by-wave design notes, audits and gates are in [`docs/`](docs/) (start with `W12_WINDOWS_LANE.md`, `W16_FAIL_CLOSED_EVIDENCE_HARDENING.md`, `W17_PIPE_OWNER.md`, `ROADMAP.md`).
+`SHA256SUMS_W12` is the current manifest (all tracked files except the two manifests); `SHA256SUMS` is the historical W11 import manifest, kept unchanged as a record and intentionally no longer current. The collector needs a full clone (it checks that the audited W14 baseline `26309e9` is an ancestor of `HEAD`) and byte-exact sources (`.gitattributes` disables line-ending conversion). Exit code 0 with verdict `UNTRUSTED_REPORT_SCHEMA_VALID` means the 47 pinned tests passed on that machine — nothing more. On Windows use a base interpreter, not a virtual environment: a venv's `python.exe` is a redirector that starts the real interpreter as a child process, so `test_same_user_cross_process_peer_ok` sees a different client PID and fails (observed with Python 3.13.13). Wave-by-wave design notes, audits and gates are in [`docs/`](docs/) (start with `W12_WINDOWS_LANE.md`, `W16_FAIL_CLOSED_EVIDENCE_HARDENING.md`, `W17_PIPE_OWNER.md`, `W18_LEAST_PRIVILEGE_PIPE_ACL.md`, `ROADMAP.md`).
 
 ## Citation, license, provenance
 
