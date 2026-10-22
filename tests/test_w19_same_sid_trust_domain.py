@@ -182,27 +182,32 @@ class PipeNameOccupied(unittest.TestCase):
         return h
 
     # -- the signal ------------------------------------------------------
+    def _refused(self, name):
+        """Catch the BASE class so a regression to the generic error is an
+        assertion failure with the observed type, not an escaping exception.
+        A server that starts (joins) fails the assertRaises itself."""
+        with self.assertRaises(wp.PipeSetupError) as cm:
+            srv = wp.OneShotPipeServer(name)
+            srv.close()
+        self.assertIsInstance(cm.exception, wp.PipeNameOccupied, repr(cm.exception))
+        return cm.exception
+
     def test_squatter_with_free_instances_gives_occupied_access_denied(self):
         name = _name()
         self._squat(name, 255)
-        with self.assertRaises(wp.PipeNameOccupied) as cm:
-            wp.OneShotPipeServer(name)
-        self.assertEqual((cm.exception.errno, cm.exception.reason), (wp.ERROR_ACCESS_DENIED, 'PIPE_NAME_OCCUPIED'))
-        self.assertIsInstance(cm.exception, wp.PipeSetupError)       # old callers keep working
+        exc = self._refused(name)
+        self.assertEqual((exc.errno, exc.reason), (wp.ERROR_ACCESS_DENIED, 'PIPE_NAME_OCCUPIED'))
 
     def test_squatter_with_one_instance_gives_occupied_pipe_busy(self):
         name = _name()
         self._squat(name, 1)
-        with self.assertRaises(wp.PipeNameOccupied) as cm:
-            wp.OneShotPipeServer(name)
-        self.assertEqual(cm.exception.errno, wp.ERROR_PIPE_BUSY)
+        self.assertEqual(self._refused(name).errno, wp.ERROR_PIPE_BUSY)
 
     def test_live_own_server_is_reported_occupied_too(self):
         # The server cannot tell a squatter from a second legitimate instance.
         name = _name()
         with wp.OneShotPipeServer(name):
-            with self.assertRaises(wp.PipeNameOccupied):
-                wp.OneShotPipeServer(name)
+            self._refused(name)
 
     def test_cli_exits_21_with_typed_json_and_never_listens(self):
         name = _name()
