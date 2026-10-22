@@ -21,7 +21,7 @@ import sys
 # tools/w15_windows_evidence.py PINNED_SOURCE_SHA256 (a test compares both).
 EXPECTED_HEAD = '26309e997fea1ac90edba8a51e457fd494cac978'
 PINNED_SOURCE_SHA256 = {
-    'udx_ref/windows_pipe.py': '6a9791dbfbb1f095094ad19a44f1f9f0f5dfed316a1fac8ef808a41538ec37a3',
+    'udx_ref/windows_pipe.py': '08e3b35a3260646b2626f394e43a3c6955dbcea2f666b656dd2b29677acb1d3b',
     'windows/udx_sid_probe.cpp': '789eb785c3871367bf70d1ec7e2c76462642535e4f4688e985ac23e31e6fcef9',
     'windows/udx_sid_client.cpp': 'e97dc3b59cc436f914661036bf415eb7e7d8e5cb76554a45187b734d5245091e',
 }

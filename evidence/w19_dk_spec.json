@@ -1,0 +1,71 @@
+{
+ "repo": ".",
+ "test_befehl": ["python", "-m", "pytest", "-p", "no:cacheprovider"],
+ "timeout_s": 120,
+ "hinweis": "W19 (ADR-UDX-006 section 4). Windows-only: the target tests use real pre-created pipes on the local Win32 pipe namespace; on Linux they skip and this spec does not discriminate there.",
+ "faelle": [
+  {
+   "name": "W19-DK1 occupied branch removed (generic PipeSetupError again)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "                if err in (ERROR_ACCESS_DENIED, ERROR_PIPE_BUSY) and pipe_name_present(api, self.name):\n",
+   "neu": "                if False:\n",
+   "test": "tests/test_w19_same_sid_trust_domain.py::PipeNameOccupied::test_squatter_with_free_instances_gives_occupied_access_denied"
+  },
+  {
+   "name": "W19-DK2 label without namespace confirmation (ACCESS_DENIED alone = occupied)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "                if err in (ERROR_ACCESS_DENIED, ERROR_PIPE_BUSY) and pipe_name_present(api, self.name):\n",
+   "neu": "                if err in (ERROR_ACCESS_DENIED, ERROR_PIPE_BUSY):\n",
+   "test": "tests/test_w19_same_sid_trust_domain.py::PipeNameOccupied::test_access_denied_on_absent_name_stays_generic"
+  },
+  {
+   "name": "W19-DK3 label without errno gate (any error on a present name = occupied)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "                if err in (ERROR_ACCESS_DENIED, ERROR_PIPE_BUSY) and pipe_name_present(api, self.name):\n",
+   "neu": "                if pipe_name_present(api, self.name):\n",
+   "test": "tests/test_w19_same_sid_trust_domain.py::PipeNameOccupied::test_other_error_on_present_name_stays_generic"
+  },
+  {
+   "name": "W19-DK4 PIPE_BUSY (all instances in use) not recognised",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "                if err in (ERROR_ACCESS_DENIED, ERROR_PIPE_BUSY) and pipe_name_present(api, self.name):\n",
+   "neu": "                if err == ERROR_ACCESS_DENIED and pipe_name_present(api, self.name):\n",
+   "test": "tests/test_w19_same_sid_trust_domain.py::PipeNameOccupied::test_squatter_with_one_instance_gives_occupied_pipe_busy"
+  },
+  {
+   "name": "W19-DK5 FIRST_PIPE_INSTANCE removed (server joins the squatter's pipe)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "                                     PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,\n",
+   "neu": "                                     PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,\n",
+   "test": "tests/test_w19_same_sid_trust_domain.py::PipeNameOccupied::test_squatter_with_free_instances_gives_occupied_access_denied"
+  },
+  {
+   "name": "W19-DK6 probe trusts the API wildcard match (no exact compare)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "            if data.cFileName.upper() == base:\n",
+   "neu": "            if True:\n",
+   "test": "tests/test_w19_same_sid_trust_domain.py::PipeNameOccupied::test_probe_matches_exactly_not_by_wildcard"
+  },
+  {
+   "name": "W19-DK7 probe opens the pipe (consumes the single instance, GetFileAttributes-style)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    h = api.FindFirstFileW(name, ctypes.byref(data))\n",
+   "neu": "    api.CloseHandle(api.CreateFileW(name, CLIENT_ACCESS, 0, None, OPEN_EXISTING, 0, None))\n    h = api.FindFirstFileW(name, ctypes.byref(data))\n",
+   "test": "tests/test_w19_same_sid_trust_domain.py::PipeNameOccupied::test_probe_does_not_consume_the_single_instance"
+  },
+  {
+   "name": "W19-DK8 CLI no longer catches PipeNameOccupied (traceback, exit 1)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "        except PipeNameOccupied as exc:\n",
+   "neu": "        except LookupError as exc:\n",
+   "test": "tests/test_w19_same_sid_trust_domain.py::PipeNameOccupied::test_cli_exits_21_with_typed_json_and_never_listens"
+  },
+  {
+   "name": "W19-DK9 CLI exit code not distinct (1 like any crash)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "            return NAME_OCCUPIED_EXIT\n",
+   "neu": "            return 1\n",
+   "test": "tests/test_w19_same_sid_trust_domain.py::PipeNameOccupied::test_cli_exits_21_with_typed_json_and_never_listens"
+  }
+ ]
+}

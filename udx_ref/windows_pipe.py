@@ -19,6 +19,10 @@ W13 (after the Aegis audit) supersedes parts of the W12 list below:
     i.e. no FILE_CREATE_PIPE_INSTANCE (== FILE_APPEND_DATA, 0x4); the client
     opens with exactly that mask (CLIENT_ACCESS) instead of GENERIC_READ|GENERIC_WRITE
   * a fully written response counts as sent; every Win32 failure stays typed
+  * W19 (ADR-UDX-006, same-SID = trust domain): a pre-existing pipe name is
+    reported as PipeNameOccupied / reason PIPE_NAME_OCCUPIED, CLI exit code 21
+    (NAME_OCCUPIED_EXIT), instead of a generic PipeSetupError / traceback. The
+    C++ probe still returns 14 for every CreateNamedPipeW failure (parity open)
 
 What is reproduced 1:1 from the C++ candidate (see docs/W12_WINDOWS_LANE.md):
   * protected DACL ``D:P(A;;GA;;;SY)(A;;GA;;;<current user SID>)`` built via
@@ -62,6 +66,9 @@ RESPONSE = b'PEER_OK'
 MAX_DEADLINE_S = 300.0
 TOKEN_INFO_MAX = 65536                                 # C++ query_sid cap
 REVERT_FAILURE_EXIT = 30                               # C++ TerminateProcess code
+NAME_OCCUPIED_EXIT = 21                                # W19: CLI server, name already exists
+PIPE_NAME_OCCUPIED = 'PIPE_NAME_OCCUPIED'
+MAX_PIPE_LISTING = 65536                               # bound for the namespace scan
 
 PIPE_ACCESS_DUPLEX = 0x00000003
 FILE_FLAG_FIRST_PIPE_INSTANCE = 0x00080000
@@ -161,6 +168,16 @@ class UnsupportedPlatform(RuntimeError):
 
 class PipeSetupError(OSError):
     """Pipe could not be created; carries the Win32 error code."""
+
+
+class PipeNameOccupied(PipeSetupError):
+    """W19 (ADR-UDX-006 section 4): the server refused to start because the pipe
+    name already exists. ``CreateNamedPipeW`` with FILE_FLAG_FIRST_PIPE_INSTANCE
+    failed with ERROR_ACCESS_DENIED or ERROR_PIPE_BUSY AND the name is listed in
+    the pipe namespace. Fail-closed availability signal, never an authentication
+    result: the server cannot tell a same-SID squatter from a second legitimate
+    instance or a stale process, hence "occupied", not "squatted"."""
+    reason = PIPE_NAME_OCCUPIED
 
 
 def validate_sid_text(sid_text) -> str:
@@ -311,6 +328,13 @@ if sys.platform == 'win32':
         _fields_ = [('AceType', ctypes.c_ubyte), ('AceFlags', ctypes.c_ubyte),
                     ('AceSize', wintypes.WORD), ('Mask', wintypes.DWORD), ('SidStart', wintypes.DWORD)]
 
+    class WIN32_FIND_DATAW(ctypes.Structure):
+        _fields_ = [('dwFileAttributes', wintypes.DWORD), ('ftCreationTime', wintypes.FILETIME),
+                    ('ftLastAccessTime', wintypes.FILETIME), ('ftLastWriteTime', wintypes.FILETIME),
+                    ('nFileSizeHigh', wintypes.DWORD), ('nFileSizeLow', wintypes.DWORD),
+                    ('dwReserved0', wintypes.DWORD), ('dwReserved1', wintypes.DWORD),
+                    ('cFileName', wintypes.WCHAR * 260), ('cAlternateFileName', wintypes.WCHAR * 14)]
+
     INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 
     def _fn(dll, name, restype, *argtypes):
@@ -347,6 +371,9 @@ if sys.platform == 'win32':
             self.LocalFree = _fn(k, 'LocalFree', P, P)
             self.CreateFileW = _fn(k, 'CreateFileW', H, wintypes.LPCWSTR, D, D, P, D, D, H)
             self.WaitNamedPipeW = _fn(k, 'WaitNamedPipeW', B, wintypes.LPCWSTR, D)
+            self.FindFirstFileW = _fn(k, 'FindFirstFileW', H, wintypes.LPCWSTR, ctypes.POINTER(WIN32_FIND_DATAW))
+            self.FindNextFileW = _fn(k, 'FindNextFileW', B, H, ctypes.POINTER(WIN32_FIND_DATAW))
+            self.FindClose = _fn(k, 'FindClose', B, H)
             self.OpenProcessToken = _fn(a, 'OpenProcessToken', B, H, D, ctypes.POINTER(H))
             self.OpenThreadToken = _fn(a, 'OpenThreadToken', B, H, D, B, ctypes.POINTER(H))
             self.GetTokenInformation = _fn(a, 'GetTokenInformation', B, H, ctypes.c_int, P, D, ctypes.POINTER(D))
@@ -644,6 +671,34 @@ def _overlapped_io(api, handle, start, deadline: float, *, lock=None, aborted=No
             api.CloseHandle(event)
 
 
+def pipe_name_present(api, name) -> bool:
+    """W19: True only if the pipe namespace lists exactly ``name``.
+
+    FindFirstFileW on ``\\\\.\\pipe\\<name>`` enumerates the named-pipe file
+    system directory; it does not open the pipe, so it neither connects to the
+    owner nor uses up an instance (tests/test_w19_same_sid_trust_domain.py checks
+    that a client can still connect afterwards). The pattern match of the API is
+    not trusted: ``*``/``?`` in a name would match other pipes, so every entry is
+    compared exactly (case-insensitive, like the pipe namespace). Any failure,
+    no match, or more than MAX_PIPE_LISTING entries -> False (the caller then
+    keeps the generic error; the label never claims more than was observed).
+    """
+    base = validate_pipe_name(name)[len(PIPE_PREFIX):].upper()
+    data = WIN32_FIND_DATAW()
+    h = api.FindFirstFileW(name, ctypes.byref(data))
+    if h is None or h == INVALID_HANDLE_VALUE:
+        return False
+    try:
+        for _ in range(MAX_PIPE_LISTING):
+            if data.cFileName.upper() == base:
+                return True
+            if not api.FindNextFileW(h, ctypes.byref(data)):
+                return False
+        return False
+    finally:
+        api.FindClose(h)
+
+
 class OneShotPipeServer:
     """One pipe instance, one connection, one decision. Single use.
 
@@ -689,7 +744,14 @@ class OneShotPipeServer:
                                      PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,
                                      pipe_mode, 1, 4096, 4096, 0, ctypes.byref(sa))
             if h is None or h == INVALID_HANDLE_VALUE:
-                raise PipeSetupError(api.last_error(), 'CreateNamedPipeW failed')
+                err = api.last_error()                 # before any further Win32 call
+                # W19 (ADR-UDX-006 section 4): FIRST_PIPE_INSTANCE refuses an
+                # existing name with ACCESS_DENIED (foreign pipe with free
+                # instances) or PIPE_BUSY (all instances in use). Only with the
+                # name confirmed in the namespace is that reported as occupied.
+                if err in (ERROR_ACCESS_DENIED, ERROR_PIPE_BUSY) and pipe_name_present(api, self.name):
+                    raise PipeNameOccupied(err, PIPE_NAME_OCCUPIED)
+                raise PipeSetupError(err, 'CreateNamedPipeW failed')
             self._handle = h
         except BaseException:
             if self._expected_bin.value:
@@ -1027,7 +1089,15 @@ def main(argv=None) -> int:
     c.add_argument('--silent-hold', type=float, default=None)
     args = p.parse_args(argv)
     if args.cmd == 'server':
-        with OneShotPipeServer(args.name) as srv:
+        try:
+            srv = OneShotPipeServer(args.name)
+        except PipeNameOccupied as exc:
+            # W19: loud, typed and distinct from every other failure (a traceback
+            # would exit with 1 like any crash). Nothing was created or joined.
+            print(json.dumps({'verdict': 'DENIED', 'reason': exc.reason, 'winerror': exc.errno,
+                              'name': args.name}), flush=True)
+            return NAME_OCCUPIED_EXIT
+        with srv:
             print(json.dumps({'listening': srv.name}), flush=True)
             r = srv.serve(args.deadline)
         print(json.dumps(asdict(r)), flush=True)
