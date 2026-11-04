@@ -133,7 +133,39 @@ Legacy-Open-Ablehnung) laufen unverändert als Positivkontrollen mit Standardbud
 - Named Pipe Client: https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-client
 - FlushFileBuffers: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers
 
-## CI-Lauf
+## CI-Lauf (nativ, 2026-11-04)
 
-Ausstehend – wird nach dem ersten Lauf auf dem PR-Kopf mit Lauf-ID, MSVC-Version,
-Binär-SHA-256 und den gemessenen Zeiten nachgetragen.
+GitHub Actions Lauf [41746553253](https://github.com/marcohost33-maker/ultratreiber/actions/runs/41746553253),
+PR #5, Kopf `d5b61c7` (Merge-Commit `e7e817a`): **7/7 Jobs grün** – Suite auf Ubuntu
+und Windows (Python 3.13/3.14, bash und pwsh), nativer Collector 47/47 + `--verify`,
+Konto-Matrix W20, `cpp-candidate`.
+
+`cpp-candidate` (Windows Server, erhöhter Administrator, Python 3.13.17):
+Compiler `Microsoft (R) C/C++ Optimizing Compiler Version 19.51.36260 for x64`,
+`/nologo /W4 /WX /EHsc /std:c++17`, Verdikt `CROSSRUN_OK`, 11/11 Fälle `ok`.
+
+| Quelle / Binary | SHA-256 |
+|---|---|
+| `udx_sid_probe.cpp` | `7b70f0c2f404320c75f5566e9f7d80c6dca3f8ad7861c2148b9c99c1fc8e84bc` |
+| `udx_sid_client.cpp` | `06de216ae6a8970ac94b516ebe5a12357f6b58106d52c952451a55e526575007` |
+| `udx_bounded_pipe_io.hpp` | `1c5ea2c957aea96b5003a9e3d4c060cdd3247892e17755e7cac7447cd64bfa7c` |
+| `udx_sid_probe.exe` | `122ece330c53e44c619ee7625953c289daf8f8c4f2dbd9fc50cfbeb163a976de` |
+| `udx_sid_client.exe` | `7ce8121563e9ff000a8f9aef85ffab1ded9792a73e3021804594fb634d352518` |
+
+| Fall | Exit | Zeit bis Exit | Zusatz |
+|---|---|---|---|
+| `cpp_server_connect_timeout` | 22 | 1,506 s | Name danach freigegeben |
+| `cpp_server_read_stall` | 22 | 1,493 s | Halter: `SILENT_HOLD` |
+| `cpp_server_drain_stall` | 23 | 1,487 s | Halter hat gesendet |
+| `cpp_client_silent_server` | 22 | 1,512 s | Server sah den Connect |
+| `cpp_bad_arguments` | 16 × 24 | – | Probe und Client |
+| `cpp_pair_small_budget` | 0 / 0 | – | Positivkontrolle |
+| W18/W20-Kontrollen (5) | wie bisher | – | C++↔C++, C++↔Python beide Richtungen, Exit 21, Legacy-Open `ERROR_ACCESS_DENIED` |
+
+Die Halter hielten jeweils 8 s; alle Binaries endeten nach dem 1,5-s-Budget, also
+durch die eigene Frist und nicht durch das Loslassen der Gegenseite. Die Zeiten
+liegen am Budget (GetTickCount64-Auflösung ~15,6 ms; die Messung beginnt erst, wenn
+die Pipe sichtbar ist bzw. der Halter startet). Bericht: Artefakt
+`udx-w18-cpp-crossrun-e7e817a1bd3d6b7a813376e0b4168783dfd133ee` (30 Tage Aufbewahrung).
+Weiterhin: erhöhtes Admin-Token auf Windows Server, kein Standardkonto, kein
+Windows 11, Exit-31-Pfad nicht provoziert – keine Freigabe.
