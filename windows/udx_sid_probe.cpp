@@ -2,11 +2,20 @@
 // No filesystem/process actions. Build and test under real Windows with MSVC.
 // Implements: first-instance pipe, explicit SID-scoped DACL, remote rejection,
 // last-message client impersonation, token SID compare, revert-before-response.
-// TODO before use beyond lab: overlapped I/O deadlines, bounded connections,
-// full UDX envelope parser, status receipts, independent Windows OS tests.
+// W24: every pipe operation is OVERLAPPED under ONE absolute deadline for the
+// whole exchange (udx_bounded_pipe_io.hpp); FlushFileBuffers (unbounded: it
+// waits for the client to read) is replaced by a bounded wait for peer close.
+// Usage: udx_sid_probe.exe [--budget-ms N]   (100..300000, default 10000)
+// Exit: 0 PEER_OK delivered and peer closed, 20 denied, 21 name occupied,
+// 22 deadline passed before PEER_OK was written, 23 PEER_OK written but the
+// peer did not close in time, 24 bad arguments, 30 RevertToSelf failed,
+// 31 cancelled I/O did not settle, 10-15 setup failures.
+// TODO before use beyond lab: bounded connections, full UDX envelope parser,
+// versioned ACK/durable receipts, OS app identity (G2-App), independent review.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <sddl.h>
+#include "udx_bounded_pipe_io.hpp"
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -57,8 +66,10 @@ static bool pipe_name_present(const wchar_t* full, const wchar_t* base) {
     return found;
 }
 
-int wmain() {
+int wmain(int argc, wchar_t** argv) {
     constexpr wchar_t name[] = LR"(\\.\pipe\UDX_W4_SID_PROBE)";
+    DWORD budget_ms = 0;
+    if (!udx::parse_budget(argc, argv, budget_ms)) return udx::kExitBadArguments;
     HANDLE server_token = nullptr;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &server_token)) return 10;
     std::vector<BYTE> server_sidbuf;
@@ -95,7 +106,7 @@ int wmain() {
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &sd, nullptr)) return 13;
     SECURITY_ATTRIBUTES sa = {sizeof(sa), sd, FALSE};
     HANDLE pipe = CreateNamedPipeW(name,
-        PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+        PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,
         PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
         1, 4096, 4096, 0, &sa);
     const DWORD create_error = GetLastError();      // before LocalFree can overwrite it
@@ -107,14 +118,21 @@ int wmain() {
             && pipe_name_present(name, L"UDX_W4_SID_PROBE")) return 21;
         return 14;
     }
-    bool connected = ConnectNamedPipe(pipe, nullptr) != 0;
-    if (!connected && GetLastError() == ERROR_PIPE_CONNECTED) connected = true;
-    if (!connected) {CloseHandle(pipe);return 15;}
+    // W24: the budget covers connect, request, reply and peer close together.
+    const udx::Deadline deadline(budget_ms);
+    const udx::IoResult conn = udx::bounded_io(pipe, deadline,
+        [&](OVERLAPPED* ov) { return ConnectNamedPipe(pipe, ov); });
+    if (conn.status == udx::IoStatus::timeout) {CloseHandle(pipe);return udx::kExitTimeout;}
+    if (conn.status != udx::IoStatus::ok) {CloseHandle(pipe);return 15;}
 
     // ImpersonateNamedPipeClient is based on the LAST message read from client.
     BYTE ping = 0;
-    DWORD count = 0;
-    bool read_ok = ReadFile(pipe, &ping, 1, &count, nullptr) != 0 && count == 1;
+    const udx::IoResult req = udx::bounded_io(pipe, deadline,
+        [&](OVERLAPPED* ov) { return ReadFile(pipe, &ping, 1, nullptr, ov); });
+    if (req.status == udx::IoStatus::timeout) {
+        DisconnectNamedPipe(pipe); CloseHandle(pipe); return udx::kExitTimeout;
+    }
+    const bool read_ok = req.status == udx::IoStatus::ok && req.bytes == 1;
     bool authorized = false;
     if (read_ok && ImpersonateNamedPipeClient(pipe)) {
         HANDLE client_token = nullptr;
@@ -140,15 +158,32 @@ int wmain() {
         // If the server cannot revert, fail fatally; never continue as a client.
         if (!RevertToSelf()) TerminateProcess(GetCurrentProcess(), 30);
     }
-    if (authorized) {
-        // The only observable operation is a fixed handshake, no OS action.
-        constexpr char response[] = "PEER_OK";
-        DWORD written = 0;
-        if (!WriteFile(pipe, response, sizeof(response)-1, &written, nullptr) || written != sizeof(response)-1)
-            authorized = false;
+    if (!authorized) {
+        DisconnectNamedPipe(pipe);
+        CloseHandle(pipe);
+        return 20;
     }
-    FlushFileBuffers(pipe);
+    // Strict like the Python lane (DEADLINE_EXCEEDED): no response after the deadline.
+    if (deadline.expired()) {DisconnectNamedPipe(pipe);CloseHandle(pipe);return udx::kExitTimeout;}
+    // The only observable operation is a fixed handshake, no OS action.
+    static constexpr char response[] = "PEER_OK";
+    const udx::IoResult rep = udx::bounded_io(pipe, deadline,
+        [&](OVERLAPPED* ov) { return WriteFile(pipe, response, sizeof(response)-1, nullptr, ov); });
+    if (rep.status == udx::IoStatus::timeout) {
+        DisconnectNamedPipe(pipe); CloseHandle(pipe); return udx::kExitTimeout;
+    }
+    if (rep.status != udx::IoStatus::ok || rep.bytes != sizeof(response)-1) {
+        DisconnectNamedPipe(pipe); CloseHandle(pipe); return 20;
+    }
+    // Bounded replacement for FlushFileBuffers: wait until the client closes
+    // (EOF), so DisconnectNamedPipe does not discard the unread response. This
+    // shows the peer CLOSED, not that it processed PEER_OK (no ACK protocol).
+    BYTE sink = 0;
+    const udx::IoResult drain = udx::bounded_io(pipe, deadline,
+        [&](OVERLAPPED* ov) { return ReadFile(pipe, &sink, 1, nullptr, ov); });
+    const bool peer_closed = drain.status == udx::IoStatus::failure
+        && (drain.error == ERROR_BROKEN_PIPE || drain.error == ERROR_NO_DATA);
     DisconnectNamedPipe(pipe);
     CloseHandle(pipe);
-    return authorized ? 0 : 20;
+    return peer_closed ? 0 : udx::kExitPeerNotClosed;
 }

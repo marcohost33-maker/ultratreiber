@@ -5,6 +5,15 @@ Scope: the Windows named-pipe peer-SID probe (`udx_ref/windows_pipe.py`,
 `windows/udx_sid_probe.cpp`, `windows/udx_sid_client.cpp`). Research only; not a
 production security acceptance and not a release approval.
 
+> **Product-gate cross-reference (added W24, reviews UDX-W21-03 / UDX22-03):**
+> `docs/W5_RELEASE_GATES.md` gate **G2-App remains FAIL/OPEN**, and `docs/ROADMAP.md`
+> P0 (OS-enforced application identity; deny same-UID impostors before any sensitive
+> adapter) remains mandatory. This ADR only narrows the threat model of the research
+> named-pipe probe. UDX14-08 / UDX-R25-01 (pre-start squatting) is **out of scope for
+> research, not fixed for a product**. A product broker needs its own OS principal
+> (service SID or package identity), a trusted bootstrap of the expected server
+> identity before the first payload, and hostile same-SID negative tests.
+
 Trigger: cross-family review R25, finding UDX-R25-01 (P1): "DACL + owner alone are
 no server authentication under an adversarial same-SID process" (pre-start
 squatting). The repository already stated the gap: `udx_ref/windows_pipe.py`
