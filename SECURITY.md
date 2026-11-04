@@ -8,7 +8,7 @@ it to protect real data or systems.
 
 | Version | Supported |
 |---|---|
-| `main` (current wave W20, 0.20.0) | Best effort: reports are read and triaged |
+| `main` (current wave W24, 0.24.0) | Best effort: reports are read and triaged |
 | older waves / commits | No |
 
 ## Reporting a vulnerability
@@ -41,7 +41,13 @@ and the evidence tooling in `tools/` (for example a report that the verifier
 accepts although it should be `BLOCKED`).
 
 Known, documented limits are not new vulnerabilities by themselves - see the
-"NOT evidenced" list in `README.md` and the audit documents in `docs/`
-(for example: no second-account, AppContainer, service or remote-host evidence;
-the C++ files in `windows/` have never been compiled; same user SID is not the
-same application identity).
+"NOT evidenced" list in `README.md` and the audit documents in `docs/`.
+Current state (W24): the C++ candidates in `windows/` are compiled with MSVC
+`/W4 /WX` and cross-run on a hosted Windows runner (since W18); since W24 their
+pipe I/O is overlapped under one absolute deadline, with native stall tests in CI.
+W20 supplies second-standard-account evidence under batch logon (Session 0) on that
+runner. None of this establishes: a second interactive Windows 11 session, real
+AppContainer / Low-IL / service principals, remote-host coverage, the C++ cancel-race
+path (exit 31) under fault injection, delivery acknowledgement, independent
+attestation, or product approval (gate G2-App remains FAIL/OPEN). Same user SID is
+not the same application identity (`docs/ADR-UDX-006.md`).

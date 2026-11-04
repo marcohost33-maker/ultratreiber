@@ -6,7 +6,7 @@
 
 Ultratreiber (UDX, *Universal Driver & eXchange*) is a research demonstrator of an isolated, read-only access broker: a fail-closed request parser, OS-credential-bound peer identity and evidence-gated Linux (AF_UNIX) and Windows (named pipe) transport lanes, with no dependency on any client or model runtime.
 
-> **Status: RESEARCH DEMONSTRATOR — NOT PRODUCTION READY.** Current wave: W20 (version 0.20.0). No release, no security approval.
+> **Status: RESEARCH DEMONSTRATOR — NOT PRODUCTION READY.** Current wave: W24 (version 0.24.0). No release, no security approval.
 >
 > **Evidenced (local, not independently attested):**
 > - Portable + Linux test suite, run without root (`python -m unittest discover -s tests`); per-wave logs in `evidence/*_NONROOT_TESTS.log`.
@@ -20,7 +20,9 @@ Ultratreiber (UDX, *Universal Driver & eXchange*) is a research demonstrator of 
 >
 > - W20: **standard-account and second-account lane** in CI (`windows-account-matrix`). Two throwaway local accounts with no Administrators membership run as scheduled tasks. The second account and the elevated administrator are refused at open (`ERROR_ACCESS_DENIED`). The same-account control completes `PEER_OK` and the server identifies account A. The 47 pinned native tests pass as account A (47/47, `--verify` OK). The C++ probe now exits 21 for an occupied name, like the Python CLI. Details: [`docs/W20_STANDARD_ACCOUNT_LANE.md`](docs/W20_STANDARD_ACCOUNT_LANE.md).
 >
-> **NOT evidenced:** a second account in a different interactive session (W20 covers a second account via batch logon on the hosted Windows Server runner); real AppContainer / Low-IL tokens; service-account sessions; elevated owner / AccessCheck matrix; a second (remote) host; C++ deadline/cancellation parity (W18: compiled and handshake-tested on the hosted runner only; still blocking I/O); independent security review or attestation; authentic portal consent; Android/iOS.
+> - W24: **bounded C++ pipe I/O** (UDX14-04 / UDX-W21-01 / UDX22-01; integrates the external reviews W21–W23). Server and client run every pipe operation overlapped under one absolute deadline (`windows/udx_bounded_pipe_io.hpp`: `GetOverlappedResultEx`, `CancelIoEx`, bounded settle, exit 31 if a cancelled I/O does not settle); `FlushFileBuffers` is replaced by a bounded wait for peer close. New exit codes 22 (deadline), 23 (`PEER_OK` written, peer did not close), 24 (bad arguments). The MSVC job runs six new negative-first native cases (connect / read / drain stall, silent server against the C++ client, bad arguments, small-budget positive control); a stall passes only with the typed exit code well before the stalling party lets go. Stale status claims in `SECURITY.md` fixed; W4/W5 gate files marked as historical snapshots; ADR-UDX-006 links the open G2-App gate. Details: [`docs/W24_BOUNDED_CPP_IO.md`](docs/W24_BOUNDED_CPP_IO.md).
+>
+> **NOT evidenced:** a second account in a different interactive session (W20 covers a second account via batch logon on the hosted Windows Server runner); real AppContainer / Low-IL tokens; service-account sessions; elevated owner / AccessCheck matrix; a second (remote) host; the C++ cancel-race path (exit 31) under kernel fault injection, repeated race runs and handle/memory profiles (W24 shows the deadline and cancellation on the normal path only, elevated hosted runner); the C++ binaries under a standard account; delivery acknowledgement (peer close is not processing); exit-code parity of the Python CLI with the new C++ codes 22/23; independent security review or attestation; authentic portal consent; Android/iOS.
 
 ## Quick start
 

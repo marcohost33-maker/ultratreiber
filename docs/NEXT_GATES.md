@@ -1,5 +1,11 @@
 # W4 status and priority next steps
 
+> **Historical snapshot (W4).** Kept unchanged as a record; it does not describe
+> the current state. Current status: `README.md` status box and `docs/ROADMAP.md`
+> (W24). In particular the Windows lines below predate the first MSVC build (W18),
+> the account lane (W20) and bounded C++ I/O (W24). No gate was set to PASS
+> retroactively.
+
 - Verified locally: parser parity (Python/Node limited set), Linux absolute request deadline, real AF_UNIX UID credential fixture, 55 passing nonroot tests, fresh package manifest checks pending final packaging.
 - Windows source-only transport handshake exists, **not compiled or runtime-verified**.
 

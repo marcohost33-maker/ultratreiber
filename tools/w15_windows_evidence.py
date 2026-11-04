@@ -26,6 +26,7 @@ SOURCE_FILES = (
     'udx_ref/windows_pipe.py',
     'windows/udx_sid_probe.cpp',
     'windows/udx_sid_client.cpp',
+    'windows/udx_bounded_pipe_io.hpp',
     'tools/w14_acl_static_gate.py',
     'tests/test_w12_windows_pipe.py',
     'tools/w15_windows_evidence.py',
@@ -43,8 +44,10 @@ PINNED_NATIVE_TEST_SHA256 = '5858e116582235487888807ef5ac07f42f3408715b0a2366759
 # script cannot meaningfully pin itself.
 PINNED_SOURCE_SHA256 = {
     'udx_ref/windows_pipe.py': 'cca92b5308ed9bf49da3302e10bec7bc32c9939ca6a6dea17307d95a95f520aa',
-    'windows/udx_sid_probe.cpp': '20216eb48c4abf0e2d33d19d2aff2ab29b08d6ba18f06ad00da971e4c58716f5',
-    'windows/udx_sid_client.cpp': 'e97dc3b59cc436f914661036bf415eb7e7d8e5cb76554a45187b734d5245091e',
+    'windows/udx_sid_probe.cpp': '7b70f0c2f404320c75f5566e9f7d80c6dca3f8ad7861c2148b9c99c1fc8e84bc',
+    'windows/udx_sid_client.cpp': '06de216ae6a8970ac94b516ebe5a12357f6b58106d52c952451a55e526575007',
+    # W24: bounded overlapped I/O shared by both C++ sources.
+    'windows/udx_bounded_pipe_io.hpp': '1c5ea2c957aea96b5003a9e3d4c060cdd3247892e17755e7cac7447cd64bfa7c',
     'tests/test_w12_windows_pipe.py': PINNED_NATIVE_TEST_SHA256,
 }
 _COMMIT_RE = re.compile('[0-9a-f]{40}')
