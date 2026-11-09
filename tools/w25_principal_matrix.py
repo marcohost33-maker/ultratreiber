@@ -76,15 +76,21 @@ CHILD_LIMIT_S = 15.0            # a client child must end on its own within this
 AC_NAME_PREFIX = 'udx.w25.probe.'
 PRODUCTION_LABEL = 'S:(ML;;NWNR;;;ME)'
 AC_ACE = '(A;;0x12008b;;;AC)'   # ALL APPLICATION PACKAGES, same mask as every production ACE
-LOW_LABEL = 'S:(ML;;NWNR;;;LW)'
-CONTROL_DELTA = (AC_ACE, LOW_LABEL)
+# W25.2: since the clients require an explicit label >= Medium, the harness can no
+# longer open the door for Low clients by LOWERING the label (the client refuses
+# a Low-labelled pipe before writing, measured in CI run 42605717757). It keeps
+# the Medium label and drops its policy instead: a label ACE's mask IS the policy
+# for lower-integrity subjects (SYSTEM_MANDATORY_LABEL_ACE), so mask 0 restricts
+# nothing. W25.1 used S:(ML;;NWNR;;;LW) here.
+OPEN_LABEL = 'S:(ML;;0x0;;;ME)'
+CONTROL_DELTA = (AC_ACE, OPEN_LABEL)
 PRINCIPALS = ('same_token', 'low_il', 'appcontainer', 'restricted')
 MODES = ('elevated_admin', 'standard_account')
 INHERIT = 'handle_list:1'       # W25.1: the child inherits exactly its stdout/stderr pipe
 # W25.1 harness-only security descriptors. 'production' is build_sddl unchanged;
 # the other three exist to ATTRIBUTE a refusal to one mechanism (factorial):
-#   control     +AC ACE and Low label      -> the server's own token check is reached
-#   label_only  Low label, no AC ACE       -> only the DACL can refuse an AppContainer
+#   control     +AC ACE, label policy none -> the server's own token check is reached
+#   label_only  label policy none, no AC   -> only the DACL can refuse an AppContainer
 #   acace_only  +AC ACE, Medium label kept -> does the label alone stop an AppContainer?
 #               Measured (CI run 42593419596): NO. For a lowbox token the kernel
 #               treats the integrity check as passed when the object label is
@@ -140,6 +146,17 @@ EXPECTED = {
 # on the pipe. The squatter is a real Low-IL Python process; both clients (C++
 # and Python lane) then connect. Invariant: the squatter receives no byte.
 SQUAT_CASES = ('squat_low_il_default', 'squat_low_il_medium_label')
+# Measured in CI run 42605717757 and pinned:
+#  * default: a Low-IL process CAN create the global production name; the kernel
+#    labels the pipe Low (0x1000) by itself. Its owner is the creator token's
+#    default owner: the user for a standard account (only the W25.2 label check
+#    stops the client), BUILTIN\Administrators for an elevated admin's filtered
+#    token (the owner check already stops it).
+#  * medium_label: CreateNamedPipeW with an explicit Medium label fails with
+#    ERROR_PRIVILEGE_NOT_HELD (1314): no label above the creator's own level.
+ERROR_PRIVILEGE_NOT_HELD = 1314
+ADMINISTRATORS_SID_TEXT = 'S-1-5-32-544'
+EXIT_OWNER_MISMATCH = 5
 SQUAT_LIFETIME_S = 12.0
 EXIT_PIPE_LABEL = 7
 ERROR_FILE_NOT_FOUND = 2
@@ -161,8 +178,8 @@ def sd_variant(production: str, kind: str) -> str:
         raise ValueError('UNKNOWN_SD_KIND')
     body = production[:-len(PRODUCTION_LABEL)]
     return {'production': production,
-            'control': body + AC_ACE + LOW_LABEL,
-            'label_only': body + LOW_LABEL,
+            'control': body + AC_ACE + OPEN_LABEL,
+            'label_only': body + OPEN_LABEL,
             'acace_only': body + AC_ACE + PRODUCTION_LABEL}[kind]
 
 
@@ -238,42 +255,51 @@ def _parent_issues(report: dict, parent: dict) -> list[str]:
     return issues
 
 
-def _squat_issues(name: str, c, parent: dict) -> list[str]:
-    """Fail-closed decision for one squatter case. The OS may or may not let a
-    Low-IL process create the global name; both paths are accepted only with the
-    consistent client outcome, and the squatter must never receive a byte."""
+def _squat_issues(name: str, c, parent: dict, mode) -> list[str]:
+    """Fail-closed, exact decision for one squatter case (see SQUAT_CASES)."""
     if not isinstance(c, dict) or c.get('error'):
         return ['CASE_ERROR:' + name]
     issues = []
     sq = c.get('squatter') if isinstance(c.get('squatter'), dict) else {}
     issues += _principal_issues(name, 'low_il', sq.get('facts'), parent, None)
-    if sq.get('inherit') != INHERIT:
-        issues.append('CHILD_INHERITANCE_NOT_LIMITED:' + name)
-    rep_ = sq.get('report') if isinstance(sq.get('report'), dict) else {}
-    created = rep_.get('created')
     cpp = c.get('cpp_client') if isinstance(c.get('cpp_client'), dict) else {}
     py = c.get('py_client') if isinstance(c.get('py_client'), dict) else {}
-    if cpp.get('inherit') != INHERIT:
-        issues.append('CHILD_INHERITANCE_NOT_LIMITED:' + name)
-    if created is True:
-        if type(rep_.get('received')) is not int or rep_['received'] != 0:
-            issues.append('SQUATTER_RECEIVED_DATA:' + name)
-        rid = rep_.get('label_rid')
-        if rid is not None and (type(rid) is not int or rid >= MEDIUM_RID):
-            issues.append('SQUATTER_LABEL_NOT_BELOW_MEDIUM:' + name)
-        if cpp.get('exit') != EXIT_PIPE_LABEL:
-            issues.append('CPP_CLIENT_ACCEPTED_SQUATTER:' + name)
-        if (py.get('reason'), py.get('sent')) != ('PIPE_LABEL_TOO_LOW', False):
-            issues.append('PY_CLIENT_ACCEPTED_SQUATTER:' + name)
-        if rep_.get('owner') is None or rep_.get('owner') != parent.get('user_sid'):
-            issues.append('SQUATTER_OWNER_NOT_THE_USER:' + name)   # negative control: owner check alone passes
-    elif created is False:
+    for proc in (sq, cpp):
+        if proc.get('inherit') != INHERIT:
+            issues.append('CHILD_INHERITANCE_NOT_LIMITED:' + name)
+            break
+    rep_ = sq.get('report') if isinstance(sq.get('report'), dict) else {}
+    if name == 'squat_low_il_medium_label':
+        if rep_.get('created') is not False or rep_.get('create_error') != ERROR_PRIVILEGE_NOT_HELD:
+            issues.append('SQUATTER_RAISED_ITS_LABEL:' + name)
         if (cpp.get('exit'), cpp.get('open_error')) != (EXIT_OPEN_FAILED, ERROR_FILE_NOT_FOUND):
             issues.append('CPP_CLIENT_OUTCOME_WRONG:' + name)
-        if (py.get('reason'), py.get('open_error')) != ('OPEN_FAILED', ERROR_FILE_NOT_FOUND):
+        if (py.get('reason'), py.get('open_error'), py.get('sent')) != ('OPEN_FAILED', ERROR_FILE_NOT_FOUND, False):
             issues.append('PY_CLIENT_OUTCOME_WRONG:' + name)
+        return issues
+    if rep_.get('created') is not True:
+        issues.append('SQUATTER_COULD_NOT_CREATE:' + name)
+        return issues
+    if type(rep_.get('received')) is not int or rep_['received'] != 0:
+        issues.append('SQUATTER_RECEIVED_DATA:' + name)
+    if rep_.get('label_rid') != LOW_RID:
+        issues.append('SQUATTER_LABEL_NOT_LOW:' + name)
+    owner = rep_.get('owner')
+    if mode == 'standard_account':
+        # The decisive case: the owner check alone would have passed.
+        if owner is None or owner != parent.get('user_sid'):
+            issues.append('SQUATTER_OWNER_NOT_THE_USER:' + name)
+        if cpp.get('exit') != EXIT_PIPE_LABEL:
+            issues.append('CPP_CLIENT_ACCEPTED_SQUATTER:' + name)
+        if (py.get('reason'), py.get('sent'), py.get('pipe_label')) != ('PIPE_LABEL_TOO_LOW', False, LOW_RID):
+            issues.append('PY_CLIENT_ACCEPTED_SQUATTER:' + name)
     else:
-        issues.append('SQUATTER_REPORT_MISSING:' + name)
+        if owner != ADMINISTRATORS_SID_TEXT:
+            issues.append('SQUATTER_OWNER_NOT_ADMINISTRATORS:' + name)
+        if cpp.get('exit') != EXIT_OWNER_MISMATCH:
+            issues.append('CPP_CLIENT_ACCEPTED_SQUATTER:' + name)
+        if (py.get('reason'), py.get('sent')) != ('PIPE_OWNER_MISMATCH', False):
+            issues.append('PY_CLIENT_ACCEPTED_SQUATTER:' + name)
     return issues
 
 
@@ -365,7 +391,7 @@ def evaluate(report) -> tuple[str, list[str]]:
     if set(squats) != set(SQUAT_CASES):
         issues.append('SQUAT_SET_DRIFT')
     for name in sorted(set(SQUAT_CASES) & set(squats)):
-        issues += _squat_issues(name, squats[name], parent)
+        issues += _squat_issues(name, squats[name], parent, report.get('mode'))
     cleanup = report.get('cleanup') if isinstance(report.get('cleanup'), dict) else {}
     want = {'appcontainer_profile': 'deleted', 'workdir': 'deleted'}
     if report.get('mode') == 'standard_account':
@@ -1066,7 +1092,7 @@ def orchestrate_standard() -> dict:
             raise RuntimeError('SCHTASKS_RUN_FAILED: ' + (r.stdout + r.stderr)[-400:])
         child = w20._wait_json(result, STD_TIMEOUT_S)
         # The child's own findings; orchestration facts stay authoritative.
-        for key in ('parent', 'sddl', 'appcontainer', 'cases', 'host', 'error'):
+        for key in ('parent', 'sddl', 'appcontainer', 'cases', 'squat', 'host', 'error'):
             if key in child:
                 report[key] = child[key]
         for key, val in (child.get('binaries') or {}).items():
