@@ -1114,6 +1114,8 @@ def client_ping(name: str = DEFAULT_PIPE_NAME, *, level: str = 'identification',
     * W25.2, also before the first write: exactly one explicit mandatory label of
       at least Medium on the pipe (``PIPE_LABEL_TOO_LOW`` / ``PIPE_LABEL_FAILED``);
       a Low-IL squatter of the same user passes the owner check but not this.
+      Aegis W25.2: the label must not be INHERIT_ONLY and must carry NO_WRITE_UP
+      (``PIPE_LABEL_INHERIT_ONLY`` / ``PIPE_LABEL_NO_WRITE_UP_MISSING``).
     * write and read run with an absolute deadline (``response_timeout_s``).
     ``send=False`` connects, verifies and stays silent for ``hold_s`` seconds.
     """

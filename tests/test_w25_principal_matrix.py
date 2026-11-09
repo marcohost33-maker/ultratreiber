@@ -459,6 +459,9 @@ class SquatterW252(unittest.TestCase):
     def test_python_client_checks_the_label_before_writing(self):
         src = (ROOT / 'udx_ref' / 'windows_pipe.py').read_text(encoding='utf-8')
         body = src[src.index('def client_ping('):src.index('def main(')]
+        # assert first: a removed call must fail as an assertion, not crash str.index (DK16)
+        for needle in ('_verify_pipe_owner(api, h, expected_bin)', '_verify_pipe_label(api, h)', 'api.WriteFile('):
+            self.assertIn(needle, body)
         self.assertLess(body.index('_verify_pipe_owner(api, h, expected_bin)'),
                         body.index('_verify_pipe_label(api, h)'))
         self.assertLess(body.index('_verify_pipe_label(api, h)'), body.index('api.WriteFile('))

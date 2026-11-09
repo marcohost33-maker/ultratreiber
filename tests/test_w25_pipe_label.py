@@ -74,6 +74,50 @@ class PipeLabelCheck(unittest.TestCase):
         r = wp.client_ping(name, send=False, hold_s=0.0, connect_timeout_s=2.0)
         self.assertEqual((r.reason, r.sent, r.pipe_label), ('PIPE_LABEL_NO_WRITE_UP_MISSING', False, 0x2000))
 
+    def test_restricted_token_squatter_is_a_documented_boundary(self):
+        # Aegis W25.2-P3, ADR-UDX-006 addendum "restricted squatter": BOUNDARY PIN,
+        # not a security claim. A restricted token of the same user at the same IL
+        # (restricting set {RESTRICTED S-1-5-12}) can create the pipe name with the
+        # production-like Medium NW+NR label; owner and label checks both pass, so
+        # the client would write. The same token cannot open this process for
+        # VM_WRITE|CREATE_THREAD, i.e. it is OUTSIDE the section-1 trust domain.
+        # If Windows changes any of the three facts, this test turns red and the
+        # ADR addendum must be revisited. (In-thread impersonation, not a process.)
+        api = self.api
+        k32 = ctypes.WinDLL('kernel32', use_last_error=True)
+        k32.OpenProcess.restype = wp.wintypes.HANDLE
+        k32.OpenProcess.argtypes = [wp.wintypes.DWORD, wp.wintypes.BOOL, wp.wintypes.DWORD]
+        proc, rtok, imp = wp.wintypes.HANDLE(), wp.wintypes.HANDLE(), wp.wintypes.HANDLE()
+        self.assertTrue(api.OpenProcessToken(api.GetCurrentProcess(),
+                                             wp.TOKEN_QUERY | wp.TOKEN_DUPLICATE | 0x0001, ctypes.byref(proc)))
+        restricted_sid = ctypes.c_void_p()
+        self.assertTrue(api.ConvertStringSidToSidW('S-1-5-12', ctypes.byref(restricted_sid)))
+        restrict = wp.SID_AND_ATTRIBUTES(restricted_sid, 0)
+        try:
+            self.assertTrue(api.CreateRestrictedToken(proc, 0, 0, None, 0, None, 1, ctypes.byref(restrict),
+                                                      ctypes.byref(rtok)))
+            self.assertTrue(api.DuplicateTokenEx(rtok, wp.TOKEN_QUERY | wp.TOKEN_IMPERSONATE, None,
+                                                 wp.SecurityImpersonation, wp.TokenImpersonation,
+                                                 ctypes.byref(imp)))
+            self.assertTrue(api.SetThreadToken(None, imp))
+            try:
+                ph = k32.OpenProcess(0x0020 | 0x0002, False, k32.GetCurrentProcessId())
+                proc_err = ctypes.get_last_error()
+                if ph:
+                    k32.CloseHandle(ph)
+                name, h = self._pipe('S:(ML;;NWNR;;;ME)')       # created by the restricted token
+            finally:
+                self.assertTrue(api.RevertToSelf())
+        finally:
+            for t in (proc, rtok, imp):
+                if t.value:
+                    api.CloseHandle(t)
+            api.LocalFree(restricted_sid)
+        self.assertEqual((bool(ph), proc_err), (False, wp.ERROR_ACCESS_DENIED))
+        self.assertEqual(wp.pipe_label_info(api, h), ((0x2000, 0, 0x3), 0))
+        r = wp.client_ping(name, send=False, hold_s=0.0, connect_timeout_s=2.0)
+        self.assertEqual((r.reason, r.pipe_owner), ('SILENT_HOLD', self.sid))
+
     def test_production_label_is_effective_and_no_write_up(self):
         with wp.OneShotPipeServer(wp.PIPE_PREFIX + 'UDX_W25L_' + uuid.uuid4().hex) as srv:
             self.assertEqual(wp.pipe_label_info(self.api, srv.handle), ((0x2000, 0, 0x3), 0))
