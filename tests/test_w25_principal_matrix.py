@@ -210,6 +210,15 @@ class EvaluatePrincipalMatrix(unittest.TestCase):
             self.assertIn('BLOCKED', no.stdout)
 
 
+class Summary(unittest.TestCase):
+    def test_one_line_per_case_without_failing_on_junk(self):
+        lines = tool.summary_lines(good_report())
+        self.assertEqual(len(lines), len(tool.EXPECTED))
+        self.assertTrue(any('CASE py_low_il: rid=0x1000' in x and 'open_error=5' in x for x in lines))
+        self.assertEqual(tool.summary_lines(None), [])
+        self.assertEqual(len(tool.summary_lines({'cases': {'x': {'error': 'E'}, 'y': 3}})), 1)
+
+
 class ControlSddl(unittest.TestCase):
     def test_production_literal_matches_the_module(self):
         from udx_ref import windows_pipe as wp

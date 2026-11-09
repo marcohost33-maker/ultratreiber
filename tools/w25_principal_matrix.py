@@ -224,6 +224,27 @@ def parse_open_error(text) -> int | None:
     return int(parts[1])
 
 
+def summary_lines(report) -> list[str]:
+    """One line per case for the CI log (synthetic data only: SIDs, codes, times)."""
+    if not isinstance(report, dict) or not isinstance(report.get('cases'), dict):
+        return []
+    out = []
+    for name in sorted(report['cases']):
+        c = report['cases'][name]
+        if not isinstance(c, dict):
+            continue
+        child = c.get('child') if isinstance(c.get('child'), dict) else {}
+        f = child.get('facts') if isinstance(child.get('facts'), dict) else {}
+        srv = c.get('server_result') if isinstance(c.get('server_result'), dict) else {}
+        server = srv.get('exit') if 'exit' in srv else f"{srv.get('verdict')}/{srv.get('reason')}"
+        rid = f.get('integrity_rid')
+        out.append(f"CASE {name}: rid={rid:#x} " if type(rid) is int else f"CASE {name}: rid=None ")
+        out[-1] += (f"appc={f.get('appcontainer')} restricted={f.get('restricted')} "
+                    f"client_exit={child.get('exit')} open_error={child.get('open_error')} "
+                    f"t={child.get('elapsed_s')}s server={server} error={c.get('error')}")
+    return out
+
+
 # --- Windows-only launcher -----------------------------------------------------
 def _win():
     """ctypes bindings, created lazily so the module imports on Linux."""
@@ -654,6 +675,8 @@ def main(argv=None) -> int:
     if not args.evaluate:
         pathlib.Path(args.output).write_text(text, encoding='utf-8')
         report['report_sha256'] = hashlib.sha256(text.encode('utf-8')).hexdigest()
+    for line in summary_lines(report):
+        print(line)
     print(json.dumps({'verdict': verdict, 'issues': issues, 'report_sha256': report.get('report_sha256')}))
     return 0 if verdict == 'PRINCIPAL_MATRIX_OK' else 1
 
