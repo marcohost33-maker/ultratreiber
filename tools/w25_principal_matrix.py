@@ -82,9 +82,17 @@ AC_ACE = '(A;;0x12008b;;;AC)'   # ALL APPLICATION PACKAGES, same mask as every p
 # the Medium label and drops its policy instead: a label ACE's mask IS the policy
 # for lower-integrity subjects (SYSTEM_MANDATORY_LABEL_ACE), so mask 0 restricts
 # nothing. W25.1 used S:(ML;;NWNR;;;LW) here.
-# Measured (CI run 42606332563): mask 0x0 does NOT admit a Low-IL client (open
-# still refused with 5) - a zero policy is evidently replaced by the default
-# no-write-up. Next attempt: an explicit non-empty policy without NW/NR (NX only).
+# Measured (CI runs 42606332563, 42608409744): neither mask 0x0 nor NX-only
+# admits a Low-IL client; the open is still refused with 5. Cause: the TOKEN's
+# mandatory policy TOKEN_MANDATORY_POLICY_NO_WRITE_UP (default for every token)
+# forbids writing to any object of a higher level, whatever the object's label
+# mask says; changing it needs SeTcbPrivilege. So no pipe the hardened clients
+# accept (explicit label >= Medium) can be opened for writing by a Low-IL,
+# non-AppContainer client: the server's INTEGRITY_TOO_LOW check is unreachable
+# for it (defense in depth; reached with a real Low token in W25.1, CI run
+# 42593714723, while the harness could still lower the pipe label). A lowbox
+# (AppContainer) token passes because its integrity check is replaced by the
+# AppContainer DACL check (see acace_only). NX-only keeps the label explicit.
 OPEN_LABEL = 'S:(ML;;NX;;;ME)'
 CONTROL_DELTA = (AC_ACE, OPEN_LABEL)
 PRINCIPALS = ('same_token', 'low_il', 'appcontainer', 'restricted')
@@ -114,8 +122,9 @@ EXPECTED = {
     'py_restricted':   ('python', 'production', 'restricted', EXIT_BAD_RESPONSE, None,
                         ('DENIED', 'RESTRICTED_TOKEN', True)),
     'ctl_same_token':  ('python', 'control', 'same_token', EXIT_OK, None, ('PEER_OK', 'OK', True)),
-    'ctl_low_il':      ('python', 'control', 'low_il', EXIT_BAD_RESPONSE, None,
-                        ('DENIED', 'INTEGRITY_TOO_LOW', True)),
+    # W25.2: refused at open by the token's NO_WRITE_UP policy (see OPEN_LABEL).
+    'ctl_low_il':      ('python', 'control', 'low_il', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
+                        ('DENIED', 'CONNECT_TIMEOUT', False)),
     'ctl_appcontainer': ('python', 'control', 'appcontainer', EXIT_BAD_RESPONSE, None,
                          ('DENIED', 'INTEGRITY_TOO_LOW', True)),
     # W25.1 attribution: the Low label alone admits Low IL (so the label was the
@@ -124,8 +133,8 @@ EXPECTED = {
     # AppContainer OPENS the pipe: the label is no barrier for a lowbox token, the
     # missing AC/package ACE is the only one. The server's integrity check then
     # refuses it (the last line of defense for that case).
-    'lbl_low_il':      ('python', 'label_only', 'low_il', EXIT_BAD_RESPONSE, None,
-                        ('DENIED', 'INTEGRITY_TOO_LOW', True)),
+    'lbl_low_il':      ('python', 'label_only', 'low_il', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
+                        ('DENIED', 'CONNECT_TIMEOUT', False)),
     'lbl_appcontainer': ('python', 'label_only', 'appcontainer', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
                          ('DENIED', 'CONNECT_TIMEOUT', False)),
     'ace_same_token':  ('python', 'acace_only', 'same_token', EXIT_OK, None, ('PEER_OK', 'OK', True)),

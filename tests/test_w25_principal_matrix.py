@@ -278,7 +278,10 @@ class HardeningW251(unittest.TestCase):
             lambda r: r['cases']['py_low_il'].pop('server_sddl')))
 
     def test_attribution_cases_exist(self):
-        self.assertEqual(tool.EXPECTED['lbl_low_il'][1:5], ('label_only', 'low_il', 3, None))
+        # W25.2: the token's NO_WRITE_UP policy refuses a Low-IL writer on any
+        # Medium-labelled pipe, whatever the label mask (measured twice).
+        self.assertEqual(tool.EXPECTED['lbl_low_il'][1:5], ('label_only', 'low_il', 1, 5))
+        self.assertEqual(tool.EXPECTED['ctl_low_il'][3:6], (1, 5, ('DENIED', 'CONNECT_TIMEOUT', False)))
         self.assertEqual(tool.EXPECTED['lbl_appcontainer'][1:5], ('label_only', 'appcontainer', 1, 5))
         # Falsified hypothesis (CI run 42593419596): the Medium label does NOT stop
         # a lowbox token once the DACL grants AC; the server check has to.
