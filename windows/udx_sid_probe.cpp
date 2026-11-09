@@ -10,6 +10,8 @@
 // 22 deadline passed before PEER_OK was written, 23 PEER_OK written but the
 // peer did not close in time, 24 bad arguments, 30 RevertToSelf failed,
 // 31 cancelled I/O did not settle, 10-15 setup failures.
+// W25: a denial (exit 20) prints one stderr line "UDX_PROBE_DENIED level=.. rid=..
+// appc=.. restricted=.. session_ok=.. sid_ok=.." (or "facts=unavailable").
 // TODO before use beyond lab: bounded connections, full UDX envelope parser,
 // versioned ACK/durable receipts, OS app identity (G2-App), independent review.
 #define WIN32_LEAN_AND_MEAN
@@ -134,6 +136,10 @@ int wmain(int argc, wchar_t** argv) {
     }
     const bool read_ok = req.status == udx::IoStatus::ok && req.bytes == 1;
     bool authorized = false;
+    // W25: the token facts outlive the impersonation block so a denial can name
+    // the failing check on stderr (exit code 20 itself stays unspecific).
+    bool facts_ok = false, sid_ok = false;
+    DWORD level = 0, appc = 1, restricted = 1, session = 0xFFFFFFFF, rid = 0;
     if (read_ok && ImpersonateNamedPipeClient(pipe)) {
         HANDLE client_token = nullptr;
         if (OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &client_token)) {
@@ -141,17 +147,18 @@ int wmain(int argc, wchar_t** argv) {
             PSID client_sid = nullptr;
             // W13 (UNCOMPILED): client grants Identification only; every fact
             // comes from the token, never from the client PID/session API.
-            DWORD level = 0, appc = 1, restricted = 1, session = 0xFFFFFFFF, rid = 0;
             if (query_sid(client_token, client_sidbuf, client_sid)
                 && token_dword(client_token, TokenImpersonationLevel, level)
                 && token_dword(client_token, TokenIsAppContainer, appc)
                 && token_dword(client_token, TokenIsRestricted, restricted)
                 && token_dword(client_token, TokenSessionId, session)
                 && integrity_rid(client_token, rid)) {
+                facts_ok = true;
+                sid_ok = EqualSid(client_sid, server_sid) != 0;
                 authorized = level >= SecurityIdentification
                     && rid >= SECURITY_MANDATORY_MEDIUM_RID
                     && appc == 0 && restricted == 0 && session == server_session
-                    && (EqualSid(client_sid, server_sid) != 0);
+                    && sid_ok;
             }
             CloseHandle(client_token);
         }
@@ -159,6 +166,12 @@ int wmain(int argc, wchar_t** argv) {
         if (!RevertToSelf()) TerminateProcess(GetCurrentProcess(), 30);
     }
     if (!authorized) {
+        // W25: one line on stderr with the facts the decision used; no SID text.
+        if (facts_ok)
+            fwprintf(stderr, L"UDX_PROBE_DENIED level=%lu rid=%lu appc=%lu restricted=%lu session_ok=%d sid_ok=%d\n",
+                     level, rid, appc, restricted, session == server_session ? 1 : 0, sid_ok ? 1 : 0);
+        else
+            fwprintf(stderr, L"UDX_PROBE_DENIED facts=unavailable\n");
         DisconnectNamedPipe(pipe);
         CloseHandle(pipe);
         return 20;

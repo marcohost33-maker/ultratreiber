@@ -211,7 +211,7 @@ jobs:
     # a harness-only control SD so the server's own check meets the real token.
     # Elevated hosted runner (Windows Server); research evidence, never a release
     # approval.
-    timeout-minutes: 20
+    timeout-minutes: 30
     defaults:
       run:
         shell: pwsh
@@ -224,11 +224,20 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.13"
-      - name: Principal matrix
+      - name: Principal matrix (parent = elevated administrator)
         run: |
-          python tools/w25_principal_matrix.py --output "$env:RUNNER_TEMP\udx_w25_principals.json"
+          python tools/w25_principal_matrix.py --mode elevated_admin --output "$env:RUNNER_TEMP\udx_w25_principals.json"
           $code = $LASTEXITCODE
           if ($code -ne 0 -and (Test-Path "$env:RUNNER_TEMP\udx_w25_principals.json")) { Get-Content "$env:RUNNER_TEMP\udx_w25_principals.json" | Select-Object -First 400 }
+          exit $code
+      # W25.1: the same matrix with a throwaway Users-only account as the parent
+      # (W20 task machinery), so same_token is Medium IL, not the elevated runner.
+      - name: Principal matrix (parent = standard account)
+        if: always()
+        run: |
+          python tools/w25_principal_matrix.py --mode standard_account --output "$env:RUNNER_TEMP\udx_w25_principals_std.json"
+          $code = $LASTEXITCODE
+          if ($code -ne 0 -and (Test-Path "$env:RUNNER_TEMP\udx_w25_principals_std.json")) { Get-Content "$env:RUNNER_TEMP\udx_w25_principals_std.json" | Select-Object -First 400 }
           exit $code
       # actions/upload-artifact v7.0.1
       - name: Upload principal-matrix report
@@ -236,6 +245,8 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: udx-w25-principal-matrix-${{ github.sha }}
-          path: ${{ runner.temp }}/udx_w25_principals.json
+          path: |
+            ${{ runner.temp }}/udx_w25_principals.json
+            ${{ runner.temp }}/udx_w25_principals_std.json
           if-no-files-found: warn
           retention-days: 30

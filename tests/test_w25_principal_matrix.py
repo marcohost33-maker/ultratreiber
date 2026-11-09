@@ -41,29 +41,47 @@ def facts(principal: str) -> dict:
     }[principal]
 
 
-def good_report() -> dict:
+BIN = {'client': 'a' * 64, 'probe': 'b' * 64}
+DENIAL = {'level': 1, 'rid': HIGH, 'appc': 0, 'restricted': 1, 'session_ok': 1, 'sid_ok': 1}
+
+
+def good_report(mode: str = 'elevated_admin') -> dict:
+    rid = HIGH if mode == 'elevated_admin' else 0x2000
     prod = tool.production_sddl(USER)
+    sddl = {kind: tool.sd_variant(prod, kind) for kind in tool.SD_KINDS}
     cases = {}
     for name, (server, sd, principal, cexit, oerr, sexp) in tool.EXPECTED.items():
-        child = {'exit': cexit, 'open_error': oerr, 'elapsed_s': 0.4, 'facts': facts(principal),
+        f = dict(facts(principal))
+        if f['integrity_rid'] == HIGH:
+            f['integrity_rid'] = rid
+        child = {'exit': cexit, 'open_error': oerr, 'elapsed_s': 0.4, 'facts': f, 'inherit': 'handle_list:1',
                  'stderr': '' if oerr is None else f'UDX_CLIENT_OPEN_ERROR {oerr}\n'}
+        case = {'server': server, 'sd': sd, 'principal': principal, 'child': child}
         if server == 'python':
             verdict, reason, identified = sexp
-            srv = {'verdict': verdict, 'reason': reason, 'client_sid': USER if identified else None,
-                   'sent': verdict == 'PEER_OK', 'winerror': None}
+            case['server_sddl'] = sddl[sd]
+            case['server_result'] = {'verdict': verdict, 'reason': reason,
+                                     'client_sid': USER if identified else None,
+                                     'sent': verdict == 'PEER_OK', 'winerror': None}
         else:
-            srv = {'exit': sexp}
-        cases[name] = {'server': server, 'sd': sd, 'principal': principal, 'child': child,
-                       'server_result': srv}
-    return {
+            code, denial = sexp
+            case['server_result'] = {'exit': code, 'denial': None if denial is None else dict(DENIAL, rid=rid)}
+        cases[name] = case
+    report = {
         'release_authorized': False,
-        'parent': {'user_sid': USER, 'integrity_rid': HIGH, 'appcontainer': False,
-                   'appcontainer_sid': None, 'restricted': False},
-        'sddl': {'production': prod, 'control': tool.control_sddl(prod)},
+        'mode': mode,
+        'parent': {'user_sid': USER, 'integrity_rid': rid, 'appcontainer': False, 'appcontainer_sid': None,
+                   'restricted': False, 'administrators_member': mode == 'elevated_admin'},
+        'sddl': sddl,
+        'binaries': {k: {'built': v, 'used': v} for k, v in BIN.items()},
         'appcontainer': {'name': 'udx.w25.probe.0123456789ab', 'sid': AC, 'created': True},
         'cases': cases,
-        'cleanup': {'appcontainer_profile': 'deleted'},
+        'cleanup': {'appcontainer_profile': 'deleted', 'workdir': 'deleted'},
     }
+    if mode == 'standard_account':
+        report['account'] = {'name': 'udxw25s', 'sid': USER}
+        report['cleanup'].update(account='deleted', batch_logon_right='removed', workroot='deleted')
+    return report
 
 
 class EvaluatePrincipalMatrix(unittest.TestCase):
@@ -181,7 +199,11 @@ class EvaluatePrincipalMatrix(unittest.TestCase):
 
     def test_sddl_drift(self):
         self._blocked_with(lambda r: r['sddl'].update(production=r['sddl']['control']), 'PRODUCTION_SDDL_DRIFT')
-        self._blocked_with(lambda r: r['sddl'].update(control=r['sddl']['production']), 'CONTROL_SDDL_DRIFT')
+        self._blocked_with(lambda r: r['sddl'].update(control=r['sddl']['production']),
+                           'SD_VARIANT_DRIFT:control')
+        self._blocked_with(lambda r: r['sddl'].update(label_only=r['sddl']['control']),
+                           'SD_VARIANT_DRIFT:label_only')
+        self._blocked_with(lambda r: r['sddl'].update(extra='O:'), 'SD_SET_DRIFT')
 
     def test_cleanup(self):
         self._blocked_with(lambda r: r['cleanup'].update(appcontainer_profile='hr=0x80070005'),
@@ -208,6 +230,108 @@ class EvaluatePrincipalMatrix(unittest.TestCase):
                                  '--output', str(path)], capture_output=True, text=True, stdin=subprocess.DEVNULL)
             self.assertEqual(no.returncode, 1)
             self.assertIn('BLOCKED', no.stdout)
+
+
+class HardeningW251(unittest.TestCase):
+    """W25.1: handle allow-list, attribution SDs, C++ denial facts, binaries,
+    standard-account parent."""
+
+    def _issues(self, mutate, mode='elevated_admin'):
+        r = good_report(mode)
+        mutate(r)
+        return tool.evaluate(r)[1]
+
+    def test_standard_account_report_passes(self):
+        self.assertEqual(tool.evaluate(good_report('standard_account')), ('PRINCIPAL_MATRIX_OK', []))
+
+    def test_child_must_inherit_only_its_pipe(self):
+        self.assertIn('CHILD_INHERITANCE_NOT_LIMITED:py_appcontainer', self._issues(
+            lambda r: r['cases']['py_appcontainer']['child'].update(inherit='all')))
+        self.assertIn('CHILD_INHERITANCE_NOT_LIMITED:cpp_low_il', self._issues(
+            lambda r: r['cases']['cpp_low_il']['child'].pop('inherit')))
+
+    def test_server_must_have_used_the_declared_sd(self):
+        # A label_only case served with the fully weakened control SD would make
+        # the attribution meaningless.
+        self.assertIn('SERVER_SD_NOT_THE_DECLARED_ONE:lbl_appcontainer', self._issues(
+            lambda r: r['cases']['lbl_appcontainer'].update(server_sddl=r['sddl']['control'])))
+        self.assertIn('SERVER_SD_NOT_THE_DECLARED_ONE:py_low_il', self._issues(
+            lambda r: r['cases']['py_low_il'].pop('server_sddl')))
+
+    def test_attribution_cases_exist(self):
+        self.assertEqual(tool.EXPECTED['lbl_low_il'][1:5], ('label_only', 'low_il', 3, None))
+        self.assertEqual(tool.EXPECTED['lbl_appcontainer'][1:5], ('label_only', 'appcontainer', 1, 5))
+        self.assertEqual(tool.EXPECTED['ace_appcontainer'][1:5], ('acace_only', 'appcontainer', 1, 5))
+        self.assertEqual(tool.EXPECTED['ace_same_token'][3], 0)
+
+    def test_sd_variants_differ_by_exactly_one_mechanism(self):
+        prod = tool.production_sddl(USER)
+        v = {k: tool.sd_variant(prod, k) for k in tool.SD_KINDS}
+        self.assertEqual(v['label_only'], prod.replace('NWNR;;;ME)', 'NWNR;;;LW)'))
+        self.assertEqual(v['acace_only'], prod.replace(')S:', ')(A;;0x12008b;;;AC)S:'))
+        self.assertEqual(v['control'], v['acace_only'].replace('NWNR;;;ME)', 'NWNR;;;LW)'))
+        with self.assertRaises(ValueError):
+            tool.sd_variant(prod, 'everyone')
+
+    def test_cpp_restricted_denial_must_name_only_the_restricted_flag(self):
+        for k, bad in (('restricted', 0), ('sid_ok', 0), ('session_ok', 0), ('appc', 1), ('rid', 0x1000),
+                       ('level', 0)):
+            self.assertIn('CPP_DENIAL_NOT_ATTRIBUTED:cpp_restricted', self._issues(
+                lambda r, k=k, bad=bad: r['cases']['cpp_restricted']['server_result']['denial'].update({k: bad})),
+                k)
+        self.assertIn('CPP_DENIAL_NOT_ATTRIBUTED:cpp_restricted', self._issues(
+            lambda r: r['cases']['cpp_restricted']['server_result'].update(denial={'facts': 'unavailable'})))
+        self.assertIn('CPP_UNEXPECTED_DENIAL:cpp_same_token', self._issues(
+            lambda r: r['cases']['cpp_same_token']['server_result'].update(denial=dict(DENIAL))))
+
+    def test_binaries_must_be_the_built_ones(self):
+        self.assertIn('BINARY_NOT_THE_BUILT_ONE:client', self._issues(
+            lambda r: r['binaries']['client'].update(used='c' * 64)))
+        self.assertIn('BINARY_NOT_THE_BUILT_ONE:probe', self._issues(lambda r: r['binaries'].pop('probe')))
+
+    def test_mode_must_match_the_parent_facts(self):
+        self.assertIn('MODE_INVALID', self._issues(lambda r: r.update(mode='admin')))
+        self.assertIn('PARENT_NOT_ELEVATED_ADMIN', self._issues(
+            lambda r: r['parent'].update(administrators_member=False)))
+        # the W18 lesson: a UAC-filtered admin (Medium, deny-only) is not a standard account
+        self.assertIn('PARENT_NOT_STANDARD_ACCOUNT', self._issues(
+            lambda r: r['parent'].update(administrators_member=True), 'standard_account'))
+        self.assertIn('PARENT_NOT_STANDARD_ACCOUNT', self._issues(
+            lambda r: r['parent'].update(integrity_rid=HIGH), 'standard_account'))
+        self.assertIn('PARENT_NOT_THE_THROWAWAY_ACCOUNT', self._issues(
+            lambda r: r['account'].update(sid='S-1-5-21-9-9-9-1001'), 'standard_account'))
+
+    def test_standard_mode_cleanup(self):
+        for key in ('account', 'batch_logon_right', 'workroot', 'workdir'):
+            self.assertIn('CLEANUP_INCOMPLETE', self._issues(
+                lambda r, key=key: r['cleanup'].pop(key), 'standard_account'), key)
+
+    def test_parse_probe_denial(self):
+        line = 'UDX_PROBE_DENIED level=1 rid=12288 appc=0 restricted=1 session_ok=1 sid_ok=1\r\n'
+        self.assertEqual(tool.parse_probe_denial(line), dict(DENIAL, rid=12288))
+        self.assertEqual(tool.parse_probe_denial('UDX_PROBE_DENIED facts=unavailable\n'), {'facts': 'unavailable'})
+        for bad in (None, '', line + line, line.replace('rid=12288 ', ''), line.replace('=1 rid', '=-1 rid'),
+                    line.replace('sid_ok=1', 'sid_ok=1 extra=2'), line.replace('appc=0', 'appc=0 appc=0'),
+                    line.replace('level=1', 'level1')):
+            self.assertIsNone(tool.parse_probe_denial(bad), bad)
+
+    def test_cpp_probe_prints_the_denial_facts(self):
+        src = (ROOT / 'windows' / 'udx_sid_probe.cpp').read_text(encoding='utf-8')
+        start = src.index('if (!authorized) {')
+        block = src[start:src.index('return 20;', start)]
+        self.assertIn('UDX_PROBE_DENIED level=%lu rid=%lu appc=%lu restricted=%lu session_ok=%d sid_ok=%d', block)
+        self.assertIn('UDX_PROBE_DENIED facts=unavailable', block)
+        # the decision itself is unchanged: sid_ok is the same EqualSid result
+        self.assertIn('sid_ok = EqualSid(client_sid, server_sid) != 0;', src)
+        self.assertIn('&& appc == 0 && restricted == 0 && session == server_session\n                    && sid_ok;', src)
+
+    def test_launcher_uses_a_handle_list_for_every_principal(self):
+        src = (ROOT / 'tools' / 'w25_principal_matrix.py').read_text(encoding='utf-8')
+        launch = src[src.index('    def launch('):src.index('def _read_all(')]
+        self.assertIn('PROC_THREAD_ATTRIBUTE_HANDLE_LIST', launch)
+        self.assertEqual(launch.count('EXTENDED_STARTUPINFO_PRESENT'), 1)   # set once, used by both create calls
+        self.assertIn('flags = CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT', launch)
+        self.assertEqual(launch.count('c.byref(siex), c.byref(pi)'), 2)
 
 
 class Summary(unittest.TestCase):
@@ -265,7 +389,8 @@ class CiWiring(unittest.TestCase):
         ci = (ROOT / '.github' / 'workflows' / 'ci.yml').read_text(encoding='utf-8')
         self.assertIn('windows-principal-matrix:', ci)
         job = ci[ci.index('windows-principal-matrix:'):]
-        self.assertIn('python tools/w25_principal_matrix.py --output', job)
+        self.assertIn('python tools/w25_principal_matrix.py --mode elevated_admin --output', job)
+        self.assertIn('python tools/w25_principal_matrix.py --mode standard_account --output', job)
         self.assertIn('exit $code', job)
         self.assertNotIn('continue-on-error', job.split('\n  windows-', 1)[0])
 

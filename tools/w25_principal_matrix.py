@@ -64,7 +64,7 @@ import time
 import uuid
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
-LOW_RID, MEDIUM_RID = 0x1000, 0x2000
+LOW_RID, MEDIUM_RID, HIGH_RID = 0x1000, 0x2000, 0x3000
 ERROR_ACCESS_DENIED = 5
 EXIT_OK, EXIT_OPEN_FAILED, EXIT_BAD_RESPONSE = 0, 1, 3
 EXIT_DENIED, EXIT_TIMEOUT = 20, 22
@@ -75,11 +75,22 @@ CPP_REFUSED_BUDGET_MS = 4000
 CHILD_LIMIT_S = 15.0            # a client child must end on its own within this
 AC_NAME_PREFIX = 'udx.w25.probe.'
 PRODUCTION_LABEL = 'S:(ML;;NWNR;;;ME)'
-CONTROL_DELTA = ('(A;;0x12008b;;;AC)', 'S:(ML;;NWNR;;;LW)')
+AC_ACE = '(A;;0x12008b;;;AC)'   # ALL APPLICATION PACKAGES, same mask as every production ACE
+LOW_LABEL = 'S:(ML;;NWNR;;;LW)'
+CONTROL_DELTA = (AC_ACE, LOW_LABEL)
 PRINCIPALS = ('same_token', 'low_il', 'appcontainer', 'restricted')
+MODES = ('elevated_admin', 'standard_account')
+INHERIT = 'handle_list:1'       # W25.1: the child inherits exactly its stdout/stderr pipe
+# W25.1 harness-only security descriptors. 'production' is build_sddl unchanged;
+# the other three exist to ATTRIBUTE a refusal to one mechanism (factorial):
+#   control     +AC ACE and Low label      -> the server's own token check is reached
+#   label_only  Low label, no AC ACE       -> only the DACL can refuse an AppContainer
+#   acace_only  +AC ACE, Medium label kept -> only the mandatory label can refuse it
+SD_KINDS = ('production', 'control', 'label_only', 'acace_only')
 
 # name: (server, sd, principal, client_exit, open_error, server expectation)
-# server expectation: python -> (verdict, reason, identified_user: bool); cpp -> exit code
+# server expectation: python -> (verdict, reason, identified_user: bool)
+#                     cpp    -> (exit code, required denial facts or None)
 EXPECTED = {
     'py_same_token':   ('python', 'production', 'same_token', EXIT_OK, None, ('PEER_OK', 'OK', True)),
     'py_low_il':       ('python', 'production', 'low_il', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
@@ -93,11 +104,26 @@ EXPECTED = {
                         ('DENIED', 'INTEGRITY_TOO_LOW', True)),
     'ctl_appcontainer': ('python', 'control', 'appcontainer', EXIT_BAD_RESPONSE, None,
                          ('DENIED', 'INTEGRITY_TOO_LOW', True)),
-    'cpp_same_token':  ('cpp', 'production', 'same_token', EXIT_OK, None, EXIT_OK),
-    'cpp_low_il':      ('cpp', 'production', 'low_il', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED, EXIT_TIMEOUT),
+    # W25.1 attribution: the Low label alone admits Low IL (so the label was the
+    # only reason for the production refusal), but an AppContainer is still
+    # refused by the DACL; with the AC ACE but the Medium label, the label alone
+    # refuses the AppContainer. Each mechanism alone suffices for AppContainer.
+    'lbl_low_il':      ('python', 'label_only', 'low_il', EXIT_BAD_RESPONSE, None,
+                        ('DENIED', 'INTEGRITY_TOO_LOW', True)),
+    'lbl_appcontainer': ('python', 'label_only', 'appcontainer', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
+                         ('DENIED', 'CONNECT_TIMEOUT', False)),
+    'ace_same_token':  ('python', 'acace_only', 'same_token', EXIT_OK, None, ('PEER_OK', 'OK', True)),
+    'ace_appcontainer': ('python', 'acace_only', 'appcontainer', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
+                         ('DENIED', 'CONNECT_TIMEOUT', False)),
+    'cpp_same_token':  ('cpp', 'production', 'same_token', EXIT_OK, None, (EXIT_OK, None)),
+    'cpp_low_il':      ('cpp', 'production', 'low_il', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
+                        (EXIT_TIMEOUT, None)),
     'cpp_appcontainer': ('cpp', 'production', 'appcontainer', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
-                         EXIT_TIMEOUT),
-    'cpp_restricted':  ('cpp', 'production', 'restricted', EXIT_BAD_RESPONSE, None, EXIT_DENIED),
+                         (EXIT_TIMEOUT, None)),
+    # W25.1: exit 20 alone is unspecific; the probe's denial line must show that
+    # the restricted flag was the ONLY failing fact (identity, level, IL, session ok).
+    'cpp_restricted':  ('cpp', 'production', 'restricted', EXIT_BAD_RESPONSE, None,
+                        (EXIT_DENIED, {'restricted': 1, 'appc': 0, 'session_ok': 1, 'sid_ok': 1})),
 }
 
 
@@ -109,11 +135,43 @@ def production_sddl(sid: str) -> str:
     return f'O:{sid}D:P(A;;{a};;;SY)(A;;{a};;;{sid})(A;;{a};;;OW){PRODUCTION_LABEL}'
 
 
-def control_sddl(production: str) -> str:
-    """Layer-2 control SD: + ALL APPLICATION PACKAGES ACE, Low label. Harness only."""
+def sd_variant(production: str, kind: str) -> str:
+    """Harness-only descriptor ``kind`` derived from the production SDDL."""
     if type(production) is not str or not production.endswith(')' + PRODUCTION_LABEL):
         raise ValueError('NOT_A_PRODUCTION_SDDL')
-    return production[:-len(PRODUCTION_LABEL)] + CONTROL_DELTA[0] + CONTROL_DELTA[1]
+    if kind not in SD_KINDS:
+        raise ValueError('UNKNOWN_SD_KIND')
+    body = production[:-len(PRODUCTION_LABEL)]
+    return {'production': production,
+            'control': body + AC_ACE + LOW_LABEL,
+            'label_only': body + LOW_LABEL,
+            'acace_only': body + AC_ACE + PRODUCTION_LABEL}[kind]
+
+
+def control_sddl(production: str) -> str:
+    """Layer-2 control SD: + ALL APPLICATION PACKAGES ACE, Low label. Harness only."""
+    return sd_variant(production, 'control')
+
+
+def parse_probe_denial(text):
+    """The C++ probe's single stderr line ``UDX_PROBE_DENIED k=v ...`` (W25.1) as
+    a dict of ints, ``{'facts': 'unavailable'}``, or None (absent/repeated/malformed)."""
+    if type(text) is not str:
+        return None
+    hits = [ln.strip() for ln in text.splitlines() if ln.strip().startswith('UDX_PROBE_DENIED')]
+    if len(hits) != 1:
+        return None
+    parts = hits[0].split(' ')[1:]
+    if parts == ['facts=unavailable']:
+        return {'facts': 'unavailable'}
+    keys = ('level', 'rid', 'appc', 'restricted', 'session_ok', 'sid_ok')
+    out = {}
+    for part in parts:
+        k, sep, v = part.partition('=')
+        if not sep or k not in keys or k in out or not v.isdigit() or len(v) > 10:
+            return None
+        out[k] = int(v)
+    return out if tuple(sorted(out)) == tuple(sorted(keys)) else None
 
 
 def _principal_issues(name: str, principal: str, facts, parent: dict, ac_sid) -> list[str]:
@@ -143,6 +201,25 @@ def _principal_issues(name: str, principal: str, facts, parent: dict, ac_sid) ->
     return issues
 
 
+def _parent_issues(report: dict, parent: dict) -> list[str]:
+    """W25.1: the parent's kind is a claim of the report and must match its facts."""
+    mode = report.get('mode')
+    if mode not in MODES:
+        return ['MODE_INVALID']
+    admin, rid = parent.get('administrators_member'), parent.get('integrity_rid')
+    if mode == 'elevated_admin':
+        if admin is not True or type(rid) is not int or rid < HIGH_RID:
+            return ['PARENT_NOT_ELEVATED_ADMIN']
+        return []
+    issues = []
+    if admin is not False or rid != MEDIUM_RID:
+        issues.append('PARENT_NOT_STANDARD_ACCOUNT')
+    acct = report.get('account') if isinstance(report.get('account'), dict) else {}
+    if acct.get('sid') is None or acct.get('sid') != parent.get('user_sid'):
+        issues.append('PARENT_NOT_THE_THROWAWAY_ACCOUNT')
+    return issues
+
+
 def evaluate(report) -> tuple[str, list[str]]:
     """Return (verdict, issues). Every expectation must be observed explicitly."""
     if not isinstance(report, dict):
@@ -161,11 +238,21 @@ def evaluate(report) -> tuple[str, list[str]]:
         issues.append('PARENT_INTEGRITY_BELOW_MEDIUM')
     if parent.get('appcontainer') is not False or parent.get('restricted') is not False:
         issues.append('PARENT_NOT_PLAIN')
+    issues += _parent_issues(report, parent)
     sddl = report.get('sddl') if isinstance(report.get('sddl'), dict) else {}
     if sid is None or sddl.get('production') != production_sddl(sid):
         issues.append('PRODUCTION_SDDL_DRIFT')
-    elif sddl.get('control') != control_sddl(sddl['production']):
-        issues.append('CONTROL_SDDL_DRIFT')
+    else:
+        for kind in SD_KINDS[1:]:
+            if sddl.get(kind) != sd_variant(sddl['production'], kind):
+                issues.append('SD_VARIANT_DRIFT:' + kind)
+        if set(sddl) != set(SD_KINDS):
+            issues.append('SD_SET_DRIFT')
+    bins = report.get('binaries') if isinstance(report.get('binaries'), dict) else {}
+    for key in ('client', 'probe'):
+        b = bins.get(key) if isinstance(bins.get(key), dict) else {}
+        if not isinstance(b.get('built'), str) or len(b['built']) != 64 or b.get('used') != b['built']:
+            issues.append('BINARY_NOT_THE_BUILT_ONE:' + key)
     ac = report.get('appcontainer') if isinstance(report.get('appcontainer'), dict) else {}
     ac_sid = ac.get('sid') if isinstance(ac.get('sid'), str) and ac['sid'].startswith('S-1-15-2-') else None
     if ac_sid is None:
@@ -181,8 +268,12 @@ def evaluate(report) -> tuple[str, list[str]]:
             continue
         if (c.get('server'), c.get('sd'), c.get('principal')) != (server, sd, principal):
             issues.append('CASE_SHAPE_DRIFT:' + name)
+        if server == 'python' and (c.get('server_sddl') is None or c.get('server_sddl') != sddl.get(sd)):
+            issues.append('SERVER_SD_NOT_THE_DECLARED_ONE:' + name)
         child = c.get('child') if isinstance(c.get('child'), dict) else {}
         issues += _principal_issues(name, principal, child.get('facts'), parent, ac_sid)
+        if child.get('inherit') != INHERIT:
+            issues.append('CHILD_INHERITANCE_NOT_LIMITED:' + name)
         if type(child.get('exit')) is not int or child['exit'] != cexit:
             issues.append('CLIENT_EXIT_WRONG:' + name)
         if child.get('open_error') != oerr or (oerr is not None and type(child.get('open_error')) is not int):
@@ -202,10 +293,22 @@ def evaluate(report) -> tuple[str, list[str]]:
             if srv.get('sent') is not (verdict == 'PEER_OK'):
                 issues.append('SERVER_SENT_WRONG:' + name)
         else:
-            if type(srv.get('exit')) is not int or srv['exit'] != sexp:
+            code, denial = sexp
+            if type(srv.get('exit')) is not int or srv['exit'] != code:
                 issues.append('CPP_SERVER_EXIT_WRONG:' + name)
+            got = srv.get('denial')
+            if denial is None:
+                if got is not None:
+                    issues.append('CPP_UNEXPECTED_DENIAL:' + name)
+            elif not isinstance(got, dict) or any(got.get(k) != v for k, v in denial.items()) \
+                    or type(got.get('rid')) is not int or got['rid'] < MEDIUM_RID \
+                    or type(got.get('level')) is not int or got['level'] < 1:
+                issues.append('CPP_DENIAL_NOT_ATTRIBUTED:' + name)
     cleanup = report.get('cleanup') if isinstance(report.get('cleanup'), dict) else {}
-    if cleanup.get('appcontainer_profile') != 'deleted':
+    want = {'appcontainer_profile': 'deleted', 'workdir': 'deleted'}
+    if report.get('mode') == 'standard_account':
+        want.update(account='deleted', batch_logon_right='removed', workroot='deleted')
+    if any(cleanup.get(k) != v for k, v in want.items()):
         issues.append('CLEANUP_INCOMPLETE')
     return ('PRINCIPAL_MATRIX_OK' if not issues else 'BLOCKED'), issues
 
@@ -241,7 +344,8 @@ def summary_lines(report) -> list[str]:
         out.append(f"CASE {name}: rid={rid:#x} " if type(rid) is int else f"CASE {name}: rid=None ")
         out[-1] += (f"appc={f.get('appcontainer')} restricted={f.get('restricted')} "
                     f"client_exit={child.get('exit')} open_error={child.get('open_error')} "
-                    f"t={child.get('elapsed_s')}s server={server} error={c.get('error')}")
+                    f"t={child.get('elapsed_s')}s inherit={child.get('inherit')} server={server} "
+                    f"denial={srv.get('denial')} error={c.get('error')}")
     return out
 
 
@@ -335,6 +439,8 @@ SE_GROUP_INTEGRITY, SE_GROUP_INTEGRITY_ENABLED = 0x20, 0x40
 CREATE_SUSPENDED, CREATE_NO_WINDOW, EXTENDED_STARTUPINFO_PRESENT = 0x4, 0x08000000, 0x80000
 STARTF_USESTDHANDLES = 0x100
 PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES = 0x00020009
+PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x00020002
+ADMINISTRATORS_SID = 'S-1-5-32-544'
 WAIT_OBJECT_0 = 0
 HRESULT_ALREADY_EXISTS = -2147024713          # HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS) = 0x800700B7
 
@@ -391,9 +497,22 @@ class Win:
         return tok
 
     def own_facts(self) -> dict:
+        """Token facts plus ``administrators_member``: BUILTIN\\Administrators
+        enabled and not deny-only (a UAC-filtered token counts as NOT a member)."""
+        c = self.ctypes
         tok = self.process_token(self.api['GetCurrentProcess']())
         try:
-            return self.token_facts(tok)
+            facts = self.token_facts(tok)
+            gbuf = self.token_info(tok, TokenGroups)
+            count = c.c_uint32.from_buffer(gbuf, 0).value
+            arr = c.cast(c.addressof(gbuf) + c.sizeof(c.c_void_p), c.POINTER(self.t['SID_AND_ATTRIBUTES']))
+            member = False
+            for i in range(count):
+                if self.sid_text(arr[i].Sid) == ADMINISTRATORS_SID:
+                    a = arr[i].Attributes
+                    member = bool(a & SE_GROUP_ENABLED) and not a & SE_GROUP_USE_FOR_DENY_ONLY
+            facts['administrators_member'] = member
+            return facts
         finally:
             self.api['CloseHandle'](tok)
 
@@ -476,41 +595,49 @@ class Win:
         os.set_handle_inheritable(hw, True)
         cmd = c.create_unicode_buffer(subprocess.list2cmdline(argv))
         pi = self.t['PROCESS_INFORMATION']()
-        flags = CREATE_SUSPENDED | CREATE_NO_WINDOW
+        flags = CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT
         token = None
         attr = None
+        # W25.1: bInheritHandles=TRUE would hand EVERY inheritable handle of this
+        # process to a sandboxed child. PROC_THREAD_ATTRIBUTE_HANDLE_LIST limits
+        # inheritance to exactly the stdout/stderr pipe (Microsoft Learn,
+        # UpdateProcThreadAttribute; same pattern as CPython subprocess/Go).
+        handles = (self.w.HANDLE * 1)(hw)
         try:
+            n_attr = 2 if principal == 'appcontainer' else 1
+            siex = self.t['STARTUPINFOEXW']()
+            si = siex.StartupInfo
+            si.cb = c.sizeof(siex)
+            si.dwFlags = STARTF_USESTDHANDLES
+            si.hStdOutput = si.hStdError = hw
+            size = c.c_size_t(0)
+            api['InitializeProcThreadAttributeList'](None, n_attr, 0, c.byref(size))
+            attr = c.create_string_buffer(size.value)
+            self.check(api['InitializeProcThreadAttributeList'](attr, n_attr, 0, c.byref(size)),
+                       'InitializeProcThreadAttributeList')
+            self.check(api['UpdateProcThreadAttribute'](attr, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, handles,
+                                                        c.sizeof(handles), None, None),
+                       'UpdateProcThreadAttribute(HANDLE_LIST)')
             if principal == 'appcontainer':
-                siex = self.t['STARTUPINFOEXW']()
-                si = siex.StartupInfo
-                si.cb = c.sizeof(siex)
-                size = c.c_size_t(0)
-                api['InitializeProcThreadAttributeList'](None, 1, 0, c.byref(size))
-                attr = c.create_string_buffer(size.value)
-                self.check(api['InitializeProcThreadAttributeList'](attr, 1, 0, c.byref(size)),
-                           'InitializeProcThreadAttributeList')
                 caps = self.t['SECURITY_CAPABILITIES']()
                 caps.AppContainerSid, caps.Capabilities, caps.CapabilityCount = ac_psid, None, 0
                 self._caps = caps
                 self.check(api['UpdateProcThreadAttribute'](attr, 0, PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
                                                             c.byref(caps), c.sizeof(caps), None, None),
-                           'UpdateProcThreadAttribute')
-                siex.lpAttributeList = c.addressof(attr)
-                si.dwFlags = STARTF_USESTDHANDLES
-                si.hStdOutput = si.hStdError = hw
-                siex.StartupInfo = si
-                ok = api['CreateProcessW'](argv[0], cmd, None, None, True, flags | EXTENDED_STARTUPINFO_PRESENT,
-                                           None, cwd, c.byref(siex), c.byref(pi))
+                           'UpdateProcThreadAttribute(SECURITY_CAPABILITIES)')
+            siex.lpAttributeList = c.addressof(attr)
+            if principal == 'appcontainer':
+                ok = api['CreateProcessW'](argv[0], cmd, None, None, True, flags, None, cwd,
+                                           c.byref(siex), c.byref(pi))
                 self.check(ok, 'CreateProcessW(AppContainer)')
             else:
                 token = self.primary_token(principal)
-                si = self.t['STARTUPINFOW']()
-                si.cb = c.sizeof(si)
-                si.dwFlags = STARTF_USESTDHANDLES
-                si.hStdOutput = si.hStdError = hw
                 ok = api['CreateProcessAsUserW'](token, argv[0], cmd, None, None, True, flags, None, cwd,
-                                                 c.byref(si), c.byref(pi))
+                                                 c.byref(siex), c.byref(pi))
                 self.check(ok, 'CreateProcessAsUserW(' + principal + ')')
+        except BaseException:
+            os.close(rfd)                      # no reader thread will own it
+            raise
         finally:
             os.close(wfd)
             if token is not None:
@@ -545,7 +672,7 @@ class Win:
         reader.join(10)
         text = chunks[0] if chunks else ''
         return {'exit': None if killed else int(code.value), 'elapsed_s': round(elapsed, 3), 'facts': facts,
-                'stderr': text[-400:], 'open_error': parse_open_error(text)}
+                'stderr': text[-400:], 'open_error': parse_open_error(text), 'inherit': INHERIT}
 
 
 def _read_all(fd: int) -> str:
@@ -562,21 +689,28 @@ def _read_all(fd: int) -> str:
 
 
 @contextlib.contextmanager
-def _control_sd(wp):
-    """Layer 2 only: OneShotPipeServer builds its SD from wp.build_sddl."""
+def _sd_kind(wp, kind: str):
+    """Harness only: OneShotPipeServer builds its SD from wp.build_sddl."""
+    if kind == 'production':
+        yield
+        return
     real = wp.build_sddl
-    wp.build_sddl = lambda sid: control_sddl(real(sid))
+    wp.build_sddl = lambda sid: sd_variant(real(sid), kind)
     try:
         yield
     finally:
         wp.build_sddl = real
 
 
-def _load_crossrun():
-    spec = importlib.util.spec_from_file_location('w18_cpp_crossrun', REPO / 'tools' / 'w18_cpp_crossrun.py')
+def _load_tool(name: str):
+    spec = importlib.util.spec_from_file_location(name, REPO / 'tools' / (name + '.py'))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def _sha256(path) -> str:
+    return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
 
 
 def run_case(win: Win, wp, crossrun, name: str, client: str, probe: str, ac_psid) -> dict:
@@ -586,9 +720,8 @@ def run_case(win: Win, wp, crossrun, name: str, client: str, probe: str, ac_psid
     argv = [client, '--budget-ms', str(CLIENT_BUDGET_MS)]
     cwd = str(pathlib.Path(client).parent)
     if server == 'python':
-        ctx = _control_sd(wp) if sd == 'control' else contextlib.nullcontext()
         box = {}
-        with ctx, wp.OneShotPipeServer(wp.DEFAULT_PIPE_NAME) as srv:
+        with _sd_kind(wp, sd), wp.OneShotPipeServer(wp.DEFAULT_PIPE_NAME) as srv:
             case['server_sddl'] = srv.sddl
             t = threading.Thread(target=lambda: box.setdefault(
                 'r', srv.serve(REFUSED_SERVER_S if refused else SERVE_S)), daemon=True)
@@ -601,12 +734,21 @@ def run_case(win: Win, wp, crossrun, name: str, client: str, probe: str, ac_psid
             'sent': r.response_sent, 'winerror': r.winerror}
     else:
         budget = CPP_REFUSED_BUDGET_MS if refused else 10000
-        proc = subprocess.Popen([probe, '--budget-ms', str(budget)], stdin=subprocess.DEVNULL)
+        proc = subprocess.Popen([probe, '--budget-ms', str(budget)], stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         try:
             if not crossrun._wait_for_pipe(wp, time.monotonic() + 20):
                 raise RuntimeError('CPP_SERVER_PIPE_NOT_CREATED')
             case['child'] = win.launch(argv, principal, ac_psid, cwd)
-            case['server_result'] = {'exit': crossrun._stop(proc)}
+            try:
+                _, err = proc.communicate(timeout=crossrun.TIMEOUT_S)
+                code = proc.returncode
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                _, err = proc.communicate()
+                code = None
+            text = err.decode('utf-8', 'replace')
+            case['server_result'] = {'exit': code, 'denial': parse_probe_denial(text), 'stderr': text[-300:]}
         finally:
             if proc.poll() is None:
                 proc.kill()
@@ -614,30 +756,38 @@ def run_case(win: Win, wp, crossrun, name: str, client: str, probe: str, ac_psid
     return case
 
 
-def orchestrate(repo: pathlib.Path) -> dict:
-    sys.path.insert(0, str(repo))
+def _new_report(mode: str) -> dict:
+    return {'tool': 'w25_principal_matrix', 'release_authorized': False, 'mode': mode, 'cases': {},
+            'cleanup': {}, 'host': {'platform': sys.platform, 'python': sys.version.split()[0],
+                                    'windows': '.'.join(map(str, sys.getwindowsversion()[:3]))}}
+
+
+def run_matrix(report: dict, binaries: pathlib.Path, work_parent: str | None = None) -> dict:
+    """Runs all EXPECTED cases as the CURRENT user (admin or standard account).
+    The built binaries are copied into a private work directory of this user
+    (it must own it to grant the AppContainer SID read access); their hashes are
+    compared with the build by evaluate()."""
+    sys.path.insert(0, str(REPO))
     from udx_ref import windows_pipe as wp
-    crossrun = _load_crossrun()
+    crossrun = _load_tool('w18_cpp_crossrun')
     win = Win()
-    report = {'tool': 'w25_principal_matrix', 'release_authorized': False, 'cases': {}, 'cleanup': {},
-              'host': {'platform': sys.platform, 'python': sys.version.split()[0],
-                       'windows': '.'.join(map(str, sys.getwindowsversion()[:3]))}}
+    import shutil
     parent = win.own_facts()
     report['parent'] = parent
     prod = wp.build_sddl(parent['user_sid'])
-    report['sddl'] = {'production': prod, 'control': control_sddl(prod)}
+    report['sddl'] = {kind: sd_variant(prod, kind) for kind in SD_KINDS}
     ac_name = AC_NAME_PREFIX + uuid.uuid4().hex[:12]
     ac_psid = None
-    work = pathlib.Path(tempfile.mkdtemp(prefix='udx_w25_'))
+    work = pathlib.Path(tempfile.mkdtemp(prefix='udx_w25_', dir=work_parent))
     try:
-        report['build'] = crossrun.build(repo, work)
-        if 'error' in report['build']:
-            report['error'] = 'BUILD_FAILED'
-            return report
+        bins = report.setdefault('binaries', {})
+        for key, exe in (('client', 'udx_sid_client.exe'), ('probe', 'udx_sid_probe.exe')):
+            shutil.copyfile(binaries / exe, work / exe)
+            bins.setdefault(key, {})['used'] = _sha256(work / exe)
         ac_psid, ac_text, created = win.appcontainer_profile(ac_name)
         report['appcontainer'] = {'name': ac_name, 'sid': ac_text, 'created': created}
         # The AppContainer child must be able to load its image: grant its SID RX
-        # on the throwaway build directory only.
+        # on this private work directory only (deleted below).
         g = subprocess.run(['icacls', str(work), '/grant', f'*{ac_text}:(OI)(CI)RX'], stdin=subprocess.DEVNULL,
                            capture_output=True, text=True, timeout=60)
         report['appcontainer']['dir_grant_exit'] = g.returncode
@@ -654,27 +804,158 @@ def orchestrate(repo: pathlib.Path) -> dict:
             win.api['FreeSid'](ac_psid)
             hr = win.api['DeleteAppContainerProfile'](ac_name)
             report['cleanup']['appcontainer_profile'] = 'deleted' if hr == 0 else f'hr={hr & 0xFFFFFFFF:#x}'
+        shutil.rmtree(work, ignore_errors=True)
+        report['cleanup']['workdir'] = 'deleted' if not work.exists() else 'LEFT_BEHIND'
     return report
+
+
+def _build(report: dict, out: pathlib.Path) -> bool:
+    build = _load_tool('w18_cpp_crossrun').build(REPO, out)
+    report['build'] = build
+    if 'error' in build:
+        report['error'] = 'BUILD_FAILED'
+        return False
+    report['binaries'] = {key: {'built': build['binaries'][key]['sha256']} for key in ('client', 'probe')}
+    return True
+
+
+def orchestrate_admin() -> dict:
+    import shutil
+    report = _new_report('elevated_admin')
+    out = pathlib.Path(tempfile.mkdtemp(prefix='udx_w25_build_'))
+    try:
+        if _build(report, out):
+            run_matrix(report, out)
+    finally:
+        shutil.rmtree(out, ignore_errors=True)
+    return report
+
+
+# --- standard-account mode (W25.1; reuses the W20 account and task machinery) ---
+WORKROOT = pathlib.Path(r'C:\udx_w25')
+STD_USER = 'udxw25s'
+STD_TIMEOUT_S = 420.0
+CHILD_FILES = ('tools/w25_principal_matrix.py', 'tools/w18_cpp_crossrun.py')
+
+
+def orchestrate_standard() -> dict:
+    """Elevated orchestrator: build, create a throwaway Users-only account, run the
+    whole matrix AS that account (scheduled task, batch logon), delete it."""
+    import shutil
+    w20 = _load_tool('w20_account_matrix')
+    report = _new_report('standard_account')
+    lsa, netuser = w20._Lsa(), w20._NetUser()
+    password = w20._password()
+    created = sid = None
+    task = None
+    try:
+        if WORKROOT.exists():
+            shutil.rmtree(WORKROOT)
+        WORKROOT.mkdir()
+        w20._lock_dir(WORKROOT, None, 'RX')
+        if not _build(report, WORKROOT / 'bin'):
+            return report
+        # The child runs from a read-only copy of exactly the files it imports.
+        repo = WORKROOT / 'repo'
+        shutil.copytree(REPO / 'udx_ref', repo / 'udx_ref', ignore=shutil.ignore_patterns('__pycache__'))
+        for rel in CHILD_FILES:
+            (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(REPO / rel, repo / rel)
+        report['child_sources'] = {rel: _sha256(repo / rel) for rel in CHILD_FILES}
+        netuser.add(STD_USER, password)
+        created = True
+        sid = w20._account_sid(STD_USER)
+        report['account'] = {'name': STD_USER, 'sid': sid}
+        lsa.add(sid)
+        outdir = WORKROOT / 'out'
+        w20._lock_dir(outdir, STD_USER, 'M')
+        result = outdir / 'matrix.json'
+        task = 'UDX_W25_' + uuid.uuid4().hex[:8]
+        argv = [sys.executable, '-I', str(repo / 'tools' / 'w25_principal_matrix.py'), '--child-matrix',
+                '--bin', str(WORKROOT / 'bin'), '--work', str(outdir), '--output', str(result)]
+        cmd = WORKROOT / 'bin' / (task + '.cmd')
+        cmd.write_text('@echo off\r\n' + subprocess.list2cmdline(argv) + ' > "%s" 2>&1\r\n'
+                       % (outdir / 'child.log'), encoding='utf-8')
+        xml = WORKROOT / 'bin' / (task + '.xml')
+        xml.write_text(w20._TASK_XML.format(user=STD_USER, command=str(cmd)), encoding='utf-16')
+        script = ('$pw = [Console]::In.ReadLine(); '
+                  'Register-ScheduledTask -TaskName $env:UDX_TN -Xml (Get-Content -Raw $env:UDX_XML) '
+                  '-User $env:UDX_USER -Password $pw -Force | Out-Null')
+        r = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
+                           input=password + '\n', capture_output=True, text=True, timeout=120,
+                           env=dict(os.environ, UDX_TN=task, UDX_XML=str(xml), UDX_USER=STD_USER))
+        if r.returncode != 0:
+            raise RuntimeError('TASK_REGISTER_FAILED: ' + (r.stdout + r.stderr).replace(password, '***')[-400:])
+        r = w20._run(['schtasks', '/Run', '/TN', task])
+        if r.returncode != 0:
+            raise RuntimeError('SCHTASKS_RUN_FAILED: ' + (r.stdout + r.stderr)[-400:])
+        child = w20._wait_json(result, STD_TIMEOUT_S)
+        # The child's own findings; orchestration facts stay authoritative.
+        for key in ('parent', 'sddl', 'appcontainer', 'cases', 'host', 'error'):
+            if key in child:
+                report[key] = child[key]
+        for key, val in (child.get('binaries') or {}).items():
+            if isinstance(val, dict) and key in report['binaries']:
+                report['binaries'][key]['used'] = val.get('used')
+        report['cleanup'].update(child.get('cleanup') or {})
+    except Exception as exc:
+        report['error'] = f'{type(exc).__name__}: {exc}'[:300].replace(password, '***')
+    finally:
+        if task:
+            w20._run(['schtasks', '/End', '/TN', task])
+            w20._run(['schtasks', '/Delete', '/TN', task, '/F'])
+        if sid:
+            try:
+                lsa.remove(sid)
+                report['cleanup']['batch_logon_right'] = 'removed'
+            except OSError as exc:
+                report['cleanup']['batch_logon_right'] = 'REMOVE_FAILED:%s' % exc.errno
+        if created:
+            report['cleanup']['account'] = 'deleted' if netuser.delete(STD_USER) == 0 else 'DELETE_FAILED'
+        shutil.rmtree(WORKROOT, ignore_errors=True)
+        report['cleanup']['workroot'] = 'deleted' if not WORKROOT.exists() else 'LEFT_BEHIND'
+    return report
+
+
+def child_matrix(args) -> int:
+    """Runs as the throwaway standard account; writes its report atomically."""
+    report = _new_report('standard_account')
+    try:
+        run_matrix(report, pathlib.Path(args.bin), args.work)
+    except Exception as exc:
+        report['error'] = f'{type(exc).__name__}: {exc}'[:300]
+    target = pathlib.Path(args.output)
+    tmp = target.with_suffix('.tmp')
+    tmp.write_text(json.dumps(report, sort_keys=True), encoding='utf-8')
+    os.replace(tmp, target)
+    return 0
 
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description='UDX W25 principal matrix (research only)')
     p.add_argument('--output', required=True)
+    p.add_argument('--mode', choices=MODES, default='elevated_admin')
     p.add_argument('--evaluate', action='store_true', help='only evaluate an existing report (portable)')
+    p.add_argument('--child-matrix', action='store_true', help=argparse.SUPPRESS)
+    p.add_argument('--bin', help=argparse.SUPPRESS)
+    p.add_argument('--work', help=argparse.SUPPRESS)
     args = p.parse_args(argv)
+    if args.child_matrix:
+        return child_matrix(args)
     if args.evaluate:
         report = json.loads(pathlib.Path(args.output).read_text(encoding='utf-8'))
     else:
         if sys.platform != 'win32':
             print(json.dumps({'verdict': 'BLOCKED', 'issues': ['NOT_WINDOWS']}))
             return 2
-        report = orchestrate(REPO)
+        report = orchestrate_admin() if args.mode == 'elevated_admin' else orchestrate_standard()
     verdict, issues = evaluate(report)
     report['verdict'], report['issues'] = verdict, issues
     text = json.dumps(report, indent=1, sort_keys=True)
     if not args.evaluate:
         pathlib.Path(args.output).write_text(text, encoding='utf-8')
         report['report_sha256'] = hashlib.sha256(text.encode('utf-8')).hexdigest()
+    print(f"MODE {report.get('mode')} parent={report.get('parent')}")
     for line in summary_lines(report):
         print(line)
     print(json.dumps({'verdict': verdict, 'issues': issues, 'report_sha256': report.get('report_sha256')}))
