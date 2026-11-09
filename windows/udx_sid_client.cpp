@@ -10,6 +10,7 @@
 //    deadline (udx_bounded_pipe_io.hpp), like the Python port client_ping. A
 //    silent or hanging server can no longer block this client indefinitely.
 // Usage: udx_sid_client.exe [--budget-ms N]   (100..300000, default 10000)
+// W25: a failed open prints "UDX_CLIENT_OPEN_ERROR <win32 error>" to stderr.
 // Exit: 0 PEER_OK, 1 open failed (or pipe absent/busy until the deadline),
 // 2 write failed, 3 bad/short response, 4 owner query failed, 5 owner mismatch,
 // 6 own SID, 22 deadline passed, 24 bad arguments, 31 cancelled I/O did not settle.
@@ -61,7 +62,13 @@ int wmain(int argc, wchar_t** argv) {
         pipe = CreateFileW(name, access, 0, nullptr, OPEN_EXISTING, flags, nullptr);
         if (pipe != INVALID_HANDLE_VALUE) break;
         const DWORD err = GetLastError();
-        if ((err != ERROR_FILE_NOT_FOUND && err != ERROR_PIPE_BUSY) || deadline.expired()) return 1;
+        if ((err != ERROR_FILE_NOT_FOUND && err != ERROR_PIPE_BUSY) || deadline.expired()) {
+            // W25: the Win32 reason of a failed open, so a harness can tell
+            // ERROR_ACCESS_DENIED (DACL / mandatory label) from an absent pipe.
+            // One line on stderr only; the exit code contract is unchanged.
+            fwprintf(stderr, L"UDX_CLIENT_OPEN_ERROR %lu\n", err);
+            return 1;
+        }
         const DWORD left = deadline.remaining_ms();
         Sleep(left < 20 ? left : 20);
     }

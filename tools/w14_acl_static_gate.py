@@ -23,7 +23,7 @@ EXPECTED_HEAD = '26309e997fea1ac90edba8a51e457fd494cac978'
 PINNED_SOURCE_SHA256 = {
     'udx_ref/windows_pipe.py': 'cca92b5308ed9bf49da3302e10bec7bc32c9939ca6a6dea17307d95a95f520aa',
     'windows/udx_sid_probe.cpp': '7b70f0c2f404320c75f5566e9f7d80c6dca3f8ad7861c2148b9c99c1fc8e84bc',
-    'windows/udx_sid_client.cpp': '06de216ae6a8970ac94b516ebe5a12357f6b58106d52c952451a55e526575007',
+    'windows/udx_sid_client.cpp': '4b6208a22aa1866e4ee24d045dc4f01f8d1c95da69c193b35237c1ca8b7a6527',
     # W24: bounded overlapped I/O shared by both C++ sources.
     'windows/udx_bounded_pipe_io.hpp': '1c5ea2c957aea96b5003a9e3d4c060cdd3247892e17755e7cac7447cd64bfa7c',
 }
