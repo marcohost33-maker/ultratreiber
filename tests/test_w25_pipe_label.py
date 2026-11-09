@@ -94,7 +94,13 @@ class PipeLabelCheck(unittest.TestCase):
         self.assertTrue(api.ConvertStringSidToSidW('S-1-5-12', ctypes.byref(restricted_sid)))
         restrict = wp.SID_AND_ATTRIBUTES(restricted_sid, 0)
         try:
-            self.assertTrue(api.CreateRestrictedToken(proc, 0, 0, None, 0, None, 1, ctypes.byref(restrict),
+            # DISABLE_MAX_PRIVILEGE (0x1): without it the restricted token keeps the
+            # parent's privileges, and an enabled SeDebugPrivilege (elevated hosted
+            # runner) makes OpenProcess succeed "regardless of the contents of the
+            # security descriptor" (Microsoft Learn, OpenProcess). Observed in CI run
+            # 42661852195: (True, 0). The pinned fact is the DACL boundary; a real
+            # restricted sandbox token carries no such privileges either.
+            self.assertTrue(api.CreateRestrictedToken(proc, 0x1, 0, None, 0, None, 1, ctypes.byref(restrict),
                                                       ctypes.byref(rtok)))
             self.assertTrue(api.DuplicateTokenEx(rtok, wp.TOKEN_QUERY | wp.TOKEN_IMPERSONATE, None,
                                                  wp.SecurityImpersonation, wp.TokenImpersonation,
