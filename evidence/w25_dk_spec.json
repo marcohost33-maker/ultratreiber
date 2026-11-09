@@ -105,6 +105,48 @@
    "alt": "            fwprintf(stderr, L\"UDX_PROBE_DENIED facts=unavailable\\n\");",
    "neu": "            ;",
    "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_cpp_probe_prints_the_denial_facts"
+  },
+  {
+   "name": "W25.2-DK15 C++-Client ohne Label-Pruefung (Low-IL-Squatter desselben Benutzers wird akzeptiert)",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "    if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID) {",
+   "neu": "    if (false) {",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_cpp_client_checks_the_label_before_writing"
+  },
+  {
+   "name": "W25.2-DK16 Python-Client prueft das Label nicht mehr vor dem Schreiben",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "            reason, err, label = _verify_pipe_label(api, h)\n",
+   "neu": "            reason, err, label = None, 0, None\n",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_python_client_checks_the_label_before_writing"
+  },
+  {
+   "name": "W25.2-DK17 Python-Label-Regel akzeptiert fehlendes oder niedriges Label",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if rid is None or rid < SECURITY_MANDATORY_MEDIUM_RID:",
+   "neu": "    if False:",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_python_client_checks_the_label_before_writing"
+  },
+  {
+   "name": "W25.2-DK18 Standardkonto-Squat: Owner-Pruefung statt Label-Pruefung wuerde genuegen",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if cpp.get('exit') != EXIT_PIPE_LABEL:",
+   "neu": "        if cpp.get('exit') not in (EXIT_PIPE_LABEL, EXIT_OWNER_MISMATCH):",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_standard_mode_needs_the_label_check_not_the_owner_check"
+  },
+  {
+   "name": "W25.2-DK19 Squatter-Empfang nicht geprueft",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if type(rep_.get('received')) is not int or rep_['received'] != 0:",
+   "neu": "    if False:",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_client_that_accepts_the_squatter_blocks"
+  },
+  {
+   "name": "W25.2-DK20 Privileg-Verweigerung beim Medium-Label nicht verlangt",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if rep_.get('created') is not False or rep_.get('create_error') != ERROR_PRIVILEGE_NOT_HELD:",
+   "neu": "        if False:",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_kernel_low_label_and_privilege_refusal_are_pinned"
   }
  ]
 }
