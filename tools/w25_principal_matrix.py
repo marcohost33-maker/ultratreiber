@@ -85,7 +85,12 @@ INHERIT = 'handle_list:1'       # W25.1: the child inherits exactly its stdout/s
 # the other three exist to ATTRIBUTE a refusal to one mechanism (factorial):
 #   control     +AC ACE and Low label      -> the server's own token check is reached
 #   label_only  Low label, no AC ACE       -> only the DACL can refuse an AppContainer
-#   acace_only  +AC ACE, Medium label kept -> only the mandatory label can refuse it
+#   acace_only  +AC ACE, Medium label kept -> does the label alone stop an AppContainer?
+#               Measured (CI run 42593419596): NO. For a lowbox token the kernel
+#               treats the integrity check as passed when the object label is
+#               <= Medium and relies on the AppContainer DACL check (Forshaw,
+#               Windows Security Internals, lowbox access check). The W25.1
+#               hypothesis "each mechanism alone suffices" was falsified.
 SD_KINDS = ('production', 'control', 'label_only', 'acace_only')
 
 # name: (server, sd, principal, client_exit, open_error, server expectation)
@@ -106,15 +111,17 @@ EXPECTED = {
                          ('DENIED', 'INTEGRITY_TOO_LOW', True)),
     # W25.1 attribution: the Low label alone admits Low IL (so the label was the
     # only reason for the production refusal), but an AppContainer is still
-    # refused by the DACL; with the AC ACE but the Medium label, the label alone
-    # refuses the AppContainer. Each mechanism alone suffices for AppContainer.
+    # refused by the DACL. With the AC ACE and the Medium label kept, the
+    # AppContainer OPENS the pipe: the label is no barrier for a lowbox token, the
+    # missing AC/package ACE is the only one. The server's integrity check then
+    # refuses it (the last line of defense for that case).
     'lbl_low_il':      ('python', 'label_only', 'low_il', EXIT_BAD_RESPONSE, None,
                         ('DENIED', 'INTEGRITY_TOO_LOW', True)),
     'lbl_appcontainer': ('python', 'label_only', 'appcontainer', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
                          ('DENIED', 'CONNECT_TIMEOUT', False)),
     'ace_same_token':  ('python', 'acace_only', 'same_token', EXIT_OK, None, ('PEER_OK', 'OK', True)),
-    'ace_appcontainer': ('python', 'acace_only', 'appcontainer', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
-                         ('DENIED', 'CONNECT_TIMEOUT', False)),
+    'ace_appcontainer': ('python', 'acace_only', 'appcontainer', EXIT_BAD_RESPONSE, None,
+                         ('DENIED', 'INTEGRITY_TOO_LOW', True)),
     'cpp_same_token':  ('cpp', 'production', 'same_token', EXIT_OK, None, (EXIT_OK, None)),
     'cpp_low_il':      ('cpp', 'production', 'low_il', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
                         (EXIT_TIMEOUT, None)),
@@ -853,6 +860,7 @@ def orchestrate_standard() -> dict:
             shutil.rmtree(WORKROOT)
         WORKROOT.mkdir()
         w20._lock_dir(WORKROOT, None, 'RX')
+        (WORKROOT / 'bin').mkdir()                 # cl /Fo needs the directory
         if not _build(report, WORKROOT / 'bin'):
             return report
         # The child runs from a read-only copy of exactly the files it imports.

@@ -261,7 +261,10 @@ class HardeningW251(unittest.TestCase):
     def test_attribution_cases_exist(self):
         self.assertEqual(tool.EXPECTED['lbl_low_il'][1:5], ('label_only', 'low_il', 3, None))
         self.assertEqual(tool.EXPECTED['lbl_appcontainer'][1:5], ('label_only', 'appcontainer', 1, 5))
-        self.assertEqual(tool.EXPECTED['ace_appcontainer'][1:5], ('acace_only', 'appcontainer', 1, 5))
+        # Falsified hypothesis (CI run 42593419596): the Medium label does NOT stop
+        # a lowbox token once the DACL grants AC; the server check has to.
+        self.assertEqual(tool.EXPECTED['ace_appcontainer'][1:6],
+                         ('acace_only', 'appcontainer', 3, None, ('DENIED', 'INTEGRITY_TOO_LOW', True)))
         self.assertEqual(tool.EXPECTED['ace_same_token'][3], 0)
 
     def test_sd_variants_differ_by_exactly_one_mechanism(self):
