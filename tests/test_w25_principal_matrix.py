@@ -337,6 +337,20 @@ class HardeningW251(unittest.TestCase):
         self.assertEqual(launch.count('c.byref(siex), c.byref(pi)'), 2)
 
 
+class DiscriminationSpec(unittest.TestCase):
+    def test_every_mutation_anchor_exists_exactly_once(self):
+        # A stale anchor silently drops a mutation (found in W25.1: DK8 after the
+        # cleanup rewrite). Each 'alt' must occur once and name an existing test.
+        spec = json.loads((ROOT / 'evidence' / 'w25_dk_spec.json').read_text(encoding='utf-8'))
+        self.assertGreaterEqual(len(spec['faelle']), 14)
+        for f in spec['faelle']:
+            src = (ROOT / f['datei']).read_text(encoding='utf-8')
+            self.assertEqual(src.count(f['alt']), 1, f['name'])
+            path, cls, meth = f['test'].split('::')
+            self.assertIn('def %s(' % meth, (ROOT / path).read_text(encoding='utf-8'), f['name'])
+            self.assertIn('class %s(' % cls, (ROOT / path).read_text(encoding='utf-8'), f['name'])
+
+
 class Summary(unittest.TestCase):
     def test_one_line_per_case_without_failing_on_junk(self):
         lines = tool.summary_lines(good_report())

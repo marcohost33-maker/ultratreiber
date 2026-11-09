@@ -101,7 +101,8 @@ erhöhter eingebauter Administrator ist.
    SD lehnt der Python-Server Low IL und AppContainer mit `INTEGRITY_TOO_LOW` ab, und
    zwar erst *nachdem* er den Benutzer korrekt identifiziert hat. Den Restricted-Token
    lehnen Python (`RESTRICTED_TOKEN`) und C++ (Exit 20) mit der Produktions-SD ab.
-3. **Designfakt:** Ein Standard-AppContainer-Token ist immer Low IL. Weil der Server die
+3. **Designfakt:** Ein Standard-AppContainer-Token ist immer Low IL (Microsoft Learn,
+   CreateProcessInSandbox: bei AppContainer ist die Integrität immer Low). Weil der Server die
    Integrität zuerst prüft, erreicht ein solcher Client die `APPCONTAINER_CLIENT`-Prüfung
    nie. Sie ist Defense in Depth und bleibt nur durch Fault Injection belegt.
    Konsequenz: Ein künftiger Broker für AppContainer-Clients müsste die Integritätsregel
@@ -111,10 +112,68 @@ erhöhter eingebauter Administrator ist.
    Menge den Benutzer enthält. Die Server-Prüfung ist hier die einzige Schicht. Sie ist
    damit nativ belegt.
 
+## W25.1 – kritische Nachprüfung und Härtung (2026-11-09)
+
+Eine Selbstprüfung der W25-Lieferung fand fünf Lücken. Alle sind geschlossen und nativ
+belegt.
+
+| # | Lücke in W25 | Härtung W25.1 | Prüfung |
+|---|---|---|---|
+| 1 | Kinder erbten jedes vererbbare Handle des Harness (`bInheritHandles=TRUE` ohne Allow-List): ein Sandbox-Test mit potenziell fremden Handles ist methodisch unsauber. | `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` mit genau der stdout/stderr-Pipe, für alle Principals (`STARTUPINFOEX` auch für `CreateProcessAsUserW`). | `inherit == handle_list:1` je Fall |
+| 2 | C++-Exit 20 war unspezifisch: `cpp_restricted` zeigte nicht, welche Prüfung griff. | Der Probe schreibt bei Ablehnung eine stderr-Zeile `UDX_PROBE_DENIED level= rid= appc= restricted= session_ok= sid_ok=`. Die Entscheidungslogik ist unverändert. | `restricted=1` muss der **einzige** fehlschlagende Fakt sein |
+| 3 | Die Ursache der Abweisung beim Öffnen war nicht zugeordnet (Label oder DACL?). | Zwei weitere Harness-SDs (`label_only`, `acace_only`) und vier Fälle. | Server-SD je Fall gleich der deklarierten Variante |
+| 4 | Der Elternprozess war immer der erhöhte Admin (größter Vorbehalt). | `--mode standard_account`: Die ganze Matrix läuft als Wegwerfkonto nur in `Users` (W20-Task-Mechanik). | Elternfakten passen zum Modus (gefiltertes Admin-Token ≠ Standardkonto); Konto, Recht und Arbeitsordner gelöscht |
+| 5 | Das Arbeitsverzeichnis mit der AppContainer-ACE blieb liegen; die Binaries waren nicht an den Build gebunden. | Verzeichnis wird gelöscht; `used`-Hash muss gleich dem `built`-Hash sein. | `cleanup.workdir == deleted`, `BINARY_NOT_THE_BUILT_ONE` |
+
+### Falsifikation (Messung widerlegt eine eigene Hypothese)
+
+W25.1 hatte erwartet: Bei vorhandener AC-ACE und beibehaltenem **Medium**-Label weist das
+Label allein den AppContainer ab (`ace_appcontainer` → Open-Fehler 5). CI-Lauf
+[42593419596](https://github.com/marcohost33-maker/ultratreiber/actions/runs/42593419596)
+zeigte das Gegenteil: Der AppContainer **öffnet** die Pipe trotz `S:(ML;;NWNR;;;ME)`, und
+erst die Integritätsprüfung des Servers lehnt ab (`INTEGRITY_TOO_LOW`). Das entspricht der
+Lowbox-Zugriffsprüfung des Kernels: Ist das Objektlabel ≤ Medium, gilt die
+Integritätsprüfung als bestanden, und die AppContainer-DACL-Prüfung entscheidet (Forshaw,
+*Windows Security Internals*, Kapitel Access Checking / Lowbox). Die Erwartung wurde auf den
+Messwert gesetzt und begründet.
+
+**Konsequenz für den Entwurf:** Für AppContainer-Clients ist die DACL die **einzige**
+OS-Barriere. Eine `AC`- oder Package-SID-ACE in der Pipe-DACL öffnet die Pipe für jeden
+AppContainer, auch bei Medium-Label. Danach bleibt nur die Server-Prüfung. Für Low IL ohne
+AppContainer ist umgekehrt das Label die einzige Barriere (`lbl_low_il` öffnet).
+
+### Nativer Beleg W25.1
+
+CI-Lauf [42593714723](https://github.com/marcohost33-maker/ultratreiber/actions/runs/42593714723),
+Kopf `af1f79a`: **8/8 Jobs grün**.
+
+- Elternprozess erhöhter Admin (`…-500`, High, Admin): 16/16, `PRINCIPAL_MATRIX_OK`,
+  Bericht-SHA-256 `3309a32cc97b941d6fa50829617c5c77dcb45cb396d39a4187e00efe6a8c5af6`.
+- Elternprozess Standardkonto (`…-1003`, Medium, `administrators_member: false`): 16/16,
+  `PRINCIPAL_MATRIX_OK`, Bericht-SHA-256
+  `092fda1dab88aabc7b48bfdd2fe934252478fb176092985ce3282550bbb46c48`. Konto, Batch-Logon-Recht
+  und `C:\udx_w25` danach entfernt.
+
+| Fall (SD) | Principal | Client-Exit / Open-Fehler | Server | Aussage |
+|---|---|---|---|---|
+| `lbl_low_il` (label_only) | Low IL | 3 / – | `INTEGRITY_TOO_LOW` | Das Label war die einzige OS-Barriere für Low IL |
+| `lbl_appcontainer` (label_only) | AppContainer | 1 / 5 | `CONNECT_TIMEOUT` | Die DACL allein weist AppContainer ab |
+| `ace_appcontainer` (acace_only) | AppContainer | 3 / – | `INTEGRITY_TOO_LOW` | Das Medium-Label weist AppContainer **nicht** ab (falsifiziert) |
+| `ace_same_token` (acace_only) | Elterntoken | 0 | `PEER_OK` | Die Kontroll-SD bedient |
+| `cpp_restricted` (production) | restricted | 3 | Exit 20, `restricted=1 appc=0 session_ok=1 sid_ok=1 level=1 rid=Eltern` | Nur das Restricted-Flag lehnte ab |
+
+Die übrigen 11 Fälle verhalten sich in beiden Modi wie in W25. `same_token` und
+`restricted` laufen unter dem Standardkonto mit Medium (0x2000). Jedes Kind lief mit
+`handle_list:1`. Die Client-Laufzeiten lagen bei 8–13 ms.
+
+Absicherung: 46 portable Tests, darunter ein Test, der jeden DK-Anker auf genau ein
+Vorkommen prüft (ein veralteter Anker fiel beim Nachlauf auf). Dazu 14/14 diskriminierende
+Mutationen (`evidence/w25_dk_spec.json`).
+
 ## Grenzen (nicht belegt)
 
-- Gehosteter Runner: Windows Server, erhöhter eingebauter Administrator. Nicht Windows 11,
-  kein Standardkonto als Elternprozess (W20 deckt das Standardkonto für die Python-Lane ab).
+- Gehosteter Runner: Windows Server, nicht Windows 11. Das Standardkonto läuft per
+  Batch-Logon in Session 0, nicht interaktiv.
 - Zweite **interaktive** Sitzung, Dienstkonto, entfernter Host.
 - AppContainer mit Capabilities. Medium-IL-AppContainer-Tokens lassen sich mit den
   Standard-APIs nicht erzeugen.

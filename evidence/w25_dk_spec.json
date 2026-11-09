@@ -1,8 +1,12 @@
 {
  "repo": ".",
- "test_befehl": ["python", "-m", "pytest"],
+ "test_befehl": [
+  "python",
+  "-m",
+  "pytest"
+ ],
  "timeout_s": 120,
- "hinweis": "Portable Diskriminierung des W25-Verdikts (Linux ausfuehrbar). Jede Mutation muss den genannten Test rot machen. Die nativen Laufzeitbelege (echte Low-IL-, AppContainer- und Restricted-Token-Prozesse auf dem Windows-Kernel) stehen im CI-Artefakt udx-w25-principal-matrix-<sha> und als CASE-Zeilen im Job-Log.",
+ "hinweis": "Portable Diskriminierung des W25-Verdikts (Linux ausfuehrbar). Jede Mutation muss den genannten Test rot machen. Die nativen Laufzeitbelege (echte Low-IL-, AppContainer- und Restricted-Token-Prozesse auf dem Windows-Kernel, Eltern = erhoehter Admin UND Standardkonto) stehen im CI-Artefakt udx-w25-principal-matrix-<sha> und als CASE-Zeilen im Job-Log.",
  "faelle": [
   {
    "name": "W25-DK1 Integritaet des Kindes nicht geprueft (Launcher-Fehlgruen moeglich)",
@@ -56,9 +60,51 @@
   {
    "name": "W25-DK8 Aufraeumen des AppContainer-Profils nicht verlangt",
    "datei": "tools/w25_principal_matrix.py",
-   "alt": "    if cleanup.get('appcontainer_profile') != 'deleted':",
+   "alt": "    if any(cleanup.get(k) != v for k, v in want.items()):",
    "neu": "    if False:",
    "test": "tests/test_w25_principal_matrix.py::EvaluatePrincipalMatrix::test_cleanup"
+  },
+  {
+   "name": "W25.1-DK9 Handle-Allow-List nicht verlangt (Sandbox-Kind koennte fremde Handles erben)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if child.get('inherit') != INHERIT:",
+   "neu": "        if False:",
+   "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_child_must_inherit_only_its_pipe"
+  },
+  {
+   "name": "W25.1-DK10 C++-Ablehnung nicht zugeordnet (Exit 20 genuegt wieder)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "            elif not isinstance(got, dict) or any(got.get(k) != v for k, v in denial.items()) \\",
+   "neu": "            elif not isinstance(got, dict) \\",
+   "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_cpp_restricted_denial_must_name_only_the_restricted_flag"
+  },
+  {
+   "name": "W25.1-DK11 Server-SD nicht gegen die deklarierte Variante geprueft (Attribution wertlos)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if server == 'python' and (c.get('server_sddl') is None or c.get('server_sddl') != sddl.get(sd)):",
+   "neu": "        if False:",
+   "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_server_must_have_used_the_declared_sd"
+  },
+  {
+   "name": "W25.1-DK12 Gefiltertes Admin-Token als Standardkonto akzeptiert (W18-Lehre)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if admin is not False or rid != MEDIUM_RID:",
+   "neu": "    if rid != MEDIUM_RID:",
+   "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_mode_must_match_the_parent_facts"
+  },
+  {
+   "name": "W25.1-DK13 Verwendete Binaries nicht gegen den Build gehasht",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if not isinstance(b.get('built'), str) or len(b['built']) != 64 or b.get('used') != b['built']:",
+   "neu": "        if not isinstance(b.get('built'), str) or len(b['built']) != 64:",
+   "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_binaries_must_be_the_built_ones"
+  },
+  {
+   "name": "W25.1-DK14 C++-Probe gibt die Ablehnungsfakten nicht mehr aus",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "            fwprintf(stderr, L\"UDX_PROBE_DENIED facts=unavailable\\n\");",
+   "neu": "            ;",
+   "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_cpp_probe_prints_the_denial_facts"
   }
  ]
 }
