@@ -1,0 +1,64 @@
+{
+ "repo": ".",
+ "test_befehl": ["python", "-m", "pytest"],
+ "timeout_s": 120,
+ "hinweis": "Portable Diskriminierung des W25-Verdikts (Linux ausfuehrbar). Jede Mutation muss den genannten Test rot machen. Die nativen Laufzeitbelege (echte Low-IL-, AppContainer- und Restricted-Token-Prozesse auf dem Windows-Kernel) stehen im CI-Artefakt udx-w25-principal-matrix-<sha> und als CASE-Zeilen im Job-Log.",
+ "faelle": [
+  {
+   "name": "W25-DK1 Integritaet des Kindes nicht geprueft (Launcher-Fehlgruen moeglich)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if type(rid) is not int or rid != want[0]:",
+   "neu": "    if type(rid) is not int:",
+   "test": "tests/test_w25_principal_matrix.py::EvaluatePrincipalMatrix::test_launcher_that_did_not_lower_integrity_blocks"
+  },
+  {
+   "name": "W25-DK2 Open-Fehler nicht verlangt (Exit 1 = auch 'Pipe fehlt')",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if child.get('open_error') != oerr or (oerr is not None and type(child.get('open_error')) is not int):",
+   "neu": "        if False:",
+   "test": "tests/test_w25_principal_matrix.py::EvaluatePrincipalMatrix::test_refusal_must_be_access_denied_at_open"
+  },
+  {
+   "name": "W25-DK3 Server-Identifikation des echten Benutzers nicht verlangt",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "            if identified and (sid is None or srv.get('client_sid') != sid):",
+   "neu": "            if False:",
+   "test": "tests/test_w25_principal_matrix.py::EvaluatePrincipalMatrix::test_server_must_have_identified_the_real_user"
+  },
+  {
+   "name": "W25-DK4 Laufzeitgrenze des Kindes entfernt",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if type(el) not in (int, float) or not math.isfinite(el) or el < 0 or el > CHILD_LIMIT_S:",
+   "neu": "        if type(el) not in (int, float):",
+   "test": "tests/test_w25_principal_matrix.py::EvaluatePrincipalMatrix::test_client_must_end_on_its_own_in_time"
+  },
+  {
+   "name": "W25-DK5 Produktions-SDDL nicht unabhaengig nachgerechnet",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if sid is None or sddl.get('production') != production_sddl(sid):",
+   "neu": "    if sid is None:",
+   "test": "tests/test_w25_principal_matrix.py::ControlSddl::test_evaluate_does_not_trust_a_weakened_production_sd"
+  },
+  {
+   "name": "W25-DK6 Restricted-Flag des Kindes nicht geprueft",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if restricted is not want[2]:",
+   "neu": "    if False:",
+   "test": "tests/test_w25_principal_matrix.py::EvaluatePrincipalMatrix::test_restricted_child_must_be_restricted"
+  },
+  {
+   "name": "W25-DK7 C++-Client meldet den Open-Fehler nicht mehr",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "            fwprintf(stderr, L\"UDX_CLIENT_OPEN_ERROR %lu\\n\", err);\n",
+   "neu": "",
+   "test": "tests/test_w25_principal_matrix.py::OpenErrorLine::test_cpp_client_prints_the_error_before_exit_1"
+  },
+  {
+   "name": "W25-DK8 Aufraeumen des AppContainer-Profils nicht verlangt",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if cleanup.get('appcontainer_profile') != 'deleted':",
+   "neu": "    if False:",
+   "test": "tests/test_w25_principal_matrix.py::EvaluatePrincipalMatrix::test_cleanup"
+  }
+ ]
+}
