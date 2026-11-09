@@ -142,6 +142,7 @@ LABEL_SECURITY_INFORMATION = 0x00000010
 SE_DACL_PROTECTED = 0x1000
 SDDL_REVISION_1 = 1
 ACCESS_ALLOWED_ACE_TYPE = 0
+SYSTEM_MANDATORY_LABEL_ACE_TYPE = 0x11
 
 ERROR_FILE_NOT_FOUND = 2
 ERROR_ACCESS_DENIED = 5
@@ -303,6 +304,7 @@ class ClientResult:
     winerror: int | None = None
     server_pid: int | None = None          # logged only, never a security decision
     pipe_owner: str | None = None
+    pipe_label: int | None = None          # W25.2: mandatory-label RID of the pipe object
 
 
 # --- ctypes binding ---------------------------------------------------------
@@ -981,6 +983,52 @@ def pipe_owner_sid(api, handle):
     return owner, sd, 0
 
 
+def pipe_label_rid(api, handle):
+    """W25.2: mandatory-label RID of the pipe object behind a CLIENT handle.
+
+    Returns (rid, 0), (None, 0) when the SACL holds no or more than one
+    mandatory-label ACE, or (None, rc) when the query failed. Needs only
+    READ_CONTROL, which CLIENT_ACCESS contains."""
+    sacl = ctypes.c_void_p()
+    sd = ctypes.c_void_p()
+    rc = api.GetSecurityInfo(handle, SE_KERNEL_OBJECT, LABEL_SECURITY_INFORMATION,
+                             None, None, None, ctypes.addressof(sacl), ctypes.byref(sd))
+    if rc != 0:
+        return None, rc
+    try:
+        labels = []
+        if sacl.value:
+            header = ACL_HEADER.from_address(sacl.value)
+            for i in range(header.AceCount):
+                p = ctypes.c_void_p()
+                if not api.GetAce(sacl, i, ctypes.byref(p)):
+                    return None, api.last_error()
+                ace = ACCESS_ALLOWED_ACE.from_address(p.value)   # same header/mask/SID layout
+                if ace.AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE:
+                    labels.append(sid_to_text(api, p.value + ACCESS_ALLOWED_ACE.SidStart.offset))
+        if len(labels) != 1 or not re.fullmatch(r'S-1-16-[0-9]{1,10}', labels[0]):
+            return None, 0
+        return int(labels[0][len('S-1-16-'):]), 0
+    finally:
+        if sd.value:
+            api.LocalFree(sd)
+
+
+def _verify_pipe_label(api, handle):
+    """W25.2 decision: the pipe must carry exactly one explicit mandatory label
+    of at least Medium. ADR-UDX-006 makes only same SID AND same integrity level
+    one trust domain; a lower-integrity process of the same user (Low IL) can
+    create a pipe owned by the user, so the owner check alone admits it. Such a
+    process cannot label an object above its own level, so it cannot meet this
+    rule. Every server of this project sets S:(ML;;NWNR;;;ME) explicitly."""
+    rid, rc = pipe_label_rid(api, handle)
+    if rc:
+        return 'PIPE_LABEL_FAILED', rc, None
+    if rid is None or rid < SECURITY_MANDATORY_MEDIUM_RID:
+        return 'PIPE_LABEL_TOO_LOW', 0, rid
+    return None, 0, rid
+
+
 def _verify_pipe_owner(api, handle, expected_bin):
     """Decision: owner of the pipe object == expected SID (Forshaw 2019: the
     server PID must not be relied upon for security decisions)."""
@@ -1013,6 +1061,9 @@ def client_ping(name: str = DEFAULT_PIPE_NAME, *, level: str = 'identification',
     * BEFORE the first write: the pipe object's owner must equal
       ``expected_server_sid`` (default: this process' user SID); otherwise no
       byte is sent and a typed reason is returned. The server PID is logged only.
+    * W25.2, also before the first write: exactly one explicit mandatory label of
+      at least Medium on the pipe (``PIPE_LABEL_TOO_LOW`` / ``PIPE_LABEL_FAILED``);
+      a Low-IL squatter of the same user passes the owner check but not this.
     * write and read run with an absolute deadline (``response_timeout_s``).
     ``send=False`` connects, verifies and stays silent for ``hold_s`` seconds.
     """
@@ -1046,6 +1097,9 @@ def client_ping(name: str = DEFAULT_PIPE_NAME, *, level: str = 'identification',
             reason, err, owner_text = _verify_pipe_owner(api, h, expected_bin)
             if reason is not None:
                 return ClientResult(None, b'', False, reason, err, server_pid, owner_text)
+            reason, err, label = _verify_pipe_label(api, h)
+            if reason is not None:
+                return ClientResult(None, b'', False, reason, err, server_pid, owner_text, label)
             if not send:
                 time.sleep(hold_s)
                 return ClientResult(None, b'', False, 'SILENT_HOLD', None, server_pid, owner_text)

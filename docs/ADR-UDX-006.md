@@ -170,3 +170,29 @@ Tests: `tests/test_w19_same_sid_trust_domain.py`, class `PipeNameOccupied`
   means implementing the design sketch in section 2.
 - The G2 matrix rows that test *other* principals (second account, AppContainer,
   Low IL, service) remain required; this ADR does not replace them.
+
+## Addendum W25.2 (2026-11-09): lower-integrity squatter of the same user
+
+The trust domain is same SID **and** same integrity level. A Low-IL process of the
+same user is therefore outside it, but a client that only compares the pipe owner
+with its own SID would accept a pipe created by such a process. The owner of a
+pipe created by a Low-IL process of the user is that user's SID.
+
+Decision: both clients (`windows/udx_sid_client.cpp`, `udx_ref.windows_pipe.client_ping`)
+also require, before the first byte is written, exactly one explicit mandatory
+label of at least Medium on the pipe object:
+
+- the C++ client exits `7`;
+- the Python client returns `PIPE_LABEL_TOO_LOW` or `PIPE_LABEL_FAILED`.
+
+Every server of this project sets `S:(ML;;NWNR;;;ME)` explicitly. A process cannot
+label an object above its own integrity level, so a Low-IL squatter cannot meet the
+rule, whatever the default labelling of the objects it creates. An AppContainer
+cannot create the global name at all: AppContainer pipe names are confined to
+`\\.\pipe\LOCAL\`, which is redirected into the AppContainer's own namespace.
+
+Evidence: `tools/w25_principal_matrix.py`, cases `squat_low_il_default` and
+`squat_low_il_medium_label`. A real Low-IL process squats the production name, and
+the squatter must receive no byte. Native results are in
+`docs/W25_PRINCIPAL_MATRIX.md`. A same-SID squatter at the **same** level stays out
+of scope: it can set the Medium label itself.

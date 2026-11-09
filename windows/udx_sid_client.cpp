@@ -13,7 +13,8 @@
 // W25: a failed open prints "UDX_CLIENT_OPEN_ERROR <win32 error>" to stderr.
 // Exit: 0 PEER_OK, 1 open failed (or pipe absent/busy until the deadline),
 // 2 write failed, 3 bad/short response, 4 owner query failed, 5 owner mismatch,
-// 6 own SID, 22 deadline passed, 24 bad arguments, 31 cancelled I/O did not settle.
+// 6 own SID, 7 pipe has no single explicit mandatory label >= Medium (W25.2),
+// 22 deadline passed, 24 bad arguments, 31 cancelled I/O did not settle.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <aclapi.h>
@@ -82,6 +83,33 @@ int wmain(int argc, wchar_t** argv) {
     const bool owner_ok = owner != nullptr && IsValidSid(owner) && EqualSid(owner, self_sid);
     LocalFree(sd);
     if (!owner_ok) { CloseHandle(pipe); return 5; }
+    // W25.2: exactly one explicit mandatory label of at least Medium on the pipe,
+    // also BEFORE any byte is sent. ADR-UDX-006: only same SID AND same integrity
+    // level is one trust domain; a Low-IL process of the same user can own a pipe
+    // with this user's SID, but cannot label an object above its own level.
+    PACL sacl = nullptr;
+    PSECURITY_DESCRIPTOR lsd = nullptr;
+    if (GetSecurityInfo(pipe, SE_KERNEL_OBJECT, LABEL_SECURITY_INFORMATION,
+                        nullptr, nullptr, nullptr, &sacl, &lsd) != ERROR_SUCCESS) {
+        fwprintf(stderr, L"UDX_CLIENT_PIPE_LABEL query_failed\n");
+        CloseHandle(pipe); return 7;
+    }
+    unsigned labels = 0;
+    DWORD label_rid = 0;
+    for (DWORD i = 0; sacl != nullptr && i < sacl->AceCount; ++i) {
+        void* ace = nullptr;
+        if (!GetAce(sacl, i, &ace)) { labels = 0xFFFF; break; }
+        if (static_cast<ACE_HEADER*>(ace)->AceType != SYSTEM_MANDATORY_LABEL_ACE_TYPE) continue;
+        PSID label = &static_cast<SYSTEM_MANDATORY_LABEL_ACE*>(ace)->SidStart;
+        ++labels;
+        if (IsValidSid(label) && *GetSidSubAuthorityCount(label) > 0)
+            label_rid = *GetSidSubAuthority(label, *GetSidSubAuthorityCount(label) - 1u);
+    }
+    LocalFree(lsd);
+    if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID) {
+        fwprintf(stderr, L"UDX_CLIENT_PIPE_LABEL count=%u rid=%lu\n", labels, label_rid);
+        CloseHandle(pipe); return 7;
+    }
     static constexpr BYTE ping = 0x55;
     const udx::IoResult sent = udx::bounded_io(pipe, deadline,
         [&](OVERLAPPED* ov) { return WriteFile(pipe, &ping, 1, nullptr, ov); });

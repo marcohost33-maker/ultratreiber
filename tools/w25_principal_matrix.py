@@ -134,6 +134,17 @@ EXPECTED = {
 }
 
 
+# W25.2: a lower-integrity process of the SAME user squats the pipe name before
+# the server starts (ADR-UDX-006: only same SID AND same IL is one trust domain).
+# Two variants: default security, and an attempt to put an explicit Medium label
+# on the pipe. The squatter is a real Low-IL Python process; both clients (C++
+# and Python lane) then connect. Invariant: the squatter receives no byte.
+SQUAT_CASES = ('squat_low_il_default', 'squat_low_il_medium_label')
+SQUAT_LIFETIME_S = 12.0
+EXIT_PIPE_LABEL = 7
+ERROR_FILE_NOT_FOUND = 2
+
+
 # --- pure decision logic (portable, tested on Linux) ---------------------------
 def production_sddl(sid: str) -> str:
     """Same string as udx_ref.windows_pipe.build_sddl (kept literal on purpose:
@@ -227,6 +238,45 @@ def _parent_issues(report: dict, parent: dict) -> list[str]:
     return issues
 
 
+def _squat_issues(name: str, c, parent: dict) -> list[str]:
+    """Fail-closed decision for one squatter case. The OS may or may not let a
+    Low-IL process create the global name; both paths are accepted only with the
+    consistent client outcome, and the squatter must never receive a byte."""
+    if not isinstance(c, dict) or c.get('error'):
+        return ['CASE_ERROR:' + name]
+    issues = []
+    sq = c.get('squatter') if isinstance(c.get('squatter'), dict) else {}
+    issues += _principal_issues(name, 'low_il', sq.get('facts'), parent, None)
+    if sq.get('inherit') != INHERIT:
+        issues.append('CHILD_INHERITANCE_NOT_LIMITED:' + name)
+    rep_ = sq.get('report') if isinstance(sq.get('report'), dict) else {}
+    created = rep_.get('created')
+    cpp = c.get('cpp_client') if isinstance(c.get('cpp_client'), dict) else {}
+    py = c.get('py_client') if isinstance(c.get('py_client'), dict) else {}
+    if cpp.get('inherit') != INHERIT:
+        issues.append('CHILD_INHERITANCE_NOT_LIMITED:' + name)
+    if created is True:
+        if type(rep_.get('received')) is not int or rep_['received'] != 0:
+            issues.append('SQUATTER_RECEIVED_DATA:' + name)
+        rid = rep_.get('label_rid')
+        if rid is not None and (type(rid) is not int or rid >= MEDIUM_RID):
+            issues.append('SQUATTER_LABEL_NOT_BELOW_MEDIUM:' + name)
+        if cpp.get('exit') != EXIT_PIPE_LABEL:
+            issues.append('CPP_CLIENT_ACCEPTED_SQUATTER:' + name)
+        if (py.get('reason'), py.get('sent')) != ('PIPE_LABEL_TOO_LOW', False):
+            issues.append('PY_CLIENT_ACCEPTED_SQUATTER:' + name)
+        if rep_.get('owner') is None or rep_.get('owner') != parent.get('user_sid'):
+            issues.append('SQUATTER_OWNER_NOT_THE_USER:' + name)   # negative control: owner check alone passes
+    elif created is False:
+        if (cpp.get('exit'), cpp.get('open_error')) != (EXIT_OPEN_FAILED, ERROR_FILE_NOT_FOUND):
+            issues.append('CPP_CLIENT_OUTCOME_WRONG:' + name)
+        if (py.get('reason'), py.get('open_error')) != ('OPEN_FAILED', ERROR_FILE_NOT_FOUND):
+            issues.append('PY_CLIENT_OUTCOME_WRONG:' + name)
+    else:
+        issues.append('SQUATTER_REPORT_MISSING:' + name)
+    return issues
+
+
 def evaluate(report) -> tuple[str, list[str]]:
     """Return (verdict, issues). Every expectation must be observed explicitly."""
     if not isinstance(report, dict):
@@ -311,6 +361,11 @@ def evaluate(report) -> tuple[str, list[str]]:
                     or type(got.get('rid')) is not int or got['rid'] < MEDIUM_RID \
                     or type(got.get('level')) is not int or got['level'] < 1:
                 issues.append('CPP_DENIAL_NOT_ATTRIBUTED:' + name)
+    squats = report.get('squat') if isinstance(report.get('squat'), dict) else {}
+    if set(squats) != set(SQUAT_CASES):
+        issues.append('SQUAT_SET_DRIFT')
+    for name in sorted(set(SQUAT_CASES) & set(squats)):
+        issues += _squat_issues(name, squats[name], parent)
     cleanup = report.get('cleanup') if isinstance(report.get('cleanup'), dict) else {}
     want = {'appcontainer_profile': 'deleted', 'workdir': 'deleted'}
     if report.get('mode') == 'standard_account':
@@ -353,6 +408,20 @@ def summary_lines(report) -> list[str]:
                     f"client_exit={child.get('exit')} open_error={child.get('open_error')} "
                     f"t={child.get('elapsed_s')}s inherit={child.get('inherit')} server={server} "
                     f"denial={srv.get('denial')} error={c.get('error')}")
+    for name in sorted(report.get('squat') or {}):
+        c = report['squat'][name]
+        if not isinstance(c, dict):
+            continue
+        sq = c.get('squatter') if isinstance(c.get('squatter'), dict) else {}
+        rep_ = sq.get('report') if isinstance(sq.get('report'), dict) else {}
+        cpp = c.get('cpp_client') if isinstance(c.get('cpp_client'), dict) else {}
+        py = c.get('py_client') if isinstance(c.get('py_client'), dict) else {}
+        f = sq.get('facts') if isinstance(sq.get('facts'), dict) else {}
+        out.append(f"SQUAT {name}: squatter_rid={f.get('integrity_rid')} created={rep_.get('created')} "
+                   f"create_error={rep_.get('create_error')} owner_is_user={rep_.get('owner') is not None} "
+                   f"label_rid={rep_.get('label_rid')} received={rep_.get('received')} "
+                   f"cpp_exit={cpp.get('exit')} cpp_stderr={(cpp.get('stderr') or '').strip()[:80]!r} "
+                   f"py={py.get('reason')}/{py.get('open_error')} error={c.get('error')}")
     return out
 
 
@@ -679,7 +748,8 @@ class Win:
         reader.join(10)
         text = chunks[0] if chunks else ''
         return {'exit': None if killed else int(code.value), 'elapsed_s': round(elapsed, 3), 'facts': facts,
-                'stderr': text[-400:], 'open_error': parse_open_error(text), 'inherit': INHERIT}
+                'stderr': text[-400:], 'output': text[-4000:], 'open_error': parse_open_error(text),
+                'inherit': INHERIT}
 
 
 def _read_all(fd: int) -> str:
@@ -763,6 +833,97 @@ def run_case(win: Win, wp, crossrun, name: str, client: str, probe: str, ac_psid
     return case
 
 
+def _json_lines(text: str) -> dict:
+    out = {}
+    for line in (text or '').splitlines():
+        line = line.strip()
+        if line.startswith('{'):
+            try:
+                obj = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(obj, dict):
+                out.update(obj)
+    return out
+
+
+def run_squat_case(win: Win, wp, name: str, client: str) -> dict:
+    kind = 'medium' if name.endswith('medium_label') else 'default'
+    api = wp.default_api()
+    argv = [sys.executable, '-I', '-B', str(REPO / 'tools' / 'w25_principal_matrix.py'), '--squatter',
+            '--squat-label', kind]
+    box = {}
+    t = threading.Thread(target=lambda: box.setdefault(
+        'child', win.launch(argv, 'low_il', None, str(REPO))), daemon=True)
+    t.start()
+    end = time.monotonic() + 8.0
+    present = False
+    while time.monotonic() < end and not present and t.is_alive():
+        present = wp.pipe_name_present(api, wp.DEFAULT_PIPE_NAME)
+        time.sleep(0.05)
+    case = {'kind': kind, 'pipe_seen': present}
+    case['cpp_client'] = win.launch([client, '--budget-ms', '3000'], 'same_token', None,
+                                    str(pathlib.Path(client).parent))
+    r = wp.client_ping(wp.DEFAULT_PIPE_NAME, connect_timeout_s=3.0, response_timeout_s=2.0)
+    case['py_client'] = {'reason': r.reason, 'open_error': r.open_error, 'sent': r.sent,
+                         'pipe_owner': r.pipe_owner, 'pipe_label': r.pipe_label, 'winerror': r.winerror}
+    t.join(SQUAT_LIFETIME_S + 15)
+    child = box.get('child')
+    if child is None:
+        raise RuntimeError('SQUATTER_DID_NOT_FINISH')
+    child['report'] = _json_lines(child.get('output'))
+    case['squatter'] = child
+    return case
+
+
+def squatter(kind: str) -> int:
+    """Runs as a Low-IL process of the same user: create the production pipe
+    name first (FIRST_PIPE_INSTANCE), report owner and label, then accept up to
+    two connections and count the bytes received. Never outlives SQUAT_LIFETIME_S."""
+    import ctypes
+    sys.path.insert(0, str(REPO))
+    from udx_ref import windows_pipe as wp
+    threading.Timer(SQUAT_LIFETIME_S, lambda: os._exit(0)).start()
+    api = wp.default_api()
+    out = {'kind': kind}
+    sa_ref, sd = None, ctypes.c_void_p()
+    if kind == 'medium':
+        sid = wp.current_user_sid(api)
+        ok = api.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            f'O:{sid}D:(A;;GA;;;{sid})S:(ML;;NWNR;;;ME)', wp.SDDL_REVISION_1, ctypes.byref(sd), None)
+        out['sd_converted'] = bool(ok)
+        sa = wp.SECURITY_ATTRIBUTES(ctypes.sizeof(wp.SECURITY_ATTRIBUTES), sd, False)
+        sa_ref = ctypes.byref(sa)
+    h = api.CreateNamedPipeW(wp.DEFAULT_PIPE_NAME, wp.PIPE_ACCESS_DUPLEX | wp.FILE_FLAG_FIRST_PIPE_INSTANCE,
+                             0, 1, 4096, 4096, 0, sa_ref)
+    err = api.last_error()
+    if sd.value:
+        api.LocalFree(sd)
+    if h is None or h == wp.INVALID_HANDLE_VALUE:
+        out.update(created=False, create_error=err)
+        print(json.dumps(out), flush=True)
+        return 0
+    owner, osd, rc = wp.pipe_owner_sid(api, h)
+    try:
+        out['owner'] = wp.sid_to_text(api, owner) if owner is not None else None
+    finally:
+        if osd is not None and osd.value:
+            api.LocalFree(osd)
+    rid, lrc = wp.pipe_label_rid(api, h)
+    out.update(created=True, label_rid=rid, label_rc=lrc)
+    print(json.dumps(out), flush=True)
+    received = 0
+    for _ in range(2):
+        api.ConnectNamedPipe(h, None)                 # returns when a client opened (or already closed)
+        buf = ctypes.create_string_buffer(1)
+        n = ctypes.c_ulong(0)
+        api.ReadFile(h, buf, 1, ctypes.byref(n), None)
+        received += n.value
+        api.DisconnectNamedPipe(h)
+    print(json.dumps({'received': received}), flush=True)
+    os._exit(0)
+
+
 def _new_report(mode: str) -> dict:
     return {'tool': 'w25_principal_matrix', 'release_authorized': False, 'mode': mode, 'cases': {},
             'cleanup': {}, 'host': {'platform': sys.platform, 'python': sys.version.split()[0],
@@ -804,6 +965,12 @@ def run_matrix(report: dict, binaries: pathlib.Path, work_parent: str | None = N
                 report['cases'][name] = run_case(win, wp, crossrun, name, client, probe, ac_psid)
             except Exception as exc:                       # recorded, the verdict fails closed
                 report['cases'][name] = {'error': f'{type(exc).__name__}: {exc}'[:300]}
+        report['squat'] = {}
+        for name in SQUAT_CASES:                           # last: they hold the production name
+            try:
+                report['squat'][name] = run_squat_case(win, wp, name, client)
+            except Exception as exc:
+                report['squat'][name] = {'error': f'{type(exc).__name__}: {exc}'[:300]}
     except Exception as exc:
         report['error'] = f'{type(exc).__name__}: {exc}'[:300]
     finally:
@@ -941,13 +1108,19 @@ def child_matrix(args) -> int:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description='UDX W25 principal matrix (research only)')
-    p.add_argument('--output', required=True)
+    p.add_argument('--output')
+    p.add_argument('--squatter', action='store_true', help=argparse.SUPPRESS)
+    p.add_argument('--squat-label', choices=('default', 'medium'), default='default', help=argparse.SUPPRESS)
     p.add_argument('--mode', choices=MODES, default='elevated_admin')
     p.add_argument('--evaluate', action='store_true', help='only evaluate an existing report (portable)')
     p.add_argument('--child-matrix', action='store_true', help=argparse.SUPPRESS)
     p.add_argument('--bin', help=argparse.SUPPRESS)
     p.add_argument('--work', help=argparse.SUPPRESS)
     args = p.parse_args(argv)
+    if args.squatter:
+        return squatter(args.squat_label)
+    if not args.output:
+        p.error('--output is required')
     if args.child_matrix:
         return child_matrix(args)
     if args.evaluate:

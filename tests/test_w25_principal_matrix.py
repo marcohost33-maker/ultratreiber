@@ -45,6 +45,20 @@ BIN = {'client': 'a' * 64, 'probe': 'b' * 64}
 DENIAL = {'level': 1, 'rid': HIGH, 'appc': 0, 'restricted': 1, 'session_ok': 1, 'sid_ok': 1}
 
 
+def squat_case(rid: int, created: bool = True) -> dict:
+    lowf = dict(facts('low_il'))
+    if created:
+        rep = {'created': True, 'owner': USER, 'label_rid': 0x1000, 'received': 0}
+        cpp = {'exit': 7, 'open_error': None, 'inherit': 'handle_list:1'}
+        py = {'reason': 'PIPE_LABEL_TOO_LOW', 'sent': False, 'open_error': None}
+    else:
+        rep = {'created': False, 'create_error': 5}
+        cpp = {'exit': 1, 'open_error': 2, 'inherit': 'handle_list:1'}
+        py = {'reason': 'OPEN_FAILED', 'sent': False, 'open_error': 2}
+    return {'kind': 'default', 'squatter': {'facts': lowf, 'inherit': 'handle_list:1', 'report': rep},
+            'cpp_client': cpp, 'py_client': py}
+
+
 def good_report(mode: str = 'elevated_admin') -> dict:
     rid = HIGH if mode == 'elevated_admin' else 0x2000
     prod = tool.production_sddl(USER)
@@ -78,6 +92,7 @@ def good_report(mode: str = 'elevated_admin') -> dict:
         'cases': cases,
         'cleanup': {'appcontainer_profile': 'deleted', 'workdir': 'deleted'},
     }
+    report['squat'] = {name: squat_case(rid) for name in tool.SQUAT_CASES}
     if mode == 'standard_account':
         report['account'] = {'name': 'udxw25s', 'sid': USER}
         report['cleanup'].update(account='deleted', batch_logon_right='removed', workroot='deleted')
@@ -351,10 +366,75 @@ class DiscriminationSpec(unittest.TestCase):
             self.assertIn('class %s(' % cls, (ROOT / path).read_text(encoding='utf-8'), f['name'])
 
 
+class SquatterW252(unittest.TestCase):
+    """W25.2: a Low-IL squatter of the same user must never receive a byte."""
+
+    def _issues(self, mutate):
+        r = good_report()
+        mutate(r['squat']['squat_low_il_default'])
+        return tool.evaluate(r)[1]
+
+    def test_both_os_paths_pass_when_consistent(self):
+        r = good_report()
+        r['squat']['squat_low_il_medium_label'] = squat_case(HIGH, created=False)
+        self.assertEqual(tool.evaluate(r), ('PRINCIPAL_MATRIX_OK', []))
+
+    def test_squat_set_must_be_exact(self):
+        r = good_report()
+        r['squat'].pop('squat_low_il_medium_label')
+        self.assertIn('SQUAT_SET_DRIFT', tool.evaluate(r)[1])
+
+    def test_client_that_accepts_the_squatter_blocks(self):
+        # The pre-W25.2 behaviour: owner check passes, the client writes.
+        self.assertIn('CPP_CLIENT_ACCEPTED_SQUATTER:squat_low_il_default',
+                      self._issues(lambda c: c['cpp_client'].update(exit=0)))
+        self.assertIn('PY_CLIENT_ACCEPTED_SQUATTER:squat_low_il_default',
+                      self._issues(lambda c: c['py_client'].update(reason='OK', sent=True)))
+        self.assertIn('SQUATTER_RECEIVED_DATA:squat_low_il_default',
+                      self._issues(lambda c: c['squatter']['report'].update(received=1)))
+
+    def test_a_squatter_label_at_medium_breaks_the_premise(self):
+        self.assertIn('SQUATTER_LABEL_NOT_BELOW_MEDIUM:squat_low_il_default',
+                      self._issues(lambda c: c['squatter']['report'].update(label_rid=0x2000)))
+
+    def test_negative_control_owner_is_the_user(self):
+        self.assertIn('SQUATTER_OWNER_NOT_THE_USER:squat_low_il_default',
+                      self._issues(lambda c: c['squatter']['report'].update(owner='S-1-5-21-9')))
+
+    def test_squatter_must_really_be_low_il(self):
+        self.assertIn('CHILD_INTEGRITY_WRONG:squat_low_il_default',
+                      self._issues(lambda c: c['squatter']['facts'].update(integrity_rid=HIGH)))
+
+    def test_not_created_path_needs_absent_pipe_outcome(self):
+        def mut(c):
+            c.update(squat_case(HIGH, created=False))
+            c['cpp_client'].update(open_error=5)
+        self.assertIn('CPP_CLIENT_OUTCOME_WRONG:squat_low_il_default', self._issues(mut))
+        self.assertIn('SQUATTER_REPORT_MISSING:squat_low_il_default',
+                      self._issues(lambda c: c['squatter'].update(report={})))
+
+    def test_cpp_client_checks_the_label_before_writing(self):
+        src = (ROOT / 'windows' / 'udx_sid_client.cpp').read_text(encoding='utf-8')
+        label = src.index('LABEL_SECURITY_INFORMATION')
+        self.assertLess(src.index('if (!owner_ok)'), label)
+        self.assertLess(label, src.index('WriteFile('))
+        self.assertIn('if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID) {', src)
+        self.assertIn('SYSTEM_MANDATORY_LABEL_ACE_TYPE', src)
+
+    def test_python_client_checks_the_label_before_writing(self):
+        src = (ROOT / 'udx_ref' / 'windows_pipe.py').read_text(encoding='utf-8')
+        body = src[src.index('def client_ping('):src.index('def main(')]
+        self.assertLess(body.index('_verify_pipe_owner(api, h, expected_bin)'),
+                        body.index('_verify_pipe_label(api, h)'))
+        self.assertLess(body.index('_verify_pipe_label(api, h)'), body.index('api.WriteFile('))
+        self.assertIn("if rid is None or rid < SECURITY_MANDATORY_MEDIUM_RID:", src)
+
+
 class Summary(unittest.TestCase):
     def test_one_line_per_case_without_failing_on_junk(self):
         lines = tool.summary_lines(good_report())
-        self.assertEqual(len(lines), len(tool.EXPECTED))
+        self.assertEqual(len(lines), len(tool.EXPECTED) + len(tool.SQUAT_CASES))
+        self.assertEqual(sum(1 for x in lines if x.startswith('SQUAT ')), len(tool.SQUAT_CASES))
         self.assertTrue(any('CASE py_low_il: rid=0x1000' in x and 'open_error=5' in x for x in lines))
         self.assertEqual(tool.summary_lines(None), [])
         self.assertEqual(len(tool.summary_lines({'cases': {'x': {'error': 'E'}, 'y': 3}})), 1)

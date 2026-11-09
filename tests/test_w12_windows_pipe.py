@@ -226,9 +226,13 @@ class WindowsPipeRuntime(unittest.TestCase):
         # case the client's owner check cannot catch. Set it explicitly; the
         # default owner of an elevated administrator is BUILTIN\Administrators
         # (the client then refuses before writing, and this case never runs).
+        # W25.2: the client also requires an explicit mandatory label >= Medium.
+        # A squatter at the SAME integrity level (ADR-UDX-006: one trust domain)
+        # can set it, so it does; a lower-IL squatter cannot (W25.2 matrix).
         sd = ctypes.c_void_p()
         self.assertTrue(self.api.ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            'O:' + self.sid + 'D:(A;;GA;;;' + self.sid + ')', wp.SDDL_REVISION_1, ctypes.byref(sd), None))
+            'O:' + self.sid + 'D:(A;;GA;;;' + self.sid + ')S:(ML;;NWNR;;;ME)', wp.SDDL_REVISION_1,
+            ctypes.byref(sd), None))
         try:
             sa = wp.SECURITY_ATTRIBUTES(ctypes.sizeof(wp.SECURITY_ATTRIBUTES), sd, False)
             squat = self.api.CreateNamedPipeW(name, wp.PIPE_ACCESS_DUPLEX, 0, 255, 4096, 4096, 0,
