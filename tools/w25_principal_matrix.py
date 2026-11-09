@@ -93,7 +93,12 @@ AC_ACE = '(A;;0x12008b;;;AC)'   # ALL APPLICATION PACKAGES, same mask as every p
 # 42593714723, while the harness could still lower the pipe label). A lowbox
 # (AppContainer) token passes because its integrity check is replaced by the
 # AppContainer DACL check (see acace_only). NX-only keeps the label explicit.
-OPEN_LABEL = 'S:(ML;;NX;;;ME)'
+# W25.2 Aegis (owner commit 187331b): the clients also require NO_WRITE_UP in the
+# label mask, so an NX-only label is refused (exit 7; CI run 42661852195). The
+# controls therefore keep NW and drop only NR. Nothing measured depends on the
+# missing NW: Low IL is refused by the token's NO_WRITE_UP anyway, and a lowbox
+# (AppContainer) token passes a Medium label with or without NW (ace_appcontainer).
+OPEN_LABEL = 'S:(ML;;NWNX;;;ME)'
 CONTROL_DELTA = (AC_ACE, OPEN_LABEL)
 PRINCIPALS = ('same_token', 'low_il', 'appcontainer', 'restricted')
 MODES = ('elevated_admin', 'standard_account')
