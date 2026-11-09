@@ -170,6 +170,75 @@ Absicherung: 46 portable Tests, darunter ein Test, der jeden DK-Anker auf genau 
 Vorkommen prüft (ein veralteter Anker fiel beim Nachlauf auf). Dazu 14/14 diskriminierende
 Mutationen (`evidence/w25_dk_spec.json`).
 
+## W25.2 – zweites Selbstreview: Squatter niedrigerer Integrität (2026-11-09)
+
+**Befund (sicherheitsrelevant):** ADR-UDX-006 macht nur *dieselbe SID auf derselben
+Integritätsstufe* zu einer Vertrauensdomäne. Beide Clients prüften vor dem Senden aber nur,
+ob der Pipe-Owner die eigene SID ist. Ein Low-IL-Prozess desselben Benutzers liegt außerhalb
+der Vertrauensdomäne, legt Pipes aber mit dieser SID als Owner an. Hätte er den
+Produktionsnamen vor dem Server besetzt, wäre er durch die Owner-Prüfung gekommen.
+
+**Fix:** Beide Clients verlangen zusätzlich, vor dem ersten Byte, genau ein **explizites
+Mandatory Label ≥ Medium** auf dem Pipe-Objekt.
+
+- C++: Exit `7` mit stderr `UDX_CLIENT_PIPE_LABEL count=… rid=…`.
+- Python: `PIPE_LABEL_TOO_LOW` bzw. `PIPE_LABEL_FAILED`, neues Feld `ClientResult.pipe_label`.
+
+Alle Server des Projekts setzen `S:(ML;;NWNR;;;ME)` explizit. In der gepinnten 47er-Lane
+bekommt der Squatter **gleicher** Stufe in `test_squatter_sees_only_identification` ein
+explizites ME-Label, das ein solcher Angreifer setzen kann. Testabsicht und ID bleiben
+gleich, die Pins sind nachgeführt.
+
+### Nativer Beleg (CI-Lauf [42609005161](https://github.com/marcohost33-maker/ultratreiber/actions/runs/42609005161), Kopf `3fc294e`, 8/8 Jobs grün)
+
+- Collector 47/47 (auch als Standardkonto in der W20-Matrix), Windows-Suiten inklusive
+  `tests/test_w25_pipe_label.py`, MSVC-Build des Clients mit Label-Prüfung.
+- Prinzipal-Matrix: erhöhter Admin `PRINCIPAL_MATRIX_OK`, Bericht-SHA-256
+  `0ce04c79bff72ec963cb1baa2f6c33180b0a3c4ddc0fdda9c843c994094ceb90`.
+- Prinzipal-Matrix: Standardkonto `PRINCIPAL_MATRIX_OK`, Bericht-SHA-256
+  `b7f606a901b5a02aa8fadb764b3cc004e74b25528204e0a35b576d33fc426dc3`.
+
+| Squat-Fall (echter Low-IL-Prozess, IL 0x1000) | Ergebnis | Clients |
+|---|---|---|
+| `squat_low_il_default`, Standardkonto | Name **anlegbar**; Kernel setzt selbst Label Low (0x1000); Owner = Benutzer | C++ Exit 7 (`count=1 rid=4096`), Python `PIPE_LABEL_TOO_LOW`; Squatter erhielt **0 Bytes** |
+| `squat_low_il_default`, erhöhter Admin | anlegbar, Label Low; Owner = `BUILTIN\Administrators` (Default-Owner des gefilterten Admin-Tokens) | C++ Exit 5, Python `PIPE_OWNER_MISMATCH`; 0 Bytes |
+| `squat_low_il_medium_label` (beide Modi) | `CreateNamedPipeW` mit explizitem ME-Label scheitert: **1314** `ERROR_PRIVILEGE_NOT_HELD` | Pipe fehlt: C++ 1/2, Python `OPEN_FAILED`/2 |
+
+Damit ist die Prämisse des Fixes gemessen: Ein Low-IL-Prozess kann kein Label über seiner
+eigenen Stufe setzen. Der Standardkonto-Fall zeigt die Lücke (die Owner-Prüfung allein wäre
+bestanden) und zugleich den Fix.
+
+### Zwei weitere falsifizierte Annahmen (Harness)
+
+Der neue Client-Check lehnt Pipes mit Low-Label ab. Die W25.1-Kontroll-SDs, die das Label
+für Low-Clients auf `LW` senkten, waren deshalb nicht mehr nutzbar. Zwei Ersatzversuche
+mit Medium-Label ohne NW-Policy schlugen fehl:
+
+- Maske `0x0` (Lauf 42606332563)
+- nur `NX` (Lauf 42608409744)
+
+In beiden Fällen wird der Low-IL-Client beim Öffnen mit 5 abgewiesen. Ursache ist die
+**Token**-Policy `TOKEN_MANDATORY_POLICY_NO_WRITE_UP`. Sie ist der Default jedes Tokens,
+lässt sich nur mit `SeTcbPrivilege` ändern und verbietet Schreiben auf höher eingestufte
+Objekte, unabhängig von der Masken-Policy des Objekts.
+
+**Konsequenz:** Mit den gehärteten Clients ist die Server-Prüfung `INTEGRITY_TOO_LOW` für
+Low-IL-Clients **ohne** AppContainer unerreichbar. Sie ist Defense in Depth: Mit echtem
+Low-Token belegt ist sie aus W25.1 (Lauf 42593714723), also bevor das Label nicht mehr
+gesenkt werden konnte. `ctl_low_il` und `lbl_low_il` erwarten jetzt die gemessene Abweisung
+beim Öffnen. AppContainer-Clients erreichen die Server-Prüfung weiterhin (`ctl_appcontainer`,
+`ace_appcontainer`), weil ihre Integritätsprüfung durch die AppContainer-DACL-Prüfung ersetzt
+wird. Die Kontroll-SDs tragen jetzt `S:(ML;;NX;;;ME)`, also weiterhin ein explizites
+Medium-Label.
+
+**Absicherung:**
+
+- 54 portable Tests in `tests/test_w25_principal_matrix.py` und 4 native in
+  `tests/test_w25_pipe_label.py`.
+- 20/20 diskriminierende Mutationen in `evidence/w25_dk_spec.json`, davon 6 neu für den
+  Label-Check. Der Anker-Integritätstest fand dabei erneut einen doppelten Anker.
+- ADR-UDX-006 hat einen Nachtrag.
+
 ## Grenzen (nicht belegt)
 
 - Gehosteter Runner: Windows Server, nicht Windows 11. Das Standardkonto läuft per
@@ -179,8 +248,8 @@ Mutationen (`evidence/w25_dk_spec.json`).
   Standard-APIs nicht erzeugen.
 - Restricted-Token mit *engerer* einschränkender Menge (ohne Benutzer): Er würde schon an
   der DACL scheitern. Nicht als eigener Fall gemessen.
-- Eine Low-IL-, AppContainer- oder Restricted-Variante als **Server** (Squatting-Szenario
-  aus einer Sandbox heraus) ist nicht geprüft.
+- Squatting aus der Sandbox: Low IL ist seit W25.2 geprüft. AppContainer als Squatter nicht
+  (laut Microsoft auf `\\.\pipe\LOCAL\` beschränkt), Restricted-Token-Squatter ebenfalls nicht.
 - Unabhängige Attestierung; G2-App (OS-App-Identität) bleibt FAIL/OPEN.
 
 ## Quellen (Microsoft Learn, abgerufen 2026-11-09)

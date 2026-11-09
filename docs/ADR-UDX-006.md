@@ -192,7 +192,18 @@ cannot create the global name at all: AppContainer pipe names are confined to
 `\\.\pipe\LOCAL\`, which is redirected into the AppContainer's own namespace.
 
 Evidence: `tools/w25_principal_matrix.py`, cases `squat_low_il_default` and
-`squat_low_il_medium_label`. A real Low-IL process squats the production name, and
-the squatter must receive no byte. Native results are in
-`docs/W25_PRINCIPAL_MATRIX.md`. A same-SID squatter at the **same** level stays out
+`squat_low_il_medium_label`; CI run 42609005161, both parent modes `PRINCIPAL_MATRIX_OK`.
+
+- A Low-IL process **can** create the global production name, and the kernel labels
+  the pipe Low (0x1000) by itself.
+- For a standard account the pipe owner is the user, so the owner check alone would
+  have passed. Both clients refuse on the label (exit 7 / `PIPE_LABEL_TOO_LOW`), and
+  the squatter receives 0 bytes.
+- An explicit Medium label in the squatter's descriptor fails with 1314
+  (`ERROR_PRIVILEGE_NOT_HELD`).
+- Side effect: because the token policy `NO_WRITE_UP` forbids a Low-IL writer on any
+  Medium-labelled pipe, the server's `INTEGRITY_TOO_LOW` check is unreachable for
+  non-AppContainer Low clients (defense in depth).
+
+Details: `docs/W25_PRINCIPAL_MATRIX.md`. A same-SID squatter at the **same** level stays out
 of scope: it can set the Medium label itself.
