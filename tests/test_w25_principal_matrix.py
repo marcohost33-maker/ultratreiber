@@ -289,9 +289,9 @@ class HardeningW251(unittest.TestCase):
     def test_sd_variants_differ_by_exactly_one_mechanism(self):
         prod = tool.production_sddl(USER)
         v = {k: tool.sd_variant(prod, k) for k in tool.SD_KINDS}
-        self.assertEqual(v['label_only'], prod.replace('(ML;;NWNR;;;ME)', '(ML;;0x0;;;ME)'))
+        self.assertEqual(v['label_only'], prod.replace('(ML;;NWNR;;;ME)', '(ML;;NX;;;ME)'))
         self.assertEqual(v['acace_only'], prod.replace(')S:', ')(A;;0x12008b;;;AC)S:'))
-        self.assertEqual(v['control'], v['acace_only'].replace('(ML;;NWNR;;;ME)', '(ML;;0x0;;;ME)'))
+        self.assertEqual(v['control'], v['acace_only'].replace('(ML;;NWNR;;;ME)', '(ML;;NX;;;ME)'))
         # W25.2: every variant keeps an explicit Medium label (the clients require it)
         for k in tool.SD_KINDS:
             self.assertTrue(v[k].endswith(';;;ME)'), k)
@@ -461,8 +461,8 @@ class ControlSddl(unittest.TestCase):
     def test_control_adds_exactly_ac_ace_and_low_label(self):
         prod = tool.production_sddl(USER)
         ctl = tool.control_sddl(prod)
-        self.assertTrue(ctl.endswith(')(A;;0x12008b;;;AC)S:(ML;;0x0;;;ME)'))
-        self.assertEqual(ctl.replace('(A;;0x12008b;;;AC)', '').replace('(ML;;0x0;;;ME)', '(ML;;NWNR;;;ME)'), prod)
+        self.assertTrue(ctl.endswith(')(A;;0x12008b;;;AC)S:(ML;;NX;;;ME)'))
+        self.assertEqual(ctl.replace('(A;;0x12008b;;;AC)', '').replace('(ML;;NX;;;ME)', '(ML;;NWNR;;;ME)'), prod)
 
     def test_control_refuses_non_production_input(self):
         for bad in ('', None, tool.control_sddl(tool.production_sddl(USER)), 'O:S-1-5-18D:P'):

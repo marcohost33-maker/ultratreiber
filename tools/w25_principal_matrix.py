@@ -82,7 +82,10 @@ AC_ACE = '(A;;0x12008b;;;AC)'   # ALL APPLICATION PACKAGES, same mask as every p
 # the Medium label and drops its policy instead: a label ACE's mask IS the policy
 # for lower-integrity subjects (SYSTEM_MANDATORY_LABEL_ACE), so mask 0 restricts
 # nothing. W25.1 used S:(ML;;NWNR;;;LW) here.
-OPEN_LABEL = 'S:(ML;;0x0;;;ME)'
+# Measured (CI run 42606332563): mask 0x0 does NOT admit a Low-IL client (open
+# still refused with 5) - a zero policy is evidently replaced by the default
+# no-write-up. Next attempt: an explicit non-empty policy without NW/NR (NX only).
+OPEN_LABEL = 'S:(ML;;NX;;;ME)'
 CONTROL_DELTA = (AC_ACE, OPEN_LABEL)
 PRINCIPALS = ('same_token', 'low_il', 'appcontainer', 'restricted')
 MODES = ('elevated_admin', 'standard_account')
