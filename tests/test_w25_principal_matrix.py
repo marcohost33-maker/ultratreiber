@@ -473,7 +473,7 @@ class SquatterW252(unittest.TestCase):
                       "        return 'PIPE_LABEL_NO_WRITE_UP_MISSING', 0, rid\n", verify)
 
     def test_python_server_requires_equal_integrity(self):
-        # Aegis W25.2-P2 (portable pin; the runtime test is test_w12 test_higher_integrity_token_denied)
+        # Aegis W25.2-P2 (portable pin; runtime: test_w25_2_integrity.py test_higher_integrity_token_denied)
         src = (ROOT / 'udx_ref' / 'windows_pipe.py').read_text(encoding='utf-8')
         self.assertIn('        self._own_integrity = own_integrity_rid(api)\n', src)
         self.assertIn("            if facts['integrity_rid'] != self._own_integrity:\n"

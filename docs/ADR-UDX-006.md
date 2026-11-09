@@ -227,7 +227,7 @@ require `client RID == own RID`. The `>= Medium` floor stays in front of it.
 - C++ (`udx_sid_probe.cpp`): `server_rid` is read together with the session; it exits
   with `11` if that fails. `authorized` adds `rid == server_rid`; the denial line keeps
   its format.
-- Tests: `test_w12_windows_pipe.py` `test_higher_integrity_token_denied`
+- Tests: `test_w25_2_integrity.py` `test_higher_integrity_token_denied`
   (client RID = own RID + 0x100, real pipe) and
   `test_server_without_own_integrity_refuses_to_start`; portable pins in
   `SquatterW252` and mutations DK21/DK24 (`evidence/w25_dk_spec.json`) and N1/N2

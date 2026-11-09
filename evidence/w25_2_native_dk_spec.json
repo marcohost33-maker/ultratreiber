@@ -13,14 +13,14 @@
    "datei": "udx_ref/windows_pipe.py",
    "alt": "            if facts['integrity_rid'] != self._own_integrity:\n",
    "neu": "            if False:\n",
-   "test": "tests/test_w12_windows_pipe.py::WindowsPipeFaultInjection::test_higher_integrity_token_denied"
+   "test": "tests/test_w25_2_integrity.py::ServerIntegrityEquality::test_higher_integrity_token_denied"
   },
   {
    "name": "W25.2-N2 Server startet ohne eigene IL (nicht fail-closed)",
    "datei": "udx_ref/windows_pipe.py",
    "alt": "        if value is None:\n            raise OSError(err, 'GetTokenInformation(TokenIntegrityLevel) failed')\n",
    "neu": "        if value is None:\n            return 0\n",
-   "test": "tests/test_w12_windows_pipe.py::WindowsPipeFaultInjection::test_server_without_own_integrity_refuses_to_start"
+   "test": "tests/test_w25_2_integrity.py::ServerIntegrityEquality::test_server_without_own_integrity_refuses_to_start"
   },
   {
    "name": "W25.2-N3 Client akzeptiert ein echtes OICIIO-Medium-Label",

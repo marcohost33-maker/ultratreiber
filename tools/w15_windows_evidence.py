@@ -43,9 +43,9 @@ PINNED_NATIVE_TEST_SHA256 = '3deb114e9e4194a9c31e303ce3e95b2c13f3e22689510190470
 # The collector and its own test file stay recorded-only: they evolve, and a
 # script cannot meaningfully pin itself.
 PINNED_SOURCE_SHA256 = {
-    'udx_ref/windows_pipe.py': '7c9261a9ba0e9af8840b6b4f2e1baf848b5d205c2f1489d075d36084f4bc79e7',
-    'windows/udx_sid_probe.cpp': '27da17c263dba965e21ab53159062c908a62fe3bc6e456b3c448117bd1a012c6',
-    'windows/udx_sid_client.cpp': '8df2ec409238156f22013f7cad4a1e2e294a2818c910a4ec7f9117fc70ef64c2',
+    'udx_ref/windows_pipe.py': 'e0260b6a9860c6830d031ab8f88efcc1b94bbb74b2140c1f6c9cf1a7da36aa30',
+    'windows/udx_sid_probe.cpp': 'dcbc4803d625e1b5c77584e60ffe4c5a6af8f07df370b0fcd9c7afc28e30333d',
+    'windows/udx_sid_client.cpp': 'f45df9822505a2d8866badd4c1198117bf44f5bc8debd396c06460896d3c0720',
     # W24: bounded overlapped I/O shared by both C++ sources.
     'windows/udx_bounded_pipe_io.hpp': '1c5ea2c957aea96b5003a9e3d4c060cdd3247892e17755e7cac7447cd64bfa7c',
     'tests/test_w12_windows_pipe.py': PINNED_NATIVE_TEST_SHA256,
