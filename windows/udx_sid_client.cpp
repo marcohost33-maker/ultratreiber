@@ -13,7 +13,8 @@
 // W25: a failed open prints "UDX_CLIENT_OPEN_ERROR <win32 error>" to stderr.
 // Exit: 0 PEER_OK, 1 open failed (or pipe absent/busy until the deadline),
 // 2 write failed, 3 bad/short response, 4 owner query failed, 5 owner mismatch,
-// 6 own SID, 7 pipe has no single explicit mandatory label >= Medium (W25.2),
+// 6 own SID, 7 pipe has no single explicit mandatory label >= Medium (W25.2;
+// the label must not be INHERIT_ONLY and must carry NO_WRITE_UP),
 // 22 deadline passed, 24 bad arguments, 31 cancelled I/O did not settle.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -94,20 +95,29 @@ int wmain(int argc, wchar_t** argv) {
         fwprintf(stderr, L"UDX_CLIENT_PIPE_LABEL query_failed\n");
         CloseHandle(pipe); return 7;
     }
+    // Aegis W25.2 hardening: the label must also be EFFECTIVE on the pipe object
+    // (no INHERIT_ONLY_ACE flag: such an ACE only seeds children) and enforce
+    // SYSTEM_MANDATORY_LABEL_NO_WRITE_UP; otherwise it does not count as Medium.
     unsigned labels = 0;
-    DWORD label_rid = 0;
+    DWORD label_rid = 0, label_mask = 0;
+    BYTE label_flags = 0;
     for (DWORD i = 0; sacl != nullptr && i < sacl->AceCount; ++i) {
         void* ace = nullptr;
         if (!GetAce(sacl, i, &ace)) { labels = 0xFFFF; break; }
         if (static_cast<ACE_HEADER*>(ace)->AceType != SYSTEM_MANDATORY_LABEL_ACE_TYPE) continue;
         PSID label = &static_cast<SYSTEM_MANDATORY_LABEL_ACE*>(ace)->SidStart;
         ++labels;
+        label_flags = static_cast<ACE_HEADER*>(ace)->AceFlags;
+        label_mask = static_cast<SYSTEM_MANDATORY_LABEL_ACE*>(ace)->Mask;
         if (IsValidSid(label) && *GetSidSubAuthorityCount(label) > 0)
             label_rid = *GetSidSubAuthority(label, *GetSidSubAuthorityCount(label) - 1u);
     }
     LocalFree(lsd);
-    if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID) {
-        fwprintf(stderr, L"UDX_CLIENT_PIPE_LABEL count=%u rid=%lu\n", labels, label_rid);
+    const bool label_effective = (label_flags & INHERIT_ONLY_ACE) == 0
+        && (label_mask & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP) != 0;
+    if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID || !label_effective) {
+        fwprintf(stderr, L"UDX_CLIENT_PIPE_LABEL count=%u rid=%lu flags=%u mask=%lu\n",
+                 labels, label_rid, static_cast<unsigned>(label_flags), label_mask);
         CloseHandle(pipe); return 7;
     }
     static constexpr BYTE ping = 0x55;

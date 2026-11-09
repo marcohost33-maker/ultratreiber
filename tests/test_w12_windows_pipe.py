@@ -797,6 +797,27 @@ class WindowsPipeFaultInjection(unittest.TestCase):
         r = self._run_with_token_fact(wp.TokenIntegrityLevel, 0x1000)
         self.assertEqual((r.verdict, r.reason), ('DENIED', 'INTEGRITY_TOO_LOW'))
 
+    def test_higher_integrity_token_denied(self):
+        # Aegis W25.2-P2: ADR-UDX-006 trust domain is same SID AND same IL. A client
+        # above the server's own IL (e.g. elevated client, Medium server) passed
+        # the old ">= Medium" rule. +0x100 is above the own RID on every host.
+        r = self._run_with_token_fact(wp.TokenIntegrityLevel, wp.own_integrity_rid() + 0x100)
+        self.assertEqual((r.verdict, r.reason), ('DENIED', 'INTEGRITY_MISMATCH'))
+
+    def test_server_without_own_integrity_refuses_to_start(self):
+        # fail-closed: no server whose own integrity level is unknown
+        api = self._api()
+        real = api.GetTokenInformation
+
+        def gti(tok, k, buf, size, req):
+            if k == wp.TokenIntegrityLevel:
+                ctypes.set_last_error(wp.ERROR_ACCESS_DENIED)
+                return 0
+            return real(tok, k, buf, size, req)
+        api.GetTokenInformation = gti
+        with self.assertRaises(OSError):
+            wp.OneShotPipeServer(_name(), api=api)
+
     def test_appcontainer_token_denied(self):
         r = self._run_with_token_fact(wp.TokenIsAppContainer, 1)
         self.assertEqual((r.verdict, r.reason), ('DENIED', 'APPCONTAINER_CLIENT'))

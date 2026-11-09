@@ -109,7 +109,7 @@
   {
    "name": "W25.2-DK15 C++-Client ohne Label-Pruefung (Low-IL-Squatter desselben Benutzers wird akzeptiert)",
    "datei": "windows/udx_sid_client.cpp",
-   "alt": "    if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID) {",
+   "alt": "    if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID || !label_effective) {",
    "neu": "    if (false) {",
    "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_cpp_client_checks_the_label_before_writing"
   },
@@ -123,8 +123,8 @@
   {
    "name": "W25.2-DK17 Python-Label-Regel akzeptiert fehlendes oder niedriges Label",
    "datei": "udx_ref/windows_pipe.py",
-   "alt": "    if rid is None or rid < SECURITY_MANDATORY_MEDIUM_RID:",
-   "neu": "    if False:",
+   "alt": "    if rid < SECURITY_MANDATORY_MEDIUM_RID:\n",
+   "neu": "    if False:\n",
    "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_python_client_checks_the_label_before_writing"
   },
   {
@@ -147,6 +147,48 @@
    "alt": "        if rep_.get('created') is not False or rep_.get('create_error') != ERROR_PRIVILEGE_NOT_HELD:",
    "neu": "        if False:",
    "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_kernel_low_label_and_privilege_refusal_are_pinned"
+  },
+  {
+   "name": "W25.2-DK21 C++-Probe verlangt nur >= Medium statt gleicher IL wie der Server (Aegis P2)",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "&& rid >= SECURITY_MANDATORY_MEDIUM_RID && rid == server_rid\n",
+   "neu": "&& rid >= SECURITY_MANDATORY_MEDIUM_RID\n",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_cpp_probe_requires_equal_integrity"
+  },
+  {
+   "name": "W25.2-DK22 C++-Client akzeptiert ein INHERIT_ONLY-Label",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "    const bool label_effective = (label_flags & INHERIT_ONLY_ACE) == 0\n",
+   "neu": "    const bool label_effective = true\n",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_cpp_client_requires_an_effective_no_write_up_label"
+  },
+  {
+   "name": "W25.2-DK23 C++-Client verlangt NO_WRITE_UP nicht",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "        && (label_mask & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP) != 0;",
+   "neu": "        && true;",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_cpp_client_requires_an_effective_no_write_up_label"
+  },
+  {
+   "name": "W25.2-DK24 Python-Server verlangt nur >= Medium statt gleicher IL (Aegis P2)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "            if facts['integrity_rid'] != self._own_integrity:\n",
+   "neu": "            if False:\n",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_python_server_requires_equal_integrity"
+  },
+  {
+   "name": "W25.2-DK25 Python-Client akzeptiert ein INHERIT_ONLY-Label",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if flags & INHERIT_ONLY_ACE:\n",
+   "neu": "    if False:\n",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_python_client_checks_the_label_before_writing"
+  },
+  {
+   "name": "W25.2-DK26 Python-Client verlangt NO_WRITE_UP nicht",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if not mask & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP:\n",
+   "neu": "    if False:\n",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_python_client_checks_the_label_before_writing"
   }
  ]
 }

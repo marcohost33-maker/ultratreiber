@@ -143,6 +143,8 @@ SE_DACL_PROTECTED = 0x1000
 SDDL_REVISION_1 = 1
 ACCESS_ALLOWED_ACE_TYPE = 0
 SYSTEM_MANDATORY_LABEL_ACE_TYPE = 0x11
+INHERIT_ONLY_ACE = 0x08                     # AceFlags: the ACE does not apply to the object itself
+SYSTEM_MANDATORY_LABEL_NO_WRITE_UP = 0x1    # label ACE mask (policy) bit
 
 ERROR_FILE_NOT_FOUND = 2
 ERROR_ACCESS_DENIED = 5
@@ -529,6 +531,21 @@ def own_session_id(api=None) -> int:
         api.CloseHandle(tok)
 
 
+def own_integrity_rid(api=None) -> int:
+    """Integrity RID of this process' primary token (ADR-UDX-006 trust domain)."""
+    api = api or default_api()
+    tok = wintypes.HANDLE()
+    if not api.OpenProcessToken(api.GetCurrentProcess(), TOKEN_QUERY, ctypes.byref(tok)):
+        raise OSError(api.last_error(), 'OpenProcessToken failed')
+    try:
+        value, err = _token_integrity_rid(api, tok)
+        if value is None:
+            raise OSError(err, 'GetTokenInformation(TokenIntegrityLevel) failed')
+        return value
+    finally:
+        api.CloseHandle(tok)
+
+
 def inspect_dacl(handle, api=None) -> DaclInfo:
     """Read back the DACL actually attached to a kernel handle."""
     api = api or default_api()
@@ -730,6 +747,9 @@ class OneShotPipeServer:
         # (Aegis P3-f: build_sddl(server_sid) used to run after the allocation).
         self.server_sid = validate_sid_text(current_user_sid(api))
         self._own_session = own_session_id(api)
+        # Aegis W25.2-P2: the trust domain is same SID AND same integrity level
+        # (ADR-UDX-006 section 1). Read once; unreadable -> OSError (fail-closed).
+        self._own_integrity = own_integrity_rid(api)
         self.expected_sid = self.server_sid if expected_sid is None else validate_sid_text(expected_sid)
         if self.expected_sid != self.server_sid and not allow_foreign_expected_sid:
             raise ValueError('FOREIGN_EXPECTED_SID_REQUIRES_FLAG')
@@ -919,6 +939,11 @@ class OneShotPipeServer:
                 return deny('IMPERSONATION_LEVEL_TOO_LOW')
             if facts['integrity_rid'] < SECURITY_MANDATORY_MEDIUM_RID:
                 return deny('INTEGRITY_TOO_LOW')
+            # Aegis W25.2-P2: equal, not merely >= Medium. A Medium client of the
+            # same user talking to an elevated (High) server, or an elevated client
+            # talking to a Medium server, crosses the ADR-UDX-006 trust domain.
+            if facts['integrity_rid'] != self._own_integrity:
+                return deny('INTEGRITY_MISMATCH')
             if facts['appcontainer']:
                 return deny('APPCONTAINER_CLIENT')
             if facts['restricted']:
@@ -988,7 +1013,16 @@ def pipe_label_rid(api, handle):
 
     Returns (rid, 0), (None, 0) when the SACL holds no or more than one
     mandatory-label ACE, or (None, rc) when the query failed. Needs only
-    READ_CONTROL, which CLIENT_ACCESS contains."""
+    READ_CONTROL, which CLIENT_ACCESS contains. The RID alone is not the client's
+    decision: see pipe_label_info (ACE flags and policy mask)."""
+    info, rc = pipe_label_info(api, handle)
+    return (None, rc) if info is None else (info[0], 0)
+
+
+def pipe_label_info(api, handle):
+    """Aegis W25.2 label check: ``((rid, ace_flags, policy_mask), 0)`` of the single
+    mandatory-label ACE of the pipe object; ``(None, 0)`` when the SACL holds no or
+    more than one label ACE; ``(None, rc)`` when the query failed."""
     sacl = ctypes.c_void_p()
     sd = ctypes.c_void_p()
     rc = api.GetSecurityInfo(handle, SE_KERNEL_OBJECT, LABEL_SECURITY_INFORMATION,
@@ -1005,10 +1039,12 @@ def pipe_label_rid(api, handle):
                     return None, api.last_error()
                 ace = ACCESS_ALLOWED_ACE.from_address(p.value)   # same header/mask/SID layout
                 if ace.AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE:
-                    labels.append(sid_to_text(api, p.value + ACCESS_ALLOWED_ACE.SidStart.offset))
-        if len(labels) != 1 or not re.fullmatch(r'S-1-16-[0-9]{1,10}', labels[0]):
+                    labels.append((sid_to_text(api, p.value + ACCESS_ALLOWED_ACE.SidStart.offset),
+                                   ace.AceFlags, ace.Mask))
+        if len(labels) != 1 or not re.fullmatch(r'S-1-16-[0-9]{1,10}', labels[0][0]):
             return None, 0
-        return int(labels[0][len('S-1-16-'):]), 0
+        text, flags, mask = labels[0]
+        return (int(text[len('S-1-16-'):]), flags, mask), 0
     finally:
         if sd.value:
             api.LocalFree(sd)
@@ -1020,11 +1056,25 @@ def _verify_pipe_label(api, handle):
     one trust domain; a lower-integrity process of the same user (Low IL) can
     create a pipe owned by the user, so the owner check alone admits it. Such a
     process cannot label an object above its own level, so it cannot meet this
-    rule. Every server of this project sets S:(ML;;NWNR;;;ME) explicitly."""
-    rid, rc = pipe_label_rid(api, handle)
+    rule. Every server of this project sets S:(ML;;NWNR;;;ME) explicitly.
+
+    Aegis W25.2 hardening: the single label must also be EFFECTIVE on the pipe
+    object itself and enforce No-Write-Up. An INHERIT_ONLY label ACE does not
+    apply to the object (it only seeds children), and a label without the
+    NO_WRITE_UP policy bit does not stop a lower-integrity writer; neither counts
+    as the Medium label (``PIPE_LABEL_INHERIT_ONLY`` /
+    ``PIPE_LABEL_NO_WRITE_UP_MISSING``)."""
+    info, rc = pipe_label_info(api, handle)
     if rc:
         return 'PIPE_LABEL_FAILED', rc, None
-    if rid is None or rid < SECURITY_MANDATORY_MEDIUM_RID:
+    if info is None:
+        return 'PIPE_LABEL_TOO_LOW', 0, None
+    rid, flags, mask = info
+    if flags & INHERIT_ONLY_ACE:
+        return 'PIPE_LABEL_INHERIT_ONLY', 0, rid
+    if not mask & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP:
+        return 'PIPE_LABEL_NO_WRITE_UP_MISSING', 0, rid
+    if rid < SECURITY_MANDATORY_MEDIUM_RID:
         return 'PIPE_LABEL_TOO_LOW', 0, rid
     return None, 0, rid
 

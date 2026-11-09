@@ -367,8 +367,11 @@ class DiscriminationSpec(unittest.TestCase):
         # A stale anchor silently drops a mutation (found in W25.1: DK8 after the
         # cleanup rewrite). Each 'alt' must occur once and name an existing test.
         spec = json.loads((ROOT / 'evidence' / 'w25_dk_spec.json').read_text(encoding='utf-8'))
-        self.assertGreaterEqual(len(spec['faelle']), 14)
-        for f in spec['faelle']:
+        self.assertGreaterEqual(len(spec['faelle']), 26)
+        # W25.2 Aegis: Windows-only runtime mutations live in a second spec
+        native = json.loads((ROOT / 'evidence' / 'w25_2_native_dk_spec.json').read_text(encoding='utf-8'))
+        self.assertGreaterEqual(len(native['faelle']), 5)
+        for f in spec['faelle'] + native['faelle']:
             src = (ROOT / f['datei']).read_text(encoding='utf-8')
             self.assertEqual(src.count(f['alt']), 1, f['name'])
             path, cls, meth = f['test'].split('::')
@@ -434,8 +437,24 @@ class SquatterW252(unittest.TestCase):
         label = src.index('LABEL_SECURITY_INFORMATION')
         self.assertLess(src.index('if (!owner_ok)'), label)
         self.assertLess(label, src.index('WriteFile('))
-        self.assertIn('if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID) {', src)
+        self.assertIn('if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID || !label_effective) {', src)
         self.assertIn('SYSTEM_MANDATORY_LABEL_ACE_TYPE', src)
+
+    def test_cpp_client_requires_an_effective_no_write_up_label(self):
+        # Aegis W25.2: INHERIT_ONLY label ACE refused, NO_WRITE_UP policy required.
+        src = (ROOT / 'windows' / 'udx_sid_client.cpp').read_text(encoding='utf-8')
+        self.assertIn('label_flags = static_cast<ACE_HEADER*>(ace)->AceFlags;', src)
+        self.assertIn('label_mask = static_cast<SYSTEM_MANDATORY_LABEL_ACE*>(ace)->Mask;', src)
+        self.assertIn('const bool label_effective = (label_flags & INHERIT_ONLY_ACE) == 0\n'
+                      '        && (label_mask & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP) != 0;', src)
+        self.assertLess(src.index('const bool label_effective'), src.index('WriteFile('))
+
+    def test_cpp_probe_requires_equal_integrity(self):
+        # Aegis W25.2-P2: client RID == server's own RID, read from the server's token.
+        src = (ROOT / 'windows' / 'udx_sid_probe.cpp').read_text(encoding='utf-8')
+        self.assertIn('ok = ok && integrity_rid(server_token, server_rid);', src)
+        self.assertLess(src.index('integrity_rid(server_token, server_rid)'), src.index('CloseHandle(server_token);'))
+        self.assertIn('&& rid >= SECURITY_MANDATORY_MEDIUM_RID && rid == server_rid\n', src)
 
     def test_python_client_checks_the_label_before_writing(self):
         src = (ROOT / 'udx_ref' / 'windows_pipe.py').read_text(encoding='utf-8')
@@ -443,7 +462,19 @@ class SquatterW252(unittest.TestCase):
         self.assertLess(body.index('_verify_pipe_owner(api, h, expected_bin)'),
                         body.index('_verify_pipe_label(api, h)'))
         self.assertLess(body.index('_verify_pipe_label(api, h)'), body.index('api.WriteFile('))
-        self.assertIn("if rid is None or rid < SECURITY_MANDATORY_MEDIUM_RID:", src)
+        verify = src[src.index('def _verify_pipe_label('):src.index('def _verify_pipe_owner(')]
+        self.assertIn("    if info is None:\n        return 'PIPE_LABEL_TOO_LOW', 0, None\n", verify)
+        self.assertIn("    if rid < SECURITY_MANDATORY_MEDIUM_RID:\n        return 'PIPE_LABEL_TOO_LOW', 0, rid\n", verify)
+        self.assertIn("    if flags & INHERIT_ONLY_ACE:\n        return 'PIPE_LABEL_INHERIT_ONLY', 0, rid\n", verify)
+        self.assertIn("    if not mask & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP:\n"
+                      "        return 'PIPE_LABEL_NO_WRITE_UP_MISSING', 0, rid\n", verify)
+
+    def test_python_server_requires_equal_integrity(self):
+        # Aegis W25.2-P2 (portable pin; the runtime test is test_w12 test_higher_integrity_token_denied)
+        src = (ROOT / 'udx_ref' / 'windows_pipe.py').read_text(encoding='utf-8')
+        self.assertIn('        self._own_integrity = own_integrity_rid(api)\n', src)
+        self.assertIn("            if facts['integrity_rid'] != self._own_integrity:\n"
+                      "                return deny('INTEGRITY_MISMATCH')\n", src)
 
 
 class Summary(unittest.TestCase):

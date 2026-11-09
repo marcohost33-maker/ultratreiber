@@ -1,0 +1,47 @@
+{
+ "repo": ".",
+ "test_befehl": [
+  "python",
+  "-m",
+  "pytest"
+ ],
+ "timeout_s": 180,
+ "hinweis": "Nur Windows (echte Named Pipes, echte Token-Abfragen): Laufzeit-Diskriminierung der Aegis-W25.2-Befunde fuer den Python-Pfad. Auf Linux werden die Tests uebersprungen und die Mutationen ueberleben -- dort gilt evidence/w25_dk_spec.json (Quelltext-Pins).",
+ "faelle": [
+  {
+   "name": "W25.2-N1 Server laesst hoehere Client-IL zu (nur >= Medium, Aegis P2)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "            if facts['integrity_rid'] != self._own_integrity:\n",
+   "neu": "            if False:\n",
+   "test": "tests/test_w12_windows_pipe.py::WindowsPipeFaultInjection::test_higher_integrity_token_denied"
+  },
+  {
+   "name": "W25.2-N2 Server startet ohne eigene IL (nicht fail-closed)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "        if value is None:\n            raise OSError(err, 'GetTokenInformation(TokenIntegrityLevel) failed')\n",
+   "neu": "        if value is None:\n            return 0\n",
+   "test": "tests/test_w12_windows_pipe.py::WindowsPipeFaultInjection::test_server_without_own_integrity_refuses_to_start"
+  },
+  {
+   "name": "W25.2-N3 Client akzeptiert ein echtes OICIIO-Medium-Label",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if flags & INHERIT_ONLY_ACE:\n",
+   "neu": "    if False:\n",
+   "test": "tests/test_w25_pipe_label.py::PipeLabelCheck::test_inherit_only_label_is_refused"
+  },
+  {
+   "name": "W25.2-N4 Client akzeptiert ein echtes Medium-Label ohne NO_WRITE_UP",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if not mask & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP:\n",
+   "neu": "    if False:\n",
+   "test": "tests/test_w25_pipe_label.py::PipeLabelCheck::test_label_without_no_write_up_is_refused"
+  },
+  {
+   "name": "W25.2-N5 Label-Info liest die ACE-Flags nicht (Inherit-only unsichtbar)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "                                   ace.AceFlags, ace.Mask))\n",
+   "neu": "                                   0, ace.Mask))\n",
+   "test": "tests/test_w25_pipe_label.py::PipeLabelCheck::test_inherit_only_label_is_refused"
+  }
+ ]
+}

@@ -12,6 +12,8 @@
 // 31 cancelled I/O did not settle, 10-15 setup failures.
 // W25: a denial (exit 20) prints one stderr line "UDX_PROBE_DENIED level=.. rid=..
 // appc=.. restricted=.. session_ok=.. sid_ok=.." (or "facts=unavailable").
+// W25.2-P2: the client's integrity RID must equal the server's own RID (not only
+// >= Medium); the denial line keeps its format, `rid` names the client's level.
 // TODO before use beyond lab: bounded connections, full UDX envelope parser,
 // versioned ACK/durable receipts, OS app identity (G2-App), independent review.
 #define WIN32_LEAN_AND_MEAN
@@ -79,6 +81,11 @@ int wmain(int argc, wchar_t** argv) {
     bool ok = query_sid(server_token, server_sidbuf, server_sid);
     DWORD server_session = 0;
     ok = ok && token_dword(server_token, TokenSessionId, server_session);
+    // Aegis W25.2-P2: ADR-UDX-006 trust domain is same SID AND same integrity
+    // level, so the client's RID must EQUAL the server's own RID (exit 11 if
+    // unreadable: fail-closed, no server with an unknown own level).
+    DWORD server_rid = 0;
+    ok = ok && integrity_rid(server_token, server_rid);
     CloseHandle(server_token);
     if (!ok) return 11;
 
@@ -156,7 +163,7 @@ int wmain(int argc, wchar_t** argv) {
                 facts_ok = true;
                 sid_ok = EqualSid(client_sid, server_sid) != 0;
                 authorized = level >= SecurityIdentification
-                    && rid >= SECURITY_MANDATORY_MEDIUM_RID
+                    && rid >= SECURITY_MANDATORY_MEDIUM_RID && rid == server_rid
                     && appc == 0 && restricted == 0 && session == server_session
                     && sid_ok;
             }

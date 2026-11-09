@@ -56,6 +56,28 @@ class PipeLabelCheck(unittest.TestCase):
         r = wp.client_ping(name, send=False, hold_s=0.0, connect_timeout_s=2.0)
         self.assertEqual((r.reason, r.sent), ('SILENT_HOLD', False))
 
+    def test_inherit_only_label_is_refused(self):
+        # Aegis W25.2: an INHERIT_ONLY label ACE does not apply to the pipe object
+        # itself. The kernel keeps OICIIO on a pipe (bare IO is dropped, measured),
+        # so the RID alone reads Medium; the client must not count it.
+        name, h = self._pipe('S:(ML;OICIIO;NWNR;;;ME)')
+        info, rc = wp.pipe_label_info(self.api, h)
+        self.assertEqual((rc, info[0], bool(info[1] & wp.INHERIT_ONLY_ACE)), (0, 0x2000, True))
+        r = wp.client_ping(name, send=False, hold_s=0.0, connect_timeout_s=2.0)
+        self.assertEqual((r.reason, r.sent, r.pipe_label), ('PIPE_LABEL_INHERIT_ONLY', False, 0x2000))
+
+    def test_label_without_no_write_up_is_refused(self):
+        # Aegis W25.2: a Medium label whose policy lacks NO_WRITE_UP does not stop
+        # a lower-integrity writer, so it must not count as the Medium label.
+        name, h = self._pipe('S:(ML;;NR;;;ME)')
+        self.assertEqual(wp.pipe_label_info(self.api, h), ((0x2000, 0, 0x2), 0))
+        r = wp.client_ping(name, send=False, hold_s=0.0, connect_timeout_s=2.0)
+        self.assertEqual((r.reason, r.sent, r.pipe_label), ('PIPE_LABEL_NO_WRITE_UP_MISSING', False, 0x2000))
+
+    def test_production_label_is_effective_and_no_write_up(self):
+        with wp.OneShotPipeServer(wp.PIPE_PREFIX + 'UDX_W25L_' + uuid.uuid4().hex) as srv:
+            self.assertEqual(wp.pipe_label_info(self.api, srv.handle), ((0x2000, 0, 0x3), 0))
+
     def test_production_server_pipe_carries_medium(self):
         with wp.OneShotPipeServer(wp.PIPE_PREFIX + 'UDX_W25L_' + uuid.uuid4().hex) as srv:
             self.assertEqual(wp.pipe_label_rid(self.api, srv.handle), (0x2000, 0))
