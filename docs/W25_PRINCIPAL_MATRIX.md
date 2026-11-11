@@ -239,6 +239,21 @@ Medium-Label.
   Label-Check. Der Anker-Integritätstest fand dabei erneut einen doppelten Anker.
 - ADR-UDX-006 hat einen Nachtrag.
 
+## UT6-02 – Label-Gleichheit Client/Server (2026-11-11)
+
+Fremdprüfung A7-R2: Der Client verlangte nur ein Label `>= Medium`, der Server dagegen
+die gleiche IL. Seit UT6-02 trägt die Pipe das Label der **eigenen** Server-IL (ME bzw.
+HI) und beide Clients verlangen ein Label **gleich** der eigenen IL (Python
+`PIPE_LABEL_MISMATCH`, C++ Exit 7). Die Harness-Varianten behalten die IL des Elternteils
+(`production_sddl(sid, rid)`, `OPEN_LABELS`).
+
+Folge für die Matrix: `ctl_appcontainer` und `ace_appcontainer` sind modusabhängig
+(`EXPECTED_BY_MODE`). Standardkonto: der Lowbox-Client öffnet die Medium-Pipe, lehnt das
+Label ab (Exit 7, kein Byte), der Server endet mit `CONNECT_FAILED` oder `READ_FAILED`.
+Erhöhter Admin: High-Label, erwartet wird Ablehnung beim Öffnen (5) – **Vorhersage, noch
+nicht gemessen**. `INTEGRITY_TOO_LOW` ist für ein echtes AppContainer-Token damit nicht
+mehr erreichbar (Tiefenverteidigung, weiter durch Fehlerinjektion belegt).
+
 ## Grenzen (nicht belegt)
 
 - Gehosteter Runner: Windows Server, nicht Windows 11. Das Standardkonto läuft per

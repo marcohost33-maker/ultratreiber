@@ -330,3 +330,41 @@ Not evidenced:
   and so it stays inside the trust domain.
 - Restricting sets with the logon SID.
 - Any host other than the development host.
+
+## Addendum UT6-02 (2026-11-11): the client binds the same identity as the server
+
+Cross-family re-audit A7-R2 confirmed a design asymmetry. Since the W25.2 Aegis
+review the server required the client's integrity level to EQUAL its own (P2), but
+the client only required the pipe's mandatory label to be `>= Medium`, and every
+server labelled its pipe Medium whatever its own level. A Medium client therefore
+accepted the pipe of an elevated server of the same user and wrote to it, although
+section 1 makes only same SID AND same level one trust domain.
+
+Decision (both directions now symmetric):
+
+- **Server label = own level.** `build_sddl(sid, rid)` takes the server token's own
+  level; `OneShotPipeServer` passes it. Medium -> `S:(ML;;NWNR;;;ME)`, High ->
+  `S:(ML;;NWNR;;;HI)`. Any other own level (Low, Medium Plus, System, Protected)
+  refuses to start (`ValueError('UNSUPPORTED_INTEGRITY_LEVEL')`; C++ probe exit 16)
+  before anything is allocated. The one-argument `build_sddl(sid)` keeps the
+  reviewed Medium string.
+- **Client label = own level.** The client reads its own effective level before the
+  open (Python: the thread's impersonation token if present, else the process
+  token; any other `OpenThreadToken` error is a failure, not a fallback; C++: the
+  process token, the C++ client never impersonates). Unreadable ->
+  `OWN_INTEGRITY_FAILED` / C++ exit 8, nothing opened. A single effective
+  No-Write-Up label that is not EXACTLY that level -> `PIPE_LABEL_MISMATCH` / C++
+  exit 7, no byte sent. Below Medium stays `PIPE_LABEL_TOO_LOW`.
+
+Consequence for the principal matrix: an AppContainer child (Low) can no longer
+reach the server's `INTEGRITY_TOO_LOW` check. Under a Medium parent the lowbox
+token still opens the AC-ACE pipe (measured W25.1) and the C++ client refuses the
+label (exit 7). Under the elevated parent the label is High; the expected outcome
+(open refused with 5) is a PREDICTION until the first CI run measures it. The server
+check stays as defense in depth and keeps its fault-injection tests.
+
+Evidence on the development host (Windows 11, standard user, Medium): real token
+and real kernel label on one side of every case, the other side injected
+(`tests/test_ut6_02_label_parity.py`). Not evidenced here: a real High label against
+a real Medium client, the elevated runner, and the compiled C++ (no compiler on the
+host; CI jobs `cpp-candidate`, `windows-principal-matrix`, `windows-native-evidence`).
