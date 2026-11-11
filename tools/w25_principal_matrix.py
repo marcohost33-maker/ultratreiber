@@ -344,7 +344,16 @@ def evaluate(report) -> tuple[str, list[str]]:
         issues.append('PRODUCTION_SDDL_DRIFT')
     else:
         for kind in SD_KINDS[1:]:
-            if sddl.get(kind) != sd_variant(sddl['production'], kind):
+            # R4/DK5: a production string that is not derivable (sd_variant raises)
+            # is a typed finding, never an exception out of evaluate(): the
+            # verdict must stay BLOCKED with a reason even if the equality check
+            # above were ever weakened.
+            try:
+                want_variant = sd_variant(sddl['production'], kind)
+            except (TypeError, ValueError):
+                issues.append('SD_VARIANT_INVALID:' + kind)
+                continue
+            if sddl.get(kind) != want_variant:
                 issues.append('SD_VARIANT_DRIFT:' + kind)
         if set(sddl) != set(SD_KINDS):
             issues.append('SD_SET_DRIFT')

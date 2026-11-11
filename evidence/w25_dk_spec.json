@@ -189,6 +189,13 @@
    "alt": "    if not mask & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP:\n",
    "neu": "    if False:\n",
    "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_python_client_checks_the_label_before_writing"
+  },
+  {
+   "name": "R4-DK27 Ausnahme aus sd_variant verlaesst evaluate() (Absturz statt Verdikt)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "            except (TypeError, ValueError):\n                issues.append('SD_VARIANT_INVALID:' + kind)\n",
+   "neu": "            except ():\n                issues.append('SD_VARIANT_INVALID:' + kind)\n",
+   "test": "tests/test_w25_principal_matrix.py::ControlSddl::test_underivable_production_is_a_typed_issue_not_an_exception"
   }
  ]
 }

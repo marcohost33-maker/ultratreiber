@@ -511,6 +511,41 @@ class ControlSddl(unittest.TestCase):
         r['sddl']['production'] = r['sddl']['production'].replace('NWNR;;;ME', 'NW;;;ME')
         self.assertIn('PRODUCTION_SDDL_DRIFT', tool.evaluate(r)[1])
 
+    # R4/DK5: malformed production values must block with the exact reason, and
+    # evaluate() must never raise (a crash is not a verdict). Each call is wrapped
+    # so that an exception turns into an assertion failure, not a test crash.
+    def _evaluate_without_crash(self, r):
+        try:
+            return tool.evaluate(r)
+        except Exception as exc:                    # noqa: BLE001 - the point of the test
+            self.fail(f'evaluate() raised {exc!r} instead of returning a verdict')
+
+    MALFORMED = (None, '', 42, 4.2, True, {'not': 'an SDDL'}, ['O:'], 'O:S-1-5-18D:P',
+                 'S:(ML;;NWNR;;;ME)', 'x' * 10000)
+
+    def test_evaluate_malformed_production_blocks_with_drift_without_crash(self):
+        for bad in self.MALFORMED:
+            with self.subTest(bad=repr(bad)[:40]):
+                r = good_report()
+                r['sddl']['production'] = bad
+                verdict, issues = self._evaluate_without_crash(r)
+                self.assertEqual(verdict, 'BLOCKED')
+                self.assertIn('PRODUCTION_SDDL_DRIFT', issues)
+
+    def test_underivable_production_is_a_typed_issue_not_an_exception(self):
+        # Seam of the DK5 guard itself: the equality check is bypassed (production
+        # declared equal to whatever the report holds), so only the try/except
+        # around sd_variant stands between a malformed string and an exception.
+        from unittest import mock
+        for bad in self.MALFORMED:
+            with self.subTest(bad=repr(bad)[:40]):
+                r = good_report()
+                r['sddl']['production'] = bad
+                with mock.patch.object(tool, 'production_sddl', lambda *a, bad=bad: bad):
+                    verdict, issues = self._evaluate_without_crash(r)
+                self.assertEqual(verdict, 'BLOCKED')
+                self.assertTrue({'SD_VARIANT_INVALID:' + k for k in tool.SD_KINDS[1:]} <= set(issues), issues)
+
 
 class OpenErrorLine(unittest.TestCase):
     def test_parse(self):
