@@ -281,7 +281,9 @@ class _SilentServer:
     def __init__(self, wp):
         self.wp, self.api = wp, wp.default_api()
         sd = ctypes.c_void_p()
-        sddl = wp.build_sddl(wp.current_user_sid(self.api))
+        # UT6-02: the C++ client accepts only a label equal to its own level, so
+        # the fake server labels at this process' level like a real server would.
+        sddl = wp.build_sddl(wp.current_user_sid(self.api), wp.own_integrity_rid(self.api))
         if not self.api.ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, wp.SDDL_REVISION_1,
                                                                              ctypes.byref(sd), None):
             raise OSError(self.api.last_error(), 'SDDL conversion failed')

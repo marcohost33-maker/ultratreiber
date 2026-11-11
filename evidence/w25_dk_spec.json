@@ -1,0 +1,285 @@
+{
+ "repo": ".",
+ "test_befehl": [
+  "python",
+  "-m",
+  "pytest"
+ ],
+ "timeout_s": 120,
+ "hinweis": "Portable Diskriminierung des W25-Verdikts (Linux ausfuehrbar). Jede Mutation muss den genannten Test rot machen. Die nativen Laufzeitbelege (echte Low-IL-, AppContainer- und Restricted-Token-Prozesse auf dem Windows-Kernel, Eltern = erhoehter Admin UND Standardkonto) stehen im CI-Artefakt udx-w25-principal-matrix-<sha> und als CASE-Zeilen im Job-Log.",
+ "faelle": [
+  {
+   "name": "W25-DK1 Integritaet des Kindes nicht geprueft (Launcher-Fehlgruen moeglich)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if type(rid) is not int or rid != want[0]:",
+   "neu": "    if type(rid) is not int:",
+   "test": "tests/test_w25_principal_matrix.py::EvaluatePrincipalMatrix::test_launcher_that_did_not_lower_integrity_blocks"
+  },
+  {
+   "name": "W25-DK2 Open-Fehler nicht verlangt (Exit 1 = auch 'Pipe fehlt')",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if child.get('open_error') != oerr or (oerr is not None and type(child.get('open_error')) is not int):",
+   "neu": "        if False:",
+   "test": "tests/test_w25_principal_matrix.py::EvaluatePrincipalMatrix::test_refusal_must_be_access_denied_at_open"
+  },
+  {
+   "name": "W25-DK3 Server-Identifikation des echten Benutzers nicht verlangt",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "            if identified and (sid is None or srv.get('client_sid') != sid):",
+   "neu": "            if False:",
+   "test": "tests/test_w25_principal_matrix.py::EvaluatePrincipalMatrix::test_server_must_have_identified_the_real_user"
+  },
+  {
+   "name": "W25-DK4 Laufzeitgrenze des Kindes entfernt",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if type(el) not in (int, float) or not math.isfinite(el) or el < 0 or el > CHILD_LIMIT_S:",
+   "neu": "        if type(el) not in (int, float):",
+   "test": "tests/test_w25_principal_matrix.py::EvaluatePrincipalMatrix::test_client_must_end_on_its_own_in_time"
+  },
+  {
+   "name": "W25-DK5 Produktions-SDDL nicht unabhaengig nachgerechnet",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if want_prod is None or sddl.get('production') != want_prod:",
+   "neu": "    if want_prod is None:",
+   "test": "tests/test_w25_principal_matrix.py::ControlSddl::test_evaluate_does_not_trust_a_weakened_production_sd"
+  },
+  {
+   "name": "W25-DK6 Restricted-Flag des Kindes nicht geprueft",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if restricted is not want[2]:",
+   "neu": "    if False:",
+   "test": "tests/test_w25_principal_matrix.py::EvaluatePrincipalMatrix::test_restricted_child_must_be_restricted"
+  },
+  {
+   "name": "W25-DK7 C++-Client meldet den Open-Fehler nicht mehr",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "            fwprintf(stderr, L\"UDX_CLIENT_OPEN_ERROR %lu\\n\", err);\n",
+   "neu": "",
+   "test": "tests/test_w25_principal_matrix.py::OpenErrorLine::test_cpp_client_prints_the_error_before_exit_1"
+  },
+  {
+   "name": "W25-DK8 Aufraeumen des AppContainer-Profils nicht verlangt",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if any(cleanup.get(k) != v for k, v in want.items()):",
+   "neu": "    if False:",
+   "test": "tests/test_w25_principal_matrix.py::EvaluatePrincipalMatrix::test_cleanup"
+  },
+  {
+   "name": "W25.1-DK9 Handle-Allow-List nicht verlangt (Sandbox-Kind koennte fremde Handles erben)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if child.get('inherit') != INHERIT:",
+   "neu": "        if False:",
+   "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_child_must_inherit_only_its_pipe"
+  },
+  {
+   "name": "W25.1-DK10 C++-Ablehnung nicht zugeordnet (Exit 20 genuegt wieder)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "            elif not isinstance(got, dict) or any(got.get(k) != v for k, v in denial.items()) \\",
+   "neu": "            elif not isinstance(got, dict) \\",
+   "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_cpp_restricted_denial_must_name_only_the_restricted_flag"
+  },
+  {
+   "name": "W25.1-DK11 Server-SD nicht gegen die deklarierte Variante geprueft (Attribution wertlos)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if server == 'python' and (c.get('server_sddl') is None or c.get('server_sddl') != sddl.get(sd)):",
+   "neu": "        if False:",
+   "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_server_must_have_used_the_declared_sd"
+  },
+  {
+   "name": "W25.1-DK12 Gefiltertes Admin-Token als Standardkonto akzeptiert (W18-Lehre)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if admin is not False or rid != MEDIUM_RID:",
+   "neu": "    if rid != MEDIUM_RID:",
+   "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_mode_must_match_the_parent_facts"
+  },
+  {
+   "name": "W25.1-DK13 Verwendete Binaries nicht gegen den Build gehasht",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if not isinstance(b.get('built'), str) or len(b['built']) != 64 or b.get('used') != b['built']:",
+   "neu": "        if not isinstance(b.get('built'), str) or len(b['built']) != 64:",
+   "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_binaries_must_be_the_built_ones"
+  },
+  {
+   "name": "W25.1-DK14 C++-Probe gibt die Ablehnungsfakten nicht mehr aus",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "            fwprintf(stderr, L\"UDX_PROBE_DENIED facts=unavailable\\n\");",
+   "neu": "            ;",
+   "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_cpp_probe_prints_the_denial_facts"
+  },
+  {
+   "name": "W25.2-DK15 C++-Client ohne Label-Pruefung (Low-IL-Squatter desselben Benutzers wird akzeptiert)",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "    if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID || !label_effective || label_rid != self_rid) {",
+   "neu": "    if (false) {",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_cpp_client_checks_the_label_before_writing"
+  },
+  {
+   "name": "W25.2-DK16 Python-Client prueft das Label nicht mehr vor dem Schreiben",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "            reason, err, label = _verify_pipe_label(api, h, own_rid)\n",
+   "neu": "            reason, err, label = None, 0, None\n",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_python_client_checks_the_label_before_writing"
+  },
+  {
+   "name": "W25.2-DK17 Python-Label-Regel akzeptiert fehlendes oder niedriges Label",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if rid < SECURITY_MANDATORY_MEDIUM_RID:\n",
+   "neu": "    if False:\n",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_python_client_checks_the_label_before_writing"
+  },
+  {
+   "name": "W25.2-DK18 Standardkonto-Squat: Owner-Pruefung statt Label-Pruefung wuerde genuegen",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if cpp.get('exit') != EXIT_PIPE_LABEL:",
+   "neu": "        if cpp.get('exit') not in (EXIT_PIPE_LABEL, EXIT_OWNER_MISMATCH):",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_standard_mode_needs_the_label_check_not_the_owner_check"
+  },
+  {
+   "name": "W25.2-DK19 Squatter-Empfang nicht geprueft",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if type(rep_.get('received')) is not int or rep_['received'] != 0:",
+   "neu": "    if False:",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_client_that_accepts_the_squatter_blocks"
+  },
+  {
+   "name": "W25.2-DK20 Privileg-Verweigerung beim Medium-Label nicht verlangt",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if rep_.get('created') is not False or rep_.get('create_error') != ERROR_PRIVILEGE_NOT_HELD:",
+   "neu": "        if False:",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_kernel_low_label_and_privilege_refusal_are_pinned"
+  },
+  {
+   "name": "W25.2-DK21 C++-Probe verlangt nur >= Medium statt gleicher IL wie der Server (Aegis P2)",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "&& rid >= SECURITY_MANDATORY_MEDIUM_RID && rid == server_rid\n",
+   "neu": "&& rid >= SECURITY_MANDATORY_MEDIUM_RID\n",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_cpp_probe_requires_equal_integrity"
+  },
+  {
+   "name": "W25.2-DK22 C++-Client akzeptiert ein INHERIT_ONLY-Label",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "    const bool label_effective = (label_flags & INHERIT_ONLY_ACE) == 0\n",
+   "neu": "    const bool label_effective = true\n",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_cpp_client_requires_an_effective_no_write_up_label"
+  },
+  {
+   "name": "W25.2-DK23 C++-Client verlangt NO_WRITE_UP nicht",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "        && (label_mask & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP) != 0;",
+   "neu": "        && true;",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_cpp_client_requires_an_effective_no_write_up_label"
+  },
+  {
+   "name": "W25.2-DK24 Python-Server verlangt nur >= Medium statt gleicher IL (Aegis P2)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "            if facts['integrity_rid'] != self._own_integrity:\n",
+   "neu": "            if False:\n",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_python_server_requires_equal_integrity"
+  },
+  {
+   "name": "W25.2-DK25 Python-Client akzeptiert ein INHERIT_ONLY-Label",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if flags & INHERIT_ONLY_ACE:\n",
+   "neu": "    if False:\n",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_python_client_checks_the_label_before_writing"
+  },
+  {
+   "name": "W25.2-DK26 Python-Client verlangt NO_WRITE_UP nicht",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if not mask & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP:\n",
+   "neu": "    if False:\n",
+   "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_python_client_checks_the_label_before_writing"
+  },
+  {
+   "name": "R4-DK27 Ausnahme aus sd_variant verlaesst evaluate() (Absturz statt Verdikt)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "            except (TypeError, ValueError):\n                issues.append('SD_VARIANT_INVALID:' + kind)\n",
+   "neu": "            except ():\n                issues.append('SD_VARIANT_INVALID:' + kind)\n",
+   "test": "tests/test_w25_principal_matrix.py::ControlSddl::test_underivable_production_is_a_typed_issue_not_an_exception"
+  },
+  {
+   "name": "UT6-02-DK28 Label-Alias fuer High zeigt auf Medium",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "LABEL_SDDL_ALIASES = {SECURITY_MANDATORY_MEDIUM_RID: 'ME', SECURITY_MANDATORY_HIGH_RID: 'HI'}\n",
+   "neu": "LABEL_SDDL_ALIASES = {SECURITY_MANDATORY_MEDIUM_RID: 'ME', SECURITY_MANDATORY_HIGH_RID: 'ME'}\n",
+   "test": "tests/test_ut6_02_label_parity.py::PortableLabelParity::test_label_sddl_maps_exactly_the_supported_levels"
+  },
+  {
+   "name": "UT6-02-DK29 label_sddl ohne Typpruefung (8192.0 / True rutschen durch)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if type(integrity_rid) is not int or integrity_rid not in LABEL_SDDL_ALIASES:\n",
+   "neu": "    if integrity_rid not in LABEL_SDDL_ALIASES:\n",
+   "test": "tests/test_ut6_02_label_parity.py::PortableLabelParity::test_label_sddl_refuses_every_other_value"
+  },
+  {
+   "name": "UT6-02-DK30 build_sddl ignoriert die uebergebene IL",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    label = label_sddl(integrity_rid)\n",
+   "neu": "    label = label_sddl(SECURITY_MANDATORY_MEDIUM_RID)\n",
+   "test": "tests/test_ut6_02_label_parity.py::PortableLabelParity::test_build_sddl_label_follows_the_level_and_nothing_else"
+  },
+  {
+   "name": "UT6-02-DK31 Harness rechnet die Produktions-SDDL ohne die Eltern-IL nach",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        want_prod = None if sid is None else production_sddl(sid, parent.get('integrity_rid'))\n",
+   "neu": "        want_prod = None if sid is None else production_sddl(sid)\n",
+   "test": "tests/test_w25_principal_matrix.py::ControlSddl::test_production_label_is_the_parent_level"
+  },
+  {
+   "name": "UT6-02-DK32 Harness akzeptiert jeden Server-Grund im Label-Ablehnungsfall",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "                    or srv.get('reason') not in reasons:\n",
+   "neu": "                    or False:\n",
+   "test": "tests/test_w25_principal_matrix.py::ControlSddl::test_label_refusal_server_reason_is_one_of_the_race_pair"
+  },
+  {
+   "name": "UT6-02-DK33 Server-Label-Verdrahtung (Quelltext-Pin, portabel)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "        self.sddl = build_sddl(self.server_sid, self._own_integrity)\n",
+   "neu": "        self.sddl = build_sddl(self.server_sid)\n",
+   "test": "tests/test_ut6_02_label_parity.py::PortableLabelParity::test_source_wiring"
+  },
+  {
+   "name": "UT6-02-DK34 C++-Client ohne Label-Gleichheit (nur >= Medium) [Quelltext-Pin]",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": " || !label_effective || label_rid != self_rid) {\n",
+   "neu": " || !label_effective) {\n",
+   "test": "tests/test_ut6_02_label_parity.py::CppSourceParity::test_cpp_client_requires_label_equal_to_own_level"
+  },
+  {
+   "name": "UT6-02-DK35 C++-Client akzeptiert Label >= eigene IL [Quelltext-Pin]",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": " || !label_effective || label_rid != self_rid) {\n",
+   "neu": " || !label_effective || label_rid < self_rid) {\n",
+   "test": "tests/test_ut6_02_label_parity.py::CppSourceParity::test_cpp_client_requires_label_equal_to_own_level"
+  },
+  {
+   "name": "UT6-02-DK36 C++-Client vergleicht mit fester Medium-Konstante [Quelltext-Pin]",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": " || !label_effective || label_rid != self_rid) {\n",
+   "neu": " || !label_effective || label_rid != SECURITY_MANDATORY_MEDIUM_RID) {\n",
+   "test": "tests/test_ut6_02_label_parity.py::CppSourceParity::test_cpp_client_requires_label_equal_to_own_level"
+  },
+  {
+   "name": "UT6-02-DK37 C++-Client liest die eigene IL nicht [Quelltext-Pin]",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "    if (!own_integrity_rid(self_rid)) return 8;\n",
+   "neu": "    self_rid = SECURITY_MANDATORY_MEDIUM_RID;\n",
+   "test": "tests/test_ut6_02_label_parity.py::CppSourceParity::test_cpp_client_reads_its_own_level_before_opening"
+  },
+  {
+   "name": "UT6-02-DK38 C++-Probe-Label wieder fest Medium [Quelltext-Pin]",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "    sddl += own_label;\n",
+   "neu": "    sddl += L\"ME\";\n",
+   "test": "tests/test_ut6_02_label_parity.py::CppSourceParity::test_cpp_probe_labels_with_its_own_level"
+  },
+  {
+   "name": "UT6-02-DK39 C++-Probe startet bei Level ohne Label (kein Exit 16) [Quelltext-Pin]",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "    if (own_label == nullptr) return 16;\n",
+   "neu": "    if (own_label == nullptr) own_label = L\"ME\";\n",
+   "test": "tests/test_ut6_02_label_parity.py::CppSourceParity::test_cpp_probe_labels_with_its_own_level"
+  }
+ ]
+}
