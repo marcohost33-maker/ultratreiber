@@ -84,8 +84,16 @@ class ServerIntegrityEquality(unittest.TestCase):
                 return 0
             return real(tok, k, buf, size, req)
         api.GetTokenInformation = gti
-        with self.assertRaises(OSError):
+        # The refusal must name the unreadable level (OSError), not surface as
+        # another error: since UT6-02 a fake level of 0 would also be refused,
+        # by build_sddl (ValueError UNSUPPORTED_INTEGRITY_LEVEL) -- a different
+        # guard. Any other exception is an assertion failure, not a crash.
+        try:
             wp.OneShotPipeServer(_name(), api=api)
+        except Exception as exc:                        # noqa: BLE001 - classified below
+            self.assertIsInstance(exc, OSError)
+        else:
+            self.fail('server started without its own integrity level')
 
 
 if __name__ == '__main__':

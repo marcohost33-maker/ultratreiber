@@ -49,8 +49,15 @@ class PortableLabelParity(unittest.TestCase):
     def test_label_sddl_refuses_every_other_value(self):
         for bad in (None, True, False, 0, -1, 0x1000, 0x1fff, 0x2001, 0x2100, 0x2fff, 0x4000, 0x5000,
                     '8192', 8192.0, b'\x00\x20', [0x2000], 2 ** 64):
-            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'UNSUPPORTED_INTEGRITY_LEVEL'):
-                wp.label_sddl(bad)
+            with self.subTest(bad=bad):
+                # typed refusal only: any other exception (e.g. TypeError for an
+                # unhashable value) is an assertion failure, not a test crash
+                try:
+                    wp.label_sddl(bad)
+                except Exception as exc:                # noqa: BLE001 - classified below
+                    self.assertEqual((type(exc), str(exc)), (ValueError, 'UNSUPPORTED_INTEGRITY_LEVEL'))
+                else:
+                    self.fail(f'label_sddl accepted {bad!r}')
 
     def test_build_sddl_label_follows_the_level_and_nothing_else(self):
         medium, high = wp.build_sddl(SID, 0x2000), wp.build_sddl(SID, 0x3000)
