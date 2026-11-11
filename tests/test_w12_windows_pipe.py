@@ -229,9 +229,12 @@ class WindowsPipeRuntime(unittest.TestCase):
         # W25.2: the client also requires an explicit mandatory label >= Medium.
         # A squatter at the SAME integrity level (ADR-UDX-006: one trust domain)
         # can set it, so it does; a lower-IL squatter cannot (W25.2 matrix).
+        # UT6-02: the client requires the label to EQUAL its own level, so the
+        # same-IL squatter labels at the own level (HI on the elevated runner).
         sd = ctypes.c_void_p()
         self.assertTrue(self.api.ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            'O:' + self.sid + 'D:(A;;GA;;;' + self.sid + ')S:(ML;;NWNR;;;ME)', wp.SDDL_REVISION_1,
+            'O:' + self.sid + 'D:(A;;GA;;;' + self.sid + ')' + wp.label_sddl(wp.own_integrity_rid()),
+            wp.SDDL_REVISION_1,
             ctypes.byref(sd), None))
         try:
             sa = wp.SECURITY_ATTRIBUTES(ctypes.sizeof(wp.SECURITY_ATTRIBUTES), sd, False)
@@ -394,7 +397,8 @@ class WindowsPipeRuntime(unittest.TestCase):
         for ace in info.aces:
             self.assertFalse(ace.mask & (WRITE_DAC | WRITE_OWNER | wp.FILE_CREATE_PIPE_INSTANCE))
         expected = ('D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;' + self.sid
-                    + ')(A;;0x12008b;;;OW)S:AI(ML;;NWNR;;;ME)')
+                    + ')(A;;0x12008b;;;OW)S:AI' + wp.label_sddl(wp.own_integrity_rid())[len('S:'):])
+        # UT6-02: the label is the server's OWN level (ME here, HI on the elevated runner)
         self.assertEqual(info.sddl, _canonical_sddl(expected))
 
     # (e) absolute deadline

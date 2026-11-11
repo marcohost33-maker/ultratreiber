@@ -65,10 +65,10 @@ def squat_case(name: str, mode: str) -> dict:
 
 def good_report(mode: str = 'elevated_admin') -> dict:
     rid = HIGH if mode == 'elevated_admin' else 0x2000
-    prod = tool.production_sddl(USER)
+    prod = tool.production_sddl(USER, rid)              # UT6-02: label = the parent's own level
     sddl = {kind: tool.sd_variant(prod, kind) for kind in tool.SD_KINDS}
     cases = {}
-    for name, (server, sd, principal, cexit, oerr, sexp) in tool.EXPECTED.items():
+    for name, (server, sd, principal, cexit, oerr, sexp) in tool.expected_cases(mode).items():
         f = dict(facts(principal))
         if f['integrity_rid'] == HIGH:
             f['integrity_rid'] = rid
@@ -78,7 +78,8 @@ def good_report(mode: str = 'elevated_admin') -> dict:
         if server == 'python':
             verdict, reason, identified = sexp
             case['server_sddl'] = sddl[sd]
-            case['server_result'] = {'verdict': verdict, 'reason': reason,
+            case['server_result'] = {'verdict': verdict,
+                                     'reason': reason[0] if type(reason) is tuple else reason,
                                      'client_sid': USER if identified else None,
                                      'sent': verdict == 'PEER_OK', 'winerror': None}
         else:
@@ -190,8 +191,10 @@ class EvaluatePrincipalMatrix(unittest.TestCase):
             r['cases']['py_low_il'], server_result=None)), 'SERVER_DECISION_WRONG:py_low_il')
 
     def test_server_must_have_identified_the_real_user(self):
-        self._blocked_with(lambda r: r['cases']['ctl_appcontainer']['server_result'].update(client_sid=None),
-                           'SERVER_DID_NOT_IDENTIFY_USER:ctl_appcontainer')
+        # UT6-02: ctl_appcontainer no longer reaches the server's token check
+        # (the client refuses the label first); py_restricted does.
+        self._blocked_with(lambda r: r['cases']['py_restricted']['server_result'].update(client_sid=None),
+                           'SERVER_DID_NOT_IDENTIFY_USER:py_restricted')
         self._blocked_with(lambda r: r['cases']['py_low_il']['server_result'].update(client_sid=USER),
                            'SERVER_SAW_A_CLIENT:py_low_il')
 
@@ -230,7 +233,7 @@ class EvaluatePrincipalMatrix(unittest.TestCase):
 
     def test_every_case_is_discriminating(self):
         # Each expected case contributes at least one issue when its child exit flips.
-        for name in tool.EXPECTED:
+        for name in tool.expected_cases('elevated_admin'):
             r = good_report()
             r['cases'][name]['child']['exit'] = 77
             self.assertIn('CLIENT_EXIT_WRONG:' + name, tool.evaluate(r)[1], name)
@@ -284,9 +287,16 @@ class HardeningW251(unittest.TestCase):
         self.assertEqual(tool.EXPECTED['ctl_low_il'][3:6], (1, 5, ('DENIED', 'CONNECT_TIMEOUT', False)))
         self.assertEqual(tool.EXPECTED['lbl_appcontainer'][1:5], ('label_only', 'appcontainer', 1, 5))
         # Falsified hypothesis (CI run 42593419596): the Medium label does NOT stop
-        # a lowbox token once the DACL grants AC; the server check has to.
-        self.assertEqual(tool.EXPECTED['ace_appcontainer'][1:6],
-                         ('acace_only', 'appcontainer', 3, None, ('DENIED', 'INTEGRITY_TOO_LOW', True)))
+        # a lowbox token once the DACL grants AC. UT6-02: the C++ client then refuses
+        # the Medium label itself (!= its own Low level, exit 7, no byte); with the
+        # elevated parent's High label the open is refused (prediction, see tool).
+        std, adm = tool.expected_cases('standard_account'), tool.expected_cases('elevated_admin')
+        for name in ('ace_appcontainer', 'ctl_appcontainer'):
+            self.assertEqual(std[name][3:6], (7, None, ('DENIED', ('CONNECT_FAILED', 'READ_FAILED'), False)))
+            self.assertEqual(adm[name][3:6], (1, 5, ('DENIED', 'CONNECT_TIMEOUT', False)))
+            self.assertNotIn(name, tool.EXPECTED)
+        with self.assertRaises(ValueError):
+            tool.expected_cases('admin')
         self.assertEqual(tool.EXPECTED['ace_same_token'][3], 0)
 
     def test_sd_variants_differ_by_exactly_one_mechanism(self):
@@ -460,11 +470,11 @@ class SquatterW252(unittest.TestCase):
         src = (ROOT / 'udx_ref' / 'windows_pipe.py').read_text(encoding='utf-8')
         body = src[src.index('def client_ping('):src.index('def main(')]
         # assert first: a removed call must fail as an assertion, not crash str.index (DK16)
-        for needle in ('_verify_pipe_owner(api, h, expected_bin)', '_verify_pipe_label(api, h)', 'api.WriteFile('):
+        label_call = '_verify_pipe_label(api, h, own_rid)'          # UT6-02: own level passed in
+        for needle in ('_verify_pipe_owner(api, h, expected_bin)', label_call, 'api.WriteFile('):
             self.assertIn(needle, body)
-        self.assertLess(body.index('_verify_pipe_owner(api, h, expected_bin)'),
-                        body.index('_verify_pipe_label(api, h)'))
-        self.assertLess(body.index('_verify_pipe_label(api, h)'), body.index('api.WriteFile('))
+        self.assertLess(body.index('_verify_pipe_owner(api, h, expected_bin)'), body.index(label_call))
+        self.assertLess(body.index(label_call), body.index('api.WriteFile('))
         verify = src[src.index('def _verify_pipe_label('):src.index('def _verify_pipe_owner(')]
         self.assertIn("    if info is None:\n        return 'PIPE_LABEL_TOO_LOW', 0, None\n", verify)
         self.assertIn("    if rid < SECURITY_MANDATORY_MEDIUM_RID:\n        return 'PIPE_LABEL_TOO_LOW', 0, rid\n", verify)
@@ -483,7 +493,7 @@ class SquatterW252(unittest.TestCase):
 class Summary(unittest.TestCase):
     def test_one_line_per_case_without_failing_on_junk(self):
         lines = tool.summary_lines(good_report())
-        self.assertEqual(len(lines), len(tool.EXPECTED) + len(tool.SQUAT_CASES))
+        self.assertEqual(len(lines), len(tool.expected_cases('elevated_admin')) + len(tool.SQUAT_CASES))
         self.assertEqual(sum(1 for x in lines if x.startswith('SQUAT ')), len(tool.SQUAT_CASES))
         self.assertTrue(any('CASE py_low_il: rid=0x1000' in x and 'open_error=5' in x for x in lines))
         self.assertEqual(tool.summary_lines(None), [])
@@ -494,6 +504,54 @@ class ControlSddl(unittest.TestCase):
     def test_production_literal_matches_the_module(self):
         from udx_ref import windows_pipe as wp
         self.assertEqual(tool.production_sddl(USER), wp.build_sddl(USER))
+        for rid in (0x2000, HIGH):                       # UT6-02: per own level
+            self.assertEqual(tool.production_sddl(USER, rid), wp.build_sddl(USER, rid))
+
+    def test_production_label_is_the_parent_level(self):
+        # UT6-02: an elevated parent's server labels HI; ME there is drift, and so
+        # is HI under a Medium parent or any level without a label.
+        self.assertTrue(tool.production_sddl(USER, HIGH).endswith(')S:(ML;;NWNR;;;HI)'))
+        for mode, wrong in (('elevated_admin', 0x2000), ('standard_account', HIGH)):
+            with self.subTest(mode=mode):
+                r = good_report(mode)
+                r['sddl'] = {k: tool.sd_variant(tool.production_sddl(USER, wrong), k) for k in tool.SD_KINDS}
+                for c in r['cases'].values():
+                    if 'server_sddl' in c:
+                        c['server_sddl'] = r['sddl'][c['sd']]
+                verdict, issues = tool.evaluate(r)
+                self.assertEqual(verdict, 'BLOCKED')
+                self.assertIn('PRODUCTION_SDDL_DRIFT', issues)
+        for bad in (0x4000, 0x2100, None, True, '12288'):
+            with self.subTest(parent_rid=bad), self.assertRaises(ValueError):
+                tool.production_sddl(USER, bad)
+
+    def test_variants_keep_the_production_level(self):
+        prod = tool.production_sddl(USER, HIGH)
+        v = {k: tool.sd_variant(prod, k) for k in tool.SD_KINDS}
+        self.assertEqual(v['label_only'], prod.replace('(ML;;NWNR;;;HI)', '(ML;;NWNX;;;HI)'))
+        self.assertEqual(v['control'], v['acace_only'].replace('(ML;;NWNR;;;HI)', '(ML;;NWNX;;;HI)'))
+        for k in tool.SD_KINDS:
+            self.assertTrue(v[k].endswith(';;;HI)'), k)
+
+    def test_label_refusal_server_reason_is_one_of_the_race_pair(self):
+        # UT6-02 standard_account: the client closes without a byte; the server
+        # sees CONNECT_FAILED or READ_FAILED. Anything else (incl. the old
+        # INTEGRITY_TOO_LOW, which needs a byte) blocks; an identification blocks.
+        for reason in ('CONNECT_FAILED', 'READ_FAILED'):
+            r = good_report('standard_account')
+            r['cases']['ace_appcontainer']['server_result']['reason'] = reason
+            self.assertEqual(tool.evaluate(r), ('PRINCIPAL_MATRIX_OK', []), reason)
+        for reason in ('INTEGRITY_TOO_LOW', 'CONNECT_TIMEOUT', None, ['READ_FAILED'], ('READ_FAILED',)):
+            with self.subTest(reason=reason):
+                r = good_report('standard_account')
+                r['cases']['ace_appcontainer']['server_result']['reason'] = reason
+                self.assertIn('SERVER_DECISION_WRONG:ace_appcontainer', tool.evaluate(r)[1])
+        r = good_report('standard_account')
+        r['cases']['ctl_appcontainer']['server_result']['client_sid'] = USER
+        self.assertIn('SERVER_SAW_A_CLIENT:ctl_appcontainer', tool.evaluate(r)[1])
+        r = good_report('standard_account')
+        r['cases']['ctl_appcontainer']['child']['exit'] = 3
+        self.assertIn('CLIENT_EXIT_WRONG:ctl_appcontainer', tool.evaluate(r)[1])
 
     def test_control_adds_exactly_ac_ace_and_low_label(self):
         prod = tool.production_sddl(USER)
@@ -508,7 +566,10 @@ class ControlSddl(unittest.TestCase):
 
     def test_evaluate_does_not_trust_a_weakened_production_sd(self):
         r = good_report()
-        r['sddl']['production'] = r['sddl']['production'].replace('NWNR;;;ME', 'NW;;;ME')
+        # level-independent weakening (UT6-02: the elevated report carries HI)
+        weakened = r['sddl']['production'].replace('(ML;;NWNR;;;', '(ML;;NW;;;')
+        self.assertNotEqual(weakened, r['sddl']['production'])
+        r['sddl']['production'] = weakened
         self.assertIn('PRODUCTION_SDDL_DRIFT', tool.evaluate(r)[1])
 
     # R4/DK5: malformed production values must block with the exact reason, and
@@ -537,7 +598,8 @@ class ControlSddl(unittest.TestCase):
         # declared equal to whatever the report holds), so only the try/except
         # around sd_variant stands between a malformed string and an exception.
         from unittest import mock
-        for bad in self.MALFORMED:
+        # None is excluded: evaluate() reads a None expectation as 'not derivable'
+        for bad in [b for b in self.MALFORMED if b is not None]:
             with self.subTest(bad=repr(bad)[:40]):
                 r = good_report()
                 r['sddl']['production'] = bad

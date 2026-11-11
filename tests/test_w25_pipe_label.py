@@ -1,4 +1,6 @@
 """W25.2: the Python client refuses a pipe without an explicit mandatory label >= Medium.
+UT6-02: and a label that is not EXACTLY its own level (ME on a Medium host, HI on
+the elevated CI runner); every "passes" case below therefore labels at the own level.
 
 Native (Windows) cases run in the CI suite jobs; the elevated runner sets the
 labels explicitly, so the decision is exercised without needing a Low-IL creator
@@ -22,6 +24,8 @@ class PipeLabelCheck(unittest.TestCase):
     def setUp(self):
         self.api = wp.default_api()
         self.sid = wp.current_user_sid(self.api)
+        self.own = wp.own_integrity_rid(self.api)          # UT6-02: Medium here, High on the CI runner
+        self.own_label = wp.label_sddl(self.own)
         self.handles = []
 
     def tearDown(self):
@@ -51,8 +55,9 @@ class PipeLabelCheck(unittest.TestCase):
         self.assertEqual((r.reason, r.sent, r.pipe_label, r.pipe_owner), ('PIPE_LABEL_TOO_LOW', False, 0x1000, self.sid))
 
     def test_medium_label_passes_the_label_check(self):
-        name, h = self._pipe('S:(ML;;NWNR;;;ME)')
-        self.assertEqual(wp.pipe_label_rid(self.api, h), (0x2000, 0))
+        # UT6-02: the label at the client's OWN level passes (Medium on a standard host)
+        name, h = self._pipe(self.own_label)
+        self.assertEqual(wp.pipe_label_rid(self.api, h), (self.own, 0))
         r = wp.client_ping(name, send=False, hold_s=0.0, connect_timeout_s=2.0)
         self.assertEqual((r.reason, r.sent), ('SILENT_HOLD', False))
 
@@ -111,7 +116,7 @@ class PipeLabelCheck(unittest.TestCase):
                 proc_err = ctypes.get_last_error()
                 if ph:
                     k32.CloseHandle(ph)
-                name, h = self._pipe('S:(ML;;NWNR;;;ME)')       # created by the restricted token
+                name, h = self._pipe(self.own_label)            # created by the restricted token
             finally:
                 self.assertTrue(api.RevertToSelf())
         finally:
@@ -120,17 +125,19 @@ class PipeLabelCheck(unittest.TestCase):
                     api.CloseHandle(t)
             api.LocalFree(restricted_sid)
         self.assertEqual((bool(ph), proc_err), (False, wp.ERROR_ACCESS_DENIED))
-        self.assertEqual(wp.pipe_label_info(api, h), ((0x2000, 0, 0x3), 0))
+        self.assertEqual(wp.pipe_label_info(api, h), ((self.own, 0, 0x3), 0))
         r = wp.client_ping(name, send=False, hold_s=0.0, connect_timeout_s=2.0)
         self.assertEqual((r.reason, r.pipe_owner), ('SILENT_HOLD', self.sid))
 
     def test_production_label_is_effective_and_no_write_up(self):
         with wp.OneShotPipeServer(wp.PIPE_PREFIX + 'UDX_W25L_' + uuid.uuid4().hex) as srv:
-            self.assertEqual(wp.pipe_label_info(self.api, srv.handle), ((0x2000, 0, 0x3), 0))
+            self.assertEqual(wp.pipe_label_info(self.api, srv.handle), ((self.own, 0, 0x3), 0))
 
-    def test_production_server_pipe_carries_medium(self):
+    def test_production_server_pipe_carries_own_level(self):
+        # UT6-02: the server labels its pipe with its OWN level (was: always Medium)
         with wp.OneShotPipeServer(wp.PIPE_PREFIX + 'UDX_W25L_' + uuid.uuid4().hex) as srv:
-            self.assertEqual(wp.pipe_label_rid(self.api, srv.handle), (0x2000, 0))
+            self.assertEqual(wp.pipe_label_rid(self.api, srv.handle), (self.own, 0))
+            self.assertTrue(srv.sddl.endswith(')' + self.own_label), srv.sddl)
 
     def test_label_query_failure_is_typed(self):
         name, _ = self._pipe('S:(ML;;NWNR;;;ME)')

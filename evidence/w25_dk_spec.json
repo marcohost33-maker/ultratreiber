@@ -39,8 +39,8 @@
   {
    "name": "W25-DK5 Produktions-SDDL nicht unabhaengig nachgerechnet",
    "datei": "tools/w25_principal_matrix.py",
-   "alt": "    if sid is None or sddl.get('production') != production_sddl(sid):",
-   "neu": "    if sid is None:",
+   "alt": "    if want_prod is None or sddl.get('production') != want_prod:",
+   "neu": "    if want_prod is None:",
    "test": "tests/test_w25_principal_matrix.py::ControlSddl::test_evaluate_does_not_trust_a_weakened_production_sd"
   },
   {
@@ -116,7 +116,7 @@
   {
    "name": "W25.2-DK16 Python-Client prueft das Label nicht mehr vor dem Schreiben",
    "datei": "udx_ref/windows_pipe.py",
-   "alt": "            reason, err, label = _verify_pipe_label(api, h)\n",
+   "alt": "            reason, err, label = _verify_pipe_label(api, h, own_rid)\n",
    "neu": "            reason, err, label = None, 0, None\n",
    "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_python_client_checks_the_label_before_writing"
   },
@@ -196,6 +196,48 @@
    "alt": "            except (TypeError, ValueError):\n                issues.append('SD_VARIANT_INVALID:' + kind)\n",
    "neu": "            except ():\n                issues.append('SD_VARIANT_INVALID:' + kind)\n",
    "test": "tests/test_w25_principal_matrix.py::ControlSddl::test_underivable_production_is_a_typed_issue_not_an_exception"
+  },
+  {
+   "name": "UT6-02-DK28 Label-Alias fuer High zeigt auf Medium",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "LABEL_SDDL_ALIASES = {SECURITY_MANDATORY_MEDIUM_RID: 'ME', SECURITY_MANDATORY_HIGH_RID: 'HI'}\n",
+   "neu": "LABEL_SDDL_ALIASES = {SECURITY_MANDATORY_MEDIUM_RID: 'ME', SECURITY_MANDATORY_HIGH_RID: 'ME'}\n",
+   "test": "tests/test_ut6_02_label_parity.py::PortableLabelParity::test_label_sddl_maps_exactly_the_supported_levels"
+  },
+  {
+   "name": "UT6-02-DK29 label_sddl ohne Typpruefung (8192.0 / True rutschen durch)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if type(integrity_rid) is not int or integrity_rid not in LABEL_SDDL_ALIASES:\n",
+   "neu": "    if integrity_rid not in LABEL_SDDL_ALIASES:\n",
+   "test": "tests/test_ut6_02_label_parity.py::PortableLabelParity::test_label_sddl_refuses_every_other_value"
+  },
+  {
+   "name": "UT6-02-DK30 build_sddl ignoriert die uebergebene IL",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    label = label_sddl(integrity_rid)\n",
+   "neu": "    label = label_sddl(SECURITY_MANDATORY_MEDIUM_RID)\n",
+   "test": "tests/test_ut6_02_label_parity.py::PortableLabelParity::test_build_sddl_label_follows_the_level_and_nothing_else"
+  },
+  {
+   "name": "UT6-02-DK31 Harness rechnet die Produktions-SDDL ohne die Eltern-IL nach",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        want_prod = None if sid is None else production_sddl(sid, parent.get('integrity_rid'))\n",
+   "neu": "        want_prod = None if sid is None else production_sddl(sid)\n",
+   "test": "tests/test_w25_principal_matrix.py::ControlSddl::test_production_label_is_the_parent_level"
+  },
+  {
+   "name": "UT6-02-DK32 Harness akzeptiert jeden Server-Grund im Label-Ablehnungsfall",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "                    or srv.get('reason') not in reasons:\n",
+   "neu": "                    or False:\n",
+   "test": "tests/test_w25_principal_matrix.py::ControlSddl::test_label_refusal_server_reason_is_one_of_the_race_pair"
+  },
+  {
+   "name": "UT6-02-DK33 Server-Label-Verdrahtung (Quelltext-Pin, portabel)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "        self.sddl = build_sddl(self.server_sid, self._own_integrity)\n",
+   "neu": "        self.sddl = build_sddl(self.server_sid)\n",
+   "test": "tests/test_ut6_02_label_parity.py::PortableLabelParity::test_source_wiring"
   }
  ]
 }

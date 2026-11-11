@@ -21,7 +21,7 @@ import sys
 # tools/w15_windows_evidence.py PINNED_SOURCE_SHA256 (a test compares both).
 EXPECTED_HEAD = '26309e997fea1ac90edba8a51e457fd494cac978'
 PINNED_SOURCE_SHA256 = {
-    'udx_ref/windows_pipe.py': 'e0260b6a9860c6830d031ab8f88efcc1b94bbb74b2140c1f6c9cf1a7da36aa30',
+    'udx_ref/windows_pipe.py': '68ce0f41520030955d712a9e6d51d28c3f197c8654dcd3f924495e7555074c06',
     'windows/udx_sid_probe.cpp': 'dcbc4803d625e1b5c77584e60ffe4c5a6af8f07df370b0fcd9c7afc28e30333d',
     'windows/udx_sid_client.cpp': 'f45df9822505a2d8866badd4c1198117bf44f5bc8debd396c06460896d3c0720',
     # W24: bounded overlapped I/O shared by both C++ sources.

@@ -100,6 +100,12 @@ AC_ACE = '(A;;0x12008b;;;AC)'   # ALL APPLICATION PACKAGES, same mask as every p
 # (AppContainer) token passes a Medium label with or without NW (ace_appcontainer).
 OPEN_LABEL = 'S:(ML;;NWNX;;;ME)'
 CONTROL_DELTA = (AC_ACE, OPEN_LABEL)
+# UT6-02: the production label is the SERVER's own level (udx_ref build_sddl(sid,
+# rid)): ME for a Medium parent, HI for an elevated one. The harness variants keep
+# that level (the same-token clients require label == own level) and change only
+# the policy (NR -> NX) or add the AC ACE. Kept literal, like production_sddl.
+PRODUCTION_LABELS = {MEDIUM_RID: PRODUCTION_LABEL, HIGH_RID: 'S:(ML;;NWNR;;;HI)'}
+OPEN_LABELS = {MEDIUM_RID: OPEN_LABEL, HIGH_RID: 'S:(ML;;NWNX;;;HI)'}
 PRINCIPALS = ('same_token', 'low_il', 'appcontainer', 'restricted')
 MODES = ('elevated_admin', 'standard_account')
 INHERIT = 'handle_list:1'       # W25.1: the child inherits exactly its stdout/stderr pipe
@@ -130,8 +136,8 @@ EXPECTED = {
     # W25.2: refused at open by the token's NO_WRITE_UP policy (see OPEN_LABEL).
     'ctl_low_il':      ('python', 'control', 'low_il', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
                         ('DENIED', 'CONNECT_TIMEOUT', False)),
-    'ctl_appcontainer': ('python', 'control', 'appcontainer', EXIT_BAD_RESPONSE, None,
-                         ('DENIED', 'INTEGRITY_TOO_LOW', True)),
+    # ctl_appcontainer / ace_appcontainer: mode-dependent since UT6-02, see
+    # EXPECTED_BY_MODE below (expected_cases() merges them in).
     # W25.1 attribution: the Low label alone admits Low IL (so the label was the
     # only reason for the production refusal), but an AppContainer is still
     # refused by the DACL. With the AC ACE and the Medium label kept, the
@@ -143,8 +149,6 @@ EXPECTED = {
     'lbl_appcontainer': ('python', 'label_only', 'appcontainer', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
                          ('DENIED', 'CONNECT_TIMEOUT', False)),
     'ace_same_token':  ('python', 'acace_only', 'same_token', EXIT_OK, None, ('PEER_OK', 'OK', True)),
-    'ace_appcontainer': ('python', 'acace_only', 'appcontainer', EXIT_BAD_RESPONSE, None,
-                         ('DENIED', 'INTEGRITY_TOO_LOW', True)),
     'cpp_same_token':  ('cpp', 'production', 'same_token', EXIT_OK, None, (EXIT_OK, None)),
     'cpp_low_il':      ('cpp', 'production', 'low_il', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
                         (EXIT_TIMEOUT, None)),
@@ -178,26 +182,72 @@ SQUAT_LIFETIME_S = 12.0
 EXIT_PIPE_LABEL = 7
 ERROR_FILE_NOT_FOUND = 2
 
+# UT6-02 (cross-family A7-R2): the clients accept only a pipe label EQUAL to
+# their own integrity level, and every server labels its pipe with its OWN level
+# (Medium -> ME, elevated -> HI). An AppContainer child is Low IL, so the
+# W25.1/W25.2 outcome "the AppContainer opens the AC-ACE pipe, writes, and the
+# SERVER refuses it with INTEGRITY_TOO_LOW" (exit 3) cannot happen any more:
+#   standard_account (labels ME): the lowbox token still OPENS a Medium-labelled
+#     pipe once the DACL grants AC (measured W25.1), then the C++ client refuses
+#     the label before writing (exit 7). No byte: the server ends with
+#     CONNECT_FAILED or READ_FAILED depending on whether the client had already
+#     closed when ConnectNamedPipe ran (same race as the pinned W17 owner test).
+#   elevated_admin (labels HI): PREDICTION, not yet measured -- a Low/lowbox token
+#     cannot write up to a High-labelled object (NO_WRITE_UP), so the open is
+#     refused with ERROR_ACCESS_DENIED and the server sees no connection.
+# The server's INTEGRITY_TOO_LOW check stays as defense in depth; for a real
+# AppContainer token it is now unreachable (fault-injection tests keep it red/green).
+LABEL_REFUSAL_SERVER_REASONS = ('CONNECT_FAILED', 'READ_FAILED')
+EXPECTED_BY_MODE = {
+    'standard_account': {
+        'ctl_appcontainer': ('python', 'control', 'appcontainer', EXIT_PIPE_LABEL, None,
+                             ('DENIED', LABEL_REFUSAL_SERVER_REASONS, False)),
+        'ace_appcontainer': ('python', 'acace_only', 'appcontainer', EXIT_PIPE_LABEL, None,
+                             ('DENIED', LABEL_REFUSAL_SERVER_REASONS, False)),
+    },
+    'elevated_admin': {
+        'ctl_appcontainer': ('python', 'control', 'appcontainer', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
+                             ('DENIED', 'CONNECT_TIMEOUT', False)),
+        'ace_appcontainer': ('python', 'acace_only', 'appcontainer', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
+                             ('DENIED', 'CONNECT_TIMEOUT', False)),
+    },
+}
+
+
+def expected_cases(mode) -> dict:
+    """EXPECTED plus the mode-dependent cases; ValueError for an unknown mode."""
+    if mode not in MODES:
+        raise ValueError('MODE_INVALID')
+    return {**EXPECTED, **EXPECTED_BY_MODE[mode]}
+
 
 # --- pure decision logic (portable, tested on Linux) ---------------------------
-def production_sddl(sid: str) -> str:
-    """Same string as udx_ref.windows_pipe.build_sddl (kept literal on purpose:
-    evaluate() must not trust the module that is under test)."""
+def production_sddl(sid: str, rid: int = MEDIUM_RID) -> str:
+    """Same string as udx_ref.windows_pipe.build_sddl(sid, rid) (kept literal on
+    purpose: evaluate() must not trust the module that is under test). UT6-02:
+    ``rid`` is the server's own level; ValueError for a level without a label."""
+    if type(rid) is not int or rid not in PRODUCTION_LABELS:
+        raise ValueError('UNSUPPORTED_INTEGRITY_LEVEL')
     a = '0x12008b'
-    return f'O:{sid}D:P(A;;{a};;;SY)(A;;{a};;;{sid})(A;;{a};;;OW){PRODUCTION_LABEL}'
+    return f'O:{sid}D:P(A;;{a};;;SY)(A;;{a};;;{sid})(A;;{a};;;OW){PRODUCTION_LABELS[rid]}'
 
 
 def sd_variant(production: str, kind: str) -> str:
-    """Harness-only descriptor ``kind`` derived from the production SDDL."""
-    if type(production) is not str or not production.endswith(')' + PRODUCTION_LABEL):
+    """Harness-only descriptor ``kind`` derived from the production SDDL; the
+    variants keep the production label's level (UT6-02)."""
+    if type(production) is not str:
+        raise ValueError('NOT_A_PRODUCTION_SDDL')
+    rid = next((r for r, label in PRODUCTION_LABELS.items() if production.endswith(')' + label)), None)
+    if rid is None:
         raise ValueError('NOT_A_PRODUCTION_SDDL')
     if kind not in SD_KINDS:
         raise ValueError('UNKNOWN_SD_KIND')
-    body = production[:-len(PRODUCTION_LABEL)]
+    label, open_label = PRODUCTION_LABELS[rid], OPEN_LABELS[rid]
+    body = production[:-len(label)]
     return {'production': production,
-            'control': body + AC_ACE + OPEN_LABEL,
-            'label_only': body + OPEN_LABEL,
-            'acace_only': body + AC_ACE + PRODUCTION_LABEL}[kind]
+            'control': body + AC_ACE + open_label,
+            'label_only': body + open_label,
+            'acace_only': body + AC_ACE + label}[kind]
 
 
 def control_sddl(production: str) -> str:
@@ -340,7 +390,12 @@ def evaluate(report) -> tuple[str, list[str]]:
         issues.append('PARENT_NOT_PLAIN')
     issues += _parent_issues(report, parent)
     sddl = report.get('sddl') if isinstance(report.get('sddl'), dict) else {}
-    if sid is None or sddl.get('production') != production_sddl(sid):
+    # UT6-02: the production label must be the parent's (= server's) OWN level.
+    try:
+        want_prod = None if sid is None else production_sddl(sid, parent.get('integrity_rid'))
+    except ValueError:
+        want_prod = None
+    if want_prod is None or sddl.get('production') != want_prod:
         issues.append('PRODUCTION_SDDL_DRIFT')
     else:
         for kind in SD_KINDS[1:]:
@@ -367,10 +422,12 @@ def evaluate(report) -> tuple[str, list[str]]:
     if ac_sid is None:
         issues.append('APPCONTAINER_SID_INVALID')
     cases = report.get('cases') if isinstance(report.get('cases'), dict) else {}
-    if set(cases) != set(EXPECTED):
+    # an invalid mode is already MODE_INVALID (BLOCKED); the case set is the same in both modes
+    expected = expected_cases(report.get('mode') if report.get('mode') in MODES else MODES[0])
+    if set(cases) != set(expected):
         issues.append('CASE_SET_DRIFT')
-    for name in sorted(set(EXPECTED) & set(cases)):
-        server, sd, principal, cexit, oerr, sexp = EXPECTED[name]
+    for name in sorted(set(expected) & set(cases)):
+        server, sd, principal, cexit, oerr, sexp = expected[name]
         c = cases[name]
         if not isinstance(c, dict) or c.get('error'):
             issues.append('CASE_ERROR:' + name)
@@ -393,7 +450,9 @@ def evaluate(report) -> tuple[str, list[str]]:
         srv = c.get('server_result') if isinstance(c.get('server_result'), dict) else {}
         if server == 'python':
             verdict, reason, identified = sexp
-            if (srv.get('verdict'), srv.get('reason')) != (verdict, reason):
+            reasons = reason if type(reason) is tuple else (reason,)    # UT6-02: race-dependent pair
+            if srv.get('verdict') != verdict or type(srv.get('reason')) is not str \
+                    or srv.get('reason') not in reasons:
                 issues.append('SERVER_DECISION_WRONG:' + name)
             if identified and (sid is None or srv.get('client_sid') != sid):
                 issues.append('SERVER_DID_NOT_IDENTIFY_USER:' + name)
@@ -824,7 +883,7 @@ def _sd_kind(wp, kind: str):
         yield
         return
     real = wp.build_sddl
-    wp.build_sddl = lambda sid: sd_variant(real(sid), kind)
+    wp.build_sddl = lambda sid, *rid: sd_variant(real(sid, *rid), kind)
     try:
         yield
     finally:
@@ -842,8 +901,9 @@ def _sha256(path) -> str:
     return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
 
 
-def run_case(win: Win, wp, crossrun, name: str, client: str, probe: str, ac_psid) -> dict:
-    server, sd, principal, cexit, _, _ = EXPECTED[name]
+def run_case(win: Win, wp, crossrun, name: str, client: str, probe: str, ac_psid,
+             mode: str = MODES[0]) -> dict:
+    server, sd, principal, cexit, _, _ = expected_cases(mode)[name]
     refused = cexit == EXIT_OPEN_FAILED
     case = {'server': server, 'sd': sd, 'principal': principal}
     argv = [client, '--budget-ms', str(CLIENT_BUDGET_MS)]
@@ -994,7 +1054,7 @@ def run_matrix(report: dict, binaries: pathlib.Path, work_parent: str | None = N
     import shutil
     parent = win.own_facts()
     report['parent'] = parent
-    prod = wp.build_sddl(parent['user_sid'])
+    prod = wp.build_sddl(parent['user_sid'], parent['integrity_rid'])     # UT6-02: own level
     report['sddl'] = {kind: sd_variant(prod, kind) for kind in SD_KINDS}
     ac_name = AC_NAME_PREFIX + uuid.uuid4().hex[:12]
     ac_psid = None
@@ -1012,9 +1072,10 @@ def run_matrix(report: dict, binaries: pathlib.Path, work_parent: str | None = N
                            capture_output=True, text=True, timeout=60)
         report['appcontainer']['dir_grant_exit'] = g.returncode
         client, probe = str(work / 'udx_sid_client.exe'), str(work / 'udx_sid_probe.exe')
-        for name in EXPECTED:
+        for name in expected_cases(report['mode']):
             try:
-                report['cases'][name] = run_case(win, wp, crossrun, name, client, probe, ac_psid)
+                report['cases'][name] = run_case(win, wp, crossrun, name, client, probe, ac_psid,
+                                                 report['mode'])
             except Exception as exc:                       # recorded, the verdict fails closed
                 report['cases'][name] = {'error': f'{type(exc).__name__}: {exc}'[:300]}
         report['squat'] = {}
