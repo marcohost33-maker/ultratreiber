@@ -447,7 +447,8 @@ class SquatterW252(unittest.TestCase):
         label = src.index('LABEL_SECURITY_INFORMATION')
         self.assertLess(src.index('if (!owner_ok)'), label)
         self.assertLess(label, src.index('WriteFile('))
-        self.assertIn('if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID || !label_effective) {', src)
+        self.assertIn('if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID || !label_effective'
+                      ' || label_rid != self_rid) {', src)
         self.assertIn('SYSTEM_MANDATORY_LABEL_ACE_TYPE', src)
 
     def test_cpp_client_requires_an_effective_no_write_up_label(self):

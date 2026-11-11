@@ -109,7 +109,7 @@
   {
    "name": "W25.2-DK15 C++-Client ohne Label-Pruefung (Low-IL-Squatter desselben Benutzers wird akzeptiert)",
    "datei": "windows/udx_sid_client.cpp",
-   "alt": "    if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID || !label_effective) {",
+   "alt": "    if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID || !label_effective || label_rid != self_rid) {",
    "neu": "    if (false) {",
    "test": "tests/test_w25_principal_matrix.py::SquatterW252::test_cpp_client_checks_the_label_before_writing"
   },
@@ -238,6 +238,48 @@
    "alt": "        self.sddl = build_sddl(self.server_sid, self._own_integrity)\n",
    "neu": "        self.sddl = build_sddl(self.server_sid)\n",
    "test": "tests/test_ut6_02_label_parity.py::PortableLabelParity::test_source_wiring"
+  },
+  {
+   "name": "UT6-02-DK34 C++-Client ohne Label-Gleichheit (nur >= Medium) [Quelltext-Pin]",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": " || !label_effective || label_rid != self_rid) {\n",
+   "neu": " || !label_effective) {\n",
+   "test": "tests/test_ut6_02_label_parity.py::CppSourceParity::test_cpp_client_requires_label_equal_to_own_level"
+  },
+  {
+   "name": "UT6-02-DK35 C++-Client akzeptiert Label >= eigene IL [Quelltext-Pin]",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": " || !label_effective || label_rid != self_rid) {\n",
+   "neu": " || !label_effective || label_rid < self_rid) {\n",
+   "test": "tests/test_ut6_02_label_parity.py::CppSourceParity::test_cpp_client_requires_label_equal_to_own_level"
+  },
+  {
+   "name": "UT6-02-DK36 C++-Client vergleicht mit fester Medium-Konstante [Quelltext-Pin]",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": " || !label_effective || label_rid != self_rid) {\n",
+   "neu": " || !label_effective || label_rid != SECURITY_MANDATORY_MEDIUM_RID) {\n",
+   "test": "tests/test_ut6_02_label_parity.py::CppSourceParity::test_cpp_client_requires_label_equal_to_own_level"
+  },
+  {
+   "name": "UT6-02-DK37 C++-Client liest die eigene IL nicht [Quelltext-Pin]",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "    if (!own_integrity_rid(self_rid)) return 8;\n",
+   "neu": "    self_rid = SECURITY_MANDATORY_MEDIUM_RID;\n",
+   "test": "tests/test_ut6_02_label_parity.py::CppSourceParity::test_cpp_client_reads_its_own_level_before_opening"
+  },
+  {
+   "name": "UT6-02-DK38 C++-Probe-Label wieder fest Medium [Quelltext-Pin]",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "    sddl += own_label;\n",
+   "neu": "    sddl += L\"ME\";\n",
+   "test": "tests/test_ut6_02_label_parity.py::CppSourceParity::test_cpp_probe_labels_with_its_own_level"
+  },
+  {
+   "name": "UT6-02-DK39 C++-Probe startet bei Level ohne Label (kein Exit 16) [Quelltext-Pin]",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "    if (own_label == nullptr) return 16;\n",
+   "neu": "    if (own_label == nullptr) own_label = L\"ME\";\n",
+   "test": "tests/test_ut6_02_label_parity.py::CppSourceParity::test_cpp_probe_labels_with_its_own_level"
   }
  ]
 }

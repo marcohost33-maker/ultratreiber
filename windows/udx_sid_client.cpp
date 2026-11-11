@@ -14,8 +14,9 @@
 // Exit: 0 PEER_OK, 1 open failed (or pipe absent/busy until the deadline),
 // 2 write failed, 3 bad/short response, 4 owner query failed, 5 owner mismatch,
 // 6 own SID, 7 pipe has no single explicit mandatory label >= Medium (W25.2;
-// the label must not be INHERIT_ONLY and must carry NO_WRITE_UP),
-// 22 deadline passed, 24 bad arguments, 31 cancelled I/O did not settle.
+// the label must not be INHERIT_ONLY and must carry NO_WRITE_UP) or the label
+// is not EXACTLY this process' own integrity level (UT6-02), 8 own integrity
+// level unreadable (UT6-02), 22 deadline passed, 24 bad arguments, 31 cancelled I/O did not settle.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <aclapi.h>
@@ -42,6 +43,28 @@ static bool own_user_sid(std::vector<BYTE>& storage, PSID& sid) {
     return sid != nullptr && IsValidSid(sid);
 }
 
+// UT6-02 (UNCOMPILED here; CI cpp-candidate job): integrity RID of this
+// process' token. The client never impersonates, so the process token is the
+// one CreateFileW uses (the Python port reads the thread token if present).
+static bool own_integrity_rid(DWORD& rid) {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
+    DWORD required = 0;
+    GetTokenInformation(token, TokenIntegrityLevel, nullptr, 0, &required);
+    bool ok = required != 0 && required <= 65536;
+    std::vector<BYTE> buf;
+    if (ok) {
+        buf.resize(required);
+        ok = GetTokenInformation(token, TokenIntegrityLevel, buf.data(), required, &required) != 0;
+    }
+    CloseHandle(token);
+    if (!ok) return false;
+    PSID sid = reinterpret_cast<TOKEN_MANDATORY_LABEL*>(buf.data())->Label.Sid;
+    if (sid == nullptr || !IsValidSid(sid) || *GetSidSubAuthorityCount(sid) == 0) return false;
+    rid = *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1u);
+    return true;
+}
+
 int wmain(int argc, wchar_t** argv) {
     constexpr wchar_t name[] = LR"(\\.\pipe\UDX_W4_SID_PROBE)";
     DWORD budget_ms = 0;
@@ -50,6 +73,9 @@ int wmain(int argc, wchar_t** argv) {
     std::vector<BYTE> self_buf;
     PSID self_sid = nullptr;
     if (!own_user_sid(self_buf, self_sid)) return 6;
+    // UT6-02: own level read BEFORE the open; unreadable -> exit 8, nothing opened.
+    DWORD self_rid = 0;
+    if (!own_integrity_rid(self_rid)) return 8;
     // W18: individual rights. GENERIC_WRITE maps to FILE_GENERIC_WRITE, which
     // contains FILE_APPEND_DATA == FILE_CREATE_PIPE_INSTANCE; the server's DACL
     // no longer grants that bit, so a GENERIC_WRITE open is refused.
@@ -115,9 +141,12 @@ int wmain(int argc, wchar_t** argv) {
     LocalFree(lsd);
     const bool label_effective = (label_flags & INHERIT_ONLY_ACE) == 0
         && (label_mask & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP) != 0;
-    if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID || !label_effective) {
-        fwprintf(stderr, L"UDX_CLIENT_PIPE_LABEL count=%u rid=%lu flags=%u mask=%lu\n",
-                 labels, label_rid, static_cast<unsigned>(label_flags), label_mask);
+    // UT6-02: and EXACTLY this process' own level (mirror of the server's
+    // rid == server_rid): a Medium client never writes to an elevated server's
+    // pipe, an elevated client never to a Medium one.
+    if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID || !label_effective || label_rid != self_rid) {
+        fwprintf(stderr, L"UDX_CLIENT_PIPE_LABEL count=%u rid=%lu flags=%u mask=%lu own=%lu\n",
+                 labels, label_rid, static_cast<unsigned>(label_flags), label_mask, self_rid);
         CloseHandle(pipe); return 7;
     }
     static constexpr BYTE ping = 0x55;

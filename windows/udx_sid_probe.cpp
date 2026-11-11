@@ -9,7 +9,8 @@
 // Exit: 0 PEER_OK delivered and peer closed, 20 denied, 21 name occupied,
 // 22 deadline passed before PEER_OK was written, 23 PEER_OK written but the
 // peer did not close in time, 24 bad arguments, 30 RevertToSelf failed,
-// 31 cancelled I/O did not settle, 10-15 setup failures.
+// 31 cancelled I/O did not settle, 10-15 setup failures, 16 own integrity level
+// has no pipe label (UT6-02: only Medium -> ME and High -> HI are served).
 // W25: a denial (exit 20) prints one stderr line "UDX_PROBE_DENIED level=.. rid=..
 // appc=.. restricted=.. session_ok=.. sid_ok=.." (or "facts=unavailable").
 // W25.2-P2: the client's integrity RID must equal the server's own RID (not only
@@ -88,6 +89,14 @@ int wmain(int argc, wchar_t** argv) {
     ok = ok && integrity_rid(server_token, server_rid);
     CloseHandle(server_token);
     if (!ok) return 11;
+    // UT6-02 (UNCOMPILED here; CI cpp-candidate job): the label ACE is the
+    // server's OWN level, because the clients accept only a label EQUAL to their
+    // own level (Medium -> ME, elevated -> HI; same closed list as
+    // udx_ref.windows_pipe.LABEL_SDDL_ALIASES). Any other own level refuses to
+    // start (exit 16) before anything is allocated.
+    const wchar_t* own_label = server_rid == SECURITY_MANDATORY_MEDIUM_RID ? L"ME"
+        : server_rid == SECURITY_MANDATORY_HIGH_RID ? L"HI" : nullptr;
+    if (own_label == nullptr) return 16;
 
     LPWSTR sid_text = nullptr;
     if (!ConvertSidToStringSidW(server_sid, &sid_text)) return 12;
@@ -109,7 +118,10 @@ int wmain(int argc, wchar_t** argv) {
     sddl += L"D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;";
     sddl += sid_text;
     // W17: OWNER RIGHTS ACE; the owner gets the ACE mask only, no implicit WRITE_DAC.
-    sddl += L")(A;;0x12008b;;;OW)S:(ML;;NWNR;;;ME)";
+    // UT6-02: NW|NR label at the server's own level (see own_label above).
+    sddl += L")(A;;0x12008b;;;OW)S:(ML;;NWNR;;;";
+    sddl += own_label;
+    sddl += L")";
     LocalFree(sid_text);
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &sd, nullptr)) return 13;

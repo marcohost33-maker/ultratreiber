@@ -87,6 +87,44 @@ class PortableLabelParity(unittest.TestCase):
                         init.index('ConvertStringSidToSidW'))
 
 
+class CppSourceParity(unittest.TestCase):
+    """C++ parity of UT6-02 as SOURCE pins (no compiler on the development host;
+    the behaviour is built and run only in the CI cpp-candidate / principal-matrix
+    jobs). A pin proves the text, not the runtime decision."""
+
+    CLIENT = (ROOT / 'windows' / 'udx_sid_client.cpp').read_text(encoding='utf-8')
+    PROBE = (ROOT / 'windows' / 'udx_sid_probe.cpp').read_text(encoding='utf-8')
+
+    def test_cpp_client_reads_its_own_level_before_opening(self):
+        src = self.CLIENT
+        self.assertIn('static bool own_integrity_rid(DWORD& rid) {', src)
+        self.assertIn('GetTokenInformation(token, TokenIntegrityLevel, buf.data(), required, &required)', src)
+        call = '    if (!own_integrity_rid(self_rid)) return 8;\n'
+        self.assertEqual(src.count(call), 1)
+        self.assertLess(src.index(call), src.index('pipe = CreateFileW(name, access,'))
+
+    def test_cpp_client_requires_label_equal_to_own_level(self):
+        src = self.CLIENT
+        cond = ('    if (labels != 1 || label_rid < SECURITY_MANDATORY_MEDIUM_RID || !label_effective'
+                ' || label_rid != self_rid) {\n')
+        self.assertEqual(src.count(cond), 1)
+        self.assertLess(src.index(cond), src.index('WriteFile('))
+        self.assertLess(src.index(cond), src.index('return 7;', src.index(cond)))
+
+    def test_cpp_probe_labels_with_its_own_level(self):
+        src = self.PROBE
+        mapping = ('    const wchar_t* own_label = server_rid == SECURITY_MANDATORY_MEDIUM_RID ? L"ME"\n'
+                   '        : server_rid == SECURITY_MANDATORY_HIGH_RID ? L"HI" : nullptr;\n'
+                   '    if (own_label == nullptr) return 16;\n')
+        self.assertEqual(src.count(mapping), 1)
+        self.assertEqual(src.count('    sddl += own_label;\n'), 1)
+        # read after the own level is known, before any allocation or pipe creation
+        self.assertLess(src.index('ok = ok && integrity_rid(server_token, server_rid);'), src.index(mapping))
+        self.assertLess(src.index(mapping), src.index('ConvertSidToStringSidW(server_sid, &sid_text)'))
+        self.assertLess(src.index('    sddl += own_label;\n'), src.index('CreateNamedPipeW('))
+        self.assertNotIn('S:(ML;;NWNR;;;ME)"', src)            # no fixed Medium label left
+
+
 def _patch_own_level(api, rid):
     """Every TokenIntegrityLevel read on this api object reports ``rid`` (the
     client's own-level seam; the pipe's kernel label stays real)."""

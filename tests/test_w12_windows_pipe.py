@@ -96,7 +96,11 @@ class PortableParityAndValidation(unittest.TestCase):
         # W18: ACE mask 0x12008b (FILE_GENERIC_READ|FILE_WRITE_DATA) instead of GRGW.
         self.assertIn('std::wstring sddl = L"O:";\n    sddl += sid_text;\n', self.CPP)
         self.assertIn('    sddl += L"D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;";\n    sddl += sid_text;\n', self.CPP)
-        self.assertIn('sddl += L")(A;;0x12008b;;;OW)S:(ML;;NWNR;;;ME)";', self.CPP)
+        # UT6-02: the C++ label is the probe's OWN level (ME/HI), like build_sddl(sid, rid)
+        self.assertIn('sddl += L")(A;;0x12008b;;;OW)S:(ML;;NWNR;;;";\n    sddl += own_label;\n'
+                      '    sddl += L")";', self.CPP)
+        self.assertIn('server_rid == SECURITY_MANDATORY_MEDIUM_RID ? L"ME"', self.CPP)
+        self.assertIn(': server_rid == SECURITY_MANDATORY_HIGH_RID ? L"HI" : nullptr;', self.CPP)
         sid = 'S-1-5-21-1-2-3-1001'
         self.assertEqual(wp.build_sddl(sid),
                          'O:' + sid + 'D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;' + sid
