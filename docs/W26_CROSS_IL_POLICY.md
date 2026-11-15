@@ -123,7 +123,21 @@ getrennt nach „am Ziel-Repo“ und „an unserem Prüfwerkzeug“ (Vermerk 007
 Lokaler Stand nach W26.1: Suite grün; DK-Replay aller **aktiven** portablen Specs **84/84**
 (public_prep 13, W16 5, W20 5, W25 39, W26 15, Carry-over 7), auf Linux und Windows identisch
 (CI-Lauf 43771825189). Native Specs (nur Windows): W19 9/9, Carry-over 5/5, W25.2 vor dem Fix
-12/14; Ergebnis nach dem Fix im CI-Artefakt `udx-dk-windows-latest-<sha>`.
+12/14.
+
+**Endstand CI-Lauf [43772594391](https://github.com/marcohost33-maker/ultratreiber/actions/runs/43772594391)
+(Kopf `6265faf`, 8/8 Jobs grün):**
+
+| Spec | Linux | Windows |
+|---|---|---|
+| public_prep / W16 / W20 / W25 / W26 / Carry-over | 13 / 5 / 5 / 39 / 15 / 7 | gleich |
+| W13 (2 Altanker gepinnt) | 1/1 (19 Windows-only) | 20/20 |
+| W18 / W24 (je 1 Altanker gepinnt) | 4/4 / 10/10 | gleich |
+| W19 / W25.2 / Carry-over nativ / W12 (4 gepinnt) / W13-Carry-over | – | 9/9 / **14/14** / 5/5 / 7/7 / 9/9 |
+| **Summe** | **99/99** | **162/162** |
+
+Artefakt `udx-dk-windows-latest-fe547813…` (PR-Merge-Ref). Nicht ausgeführt: W14 (alle 5 Anker
+veraltet, durch Carry-over ersetzt).
 
 **Methodische Lehre:** Ein Abweisungstest ohne Positivkontrolle tötet „lehne alles ab“-Mutanten
 nur zufällig, abhängig vom Host. Jede Abweisungsregel braucht im selben Test den Fall, der
