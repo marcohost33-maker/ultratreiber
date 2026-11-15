@@ -1,0 +1,96 @@
+{
+ "repo": ".",
+ "test_befehl": [
+  "python",
+  "-m",
+  "pytest"
+ ],
+ "timeout_s": 120,
+ "hinweis": "W26 Cross-IL (UT-A7-01): portable Diskriminierung des Verdikts fuer medium_il-Clients gegen den erhoehten Server und den Medium-Squatter mit der projekteigenen Medium-SD. Jede Mutation muss den genannten Test rot machen. Native Belege: CI-Job windows-principal-matrix (Modus elevated_admin), CASE-/SQUAT-Zeilen im Job-Log.",
+ "faelle": [
+  {
+   "name": "W26-DK1 Exit 7 ohne Zuordnung zur Gleichheitsregel akzeptiert",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    elif label is None or (label['count'], label['rid'], label['own']) != (1, MEDIUM_RID, HIGH_RID):",
+   "neu": "    elif label is None:",
+   "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_exit_7_must_be_the_equality_rule"
+  },
+  {
+   "name": "W26-DK2 Python-Client darf Medium-Squatter beschreiben",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if (py.get('reason'), py.get('sent'), py.get('pipe_label')) != ('PIPE_LABEL_MISMATCH', False, MEDIUM_RID):",
+   "neu": "    if False:",
+   "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_elevated_client_that_writes_to_the_medium_squatter_blocks"
+  },
+  {
+   "name": "W26-DK3 Owner-Pruefung muss nicht bestanden sein (Zuordnung verloren)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if sid is None or py.get('pipe_owner') != sid:",
+   "neu": "    if False:",
+   "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_owner_check_must_have_passed"
+  },
+  {
+   "name": "W26-DK4 Squatter-SD nicht an Medium-Produktions-SD gebunden",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if want_sddl is None or rep_.get('sddl') != want_sddl:",
+   "neu": "    if False:",
+   "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_squatter_must_use_the_projects_own_medium_descriptor"
+  },
+  {
+   "name": "W26-DK5 Medium-Squat-Fall gar nicht bewertet",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        return issues + _medium_squat_issues(name, rep_, cpp, py, parent, mode)",
+   "neu": "        return issues",
+   "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_elevated_client_that_writes_to_the_medium_squatter_blocks"
+  },
+  {
+   "name": "W26-DK6 Cross-IL-Squat-Fall aus dem Admin-Modus entfernt",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "SQUAT_CASES_BY_MODE = {'elevated_admin': ('squat_medium_il_production',), 'standard_account': ()}",
+   "neu": "SQUAT_CASES_BY_MODE = {'elevated_admin': (), 'standard_account': ()}",
+   "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_cross_il_cases_are_elevated_only"
+  },
+  {
+   "name": "W26-DK7 medium_il-Token nicht abgesenkt (High statt Medium)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "LOWERED_LABELS = {'low_il': 'S-1-16-4096', 'medium_il': 'S-1-16-8192'}",
+   "neu": "LOWERED_LABELS = {'low_il': 'S-1-16-4096', 'medium_il': 'S-1-16-12288'}",
+   "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_squatter_production_kind_uses_build_sddl_at_its_own_level"
+  },
+  {
+   "name": "W26-DK8 Integritaet des medium_il-Kindes nicht geprueft",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        'medium_il': (MEDIUM_RID, False, False),",
+   "neu": "        'medium_il': (parent.get('integrity_rid'), False, False),",
+   "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_medium_child_must_really_be_medium"
+  },
+  {
+   "name": "W26-DK9 Squatter nutzt Default-Level statt eigener IL",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        sddl = None if own is None else wp.build_sddl(sid, own)",
+   "neu": "        sddl = None if own is None else wp.build_sddl(sid)",
+   "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_squatter_production_kind_uses_build_sddl_at_its_own_level"
+  },
+  {
+   "name": "W26-DK10 Label-Zeile mit fehlenden Feldern akzeptiert",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    return out if set(out) == {'count', 'rid', 'flags', 'mask', 'own'} else None",
+   "neu": "    return out",
+   "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_parse_label_line"
+  },
+  {
+   "name": "W26-DK11 Squat-Satz modusunabhaengig (Cross-IL-Fall darf fehlen)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    want_squats = squat_cases(report.get('mode') if report.get('mode') in MODES else MODES[0])",
+   "neu": "    want_squats = SQUAT_CASES",
+   "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_cross_il_cases_cannot_be_dropped"
+  },
+  {
+   "name": "W26-DK12 Medium-Client darf die High-Pipe oeffnen",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        'py_medium_il': ('python', 'production', 'medium_il', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,",
+   "neu": "        'py_medium_il': ('python', 'production', 'medium_il', EXIT_PIPE_LABEL, None,",
+   "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_cross_il_cases_are_elevated_only"
+  }
+ ]
+}

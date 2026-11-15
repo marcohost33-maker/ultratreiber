@@ -106,7 +106,10 @@ CONTROL_DELTA = (AC_ACE, OPEN_LABEL)
 # the policy (NR -> NX) or add the AC ACE. Kept literal, like production_sddl.
 PRODUCTION_LABELS = {MEDIUM_RID: PRODUCTION_LABEL, HIGH_RID: 'S:(ML;;NWNR;;;HI)'}
 OPEN_LABELS = {MEDIUM_RID: OPEN_LABEL, HIGH_RID: 'S:(ML;;NWNX;;;HI)'}
-PRINCIPALS = ('same_token', 'low_il', 'appcontainer', 'restricted')
+# W26 (UT-A7-01): medium_il = the same duplicate lowered to Medium (S-1-16-8192).
+# Only meaningful under the elevated parent (a Medium parent's same_token is Medium).
+PRINCIPALS = ('same_token', 'low_il', 'appcontainer', 'restricted', 'medium_il')
+LOWERED_LABELS = {'low_il': 'S-1-16-4096', 'medium_il': 'S-1-16-8192'}
 MODES = ('elevated_admin', 'standard_account')
 INHERIT = 'handle_list:1'       # W25.1: the child inherits exactly its stdout/stderr pipe
 # W25.1 harness-only security descriptors. 'production' is build_sddl unchanged;
@@ -167,6 +170,27 @@ EXPECTED = {
 # on the pipe. The squatter is a real Low-IL Python process; both clients (C++
 # and Python lane) then connect. Invariant: the squatter receives no byte.
 SQUAT_CASES = ('squat_low_il_default', 'squat_low_il_medium_label')
+# W26 (UT-A7-01, second half; A7-R4 UT6-02 open gate "elevated client vs medium
+# squatter"): a Medium process of the same user creates the production name
+# FIRST, with exactly the descriptor this project's own Medium server would set
+# (build_sddl(sid, MEDIUM): owner = the user, label ME with NW|NR). To an elevated
+# client such a squatter is byte-for-byte indistinguishable from a legitimate
+# Medium server of the same user: owner, DACL and label are identical. Before
+# UT6-02 (client rule "label >= Medium") the elevated client would have WRITTEN
+# to it. Required now: C++ client exit 7 with the label line naming rid=0x2000 and
+# own=0x3000, Python PIPE_LABEL_MISMATCH with the owner check PASSED (owner = the
+# user), squatter received 0 bytes. Elevated parent only.
+SQUAT_CASES_BY_MODE = {'elevated_admin': ('squat_medium_il_production',), 'standard_account': ()}
+SQUAT_PRINCIPALS = {'squat_low_il_default': ('low_il', 'default'),
+                    'squat_low_il_medium_label': ('low_il', 'medium'),
+                    'squat_medium_il_production': ('medium_il', 'production')}
+
+
+def squat_cases(mode) -> tuple:
+    """SQUAT_CASES plus the mode-dependent ones; ValueError for an unknown mode."""
+    if mode not in MODES:
+        raise ValueError('MODE_INVALID')
+    return SQUAT_CASES + SQUAT_CASES_BY_MODE[mode]
 # Measured in CI run 42605717757 and pinned:
 #  * default: a Low-IL process CAN create the global production name; the kernel
 #    labels the pipe Low (0x1000) by itself. Its owner is the creator token's
@@ -192,9 +216,12 @@ ERROR_FILE_NOT_FOUND = 2
 #     the label before writing (exit 7). No byte: the server ends with
 #     CONNECT_FAILED or READ_FAILED depending on whether the client had already
 #     closed when ConnectNamedPipe ran (same race as the pinned W17 owner test).
-#   elevated_admin (labels HI): PREDICTION, not yet measured -- a Low/lowbox token
-#     cannot write up to a High-labelled object (NO_WRITE_UP), so the open is
-#     refused with ERROR_ACCESS_DENIED and the server sees no connection.
+#   elevated_admin (labels HI): a Low/lowbox token cannot write up to a
+#     High-labelled object (NO_WRITE_UP), so the open is refused with
+#     ERROR_ACCESS_DENIED and the server sees no connection. Predicted in UT6-02,
+#     MEASURED in CI run 42939565127 (head a736ca8, PR merge ref fdc87fc):
+#     ctl_appcontainer and ace_appcontainer client_exit=1 open_error=5,
+#     server DENIED/CONNECT_TIMEOUT (job log, report 3b683240...).
 # The server's INTEGRITY_TOO_LOW check stays as defense in depth; for a real
 # AppContainer token it is now unreachable (fault-injection tests keep it red/green).
 LABEL_REFUSAL_SERVER_REASONS = ('CONNECT_FAILED', 'READ_FAILED')
@@ -210,6 +237,16 @@ EXPECTED_BY_MODE = {
                              ('DENIED', 'CONNECT_TIMEOUT', False)),
         'ace_appcontainer': ('python', 'acace_only', 'appcontainer', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
                              ('DENIED', 'CONNECT_TIMEOUT', False)),
+        # W26 (UT-A7-01, first half): a Medium process of the SAME user against the
+        # elevated (High) production server. ADR-UDX-007 predicts the refusal at OPEN
+        # by the kernel, before any project code runs: the pipe label is HI with
+        # NO_WRITE_UP and the token policy NO_WRITE_UP forbids a Medium writer. So
+        # the "false rejection" of a Medium client is the OS boundary itself, not
+        # the UT6-02 client rule; no client-side relaxation could admit it.
+        'py_medium_il': ('python', 'production', 'medium_il', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
+                         ('DENIED', 'CONNECT_TIMEOUT', False)),
+        'cpp_medium_il': ('cpp', 'production', 'medium_il', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
+                          (EXIT_TIMEOUT, None)),
     },
 }
 
@@ -276,6 +313,25 @@ def parse_probe_denial(text):
     return out if tuple(sorted(out)) == tuple(sorted(keys)) else None
 
 
+def parse_label_line(text):
+    """W26: the C++ client's single stderr line ``UDX_CLIENT_PIPE_LABEL count=..
+    rid=.. flags=.. mask=.. own=..`` (exit 7) as a dict of ints; None if absent,
+    repeated, malformed or the ``query_failed`` variant. It attributes an exit 7
+    to the rule that fired (W26: label rid 0x2000 vs own 0x3000 = equality rule)."""
+    if type(text) is not str:
+        return None
+    hits = [ln.strip() for ln in text.splitlines() if ln.strip().startswith('UDX_CLIENT_PIPE_LABEL')]
+    if len(hits) != 1:
+        return None
+    out = {}
+    for part in hits[0].split(' ')[1:]:
+        k, sep, v = part.partition('=')
+        if not sep or k in out or not v.isdigit() or len(v) > 10:
+            return None
+        out[k] = int(v)
+    return out if set(out) == {'count', 'rid', 'flags', 'mask', 'own'} else None
+
+
 def _principal_issues(name: str, principal: str, facts, parent: dict, ac_sid) -> list[str]:
     if not isinstance(facts, dict):
         return ['CHILD_FACTS_MISSING:' + name]
@@ -288,6 +344,7 @@ def _principal_issues(name: str, principal: str, facts, parent: dict, ac_sid) ->
         'low_il': (LOW_RID, False, False),
         'appcontainer': (LOW_RID, True, False),
         'restricted': (parent.get('integrity_rid'), False, True),
+        'medium_il': (MEDIUM_RID, False, False),
     }[principal]
     if type(rid) is not int or rid != want[0]:
         issues.append('CHILD_INTEGRITY_WRONG:' + name)
@@ -328,7 +385,9 @@ def _squat_issues(name: str, c, parent: dict, mode) -> list[str]:
         return ['CASE_ERROR:' + name]
     issues = []
     sq = c.get('squatter') if isinstance(c.get('squatter'), dict) else {}
-    issues += _principal_issues(name, 'low_il', sq.get('facts'), parent, None)
+    if name not in SQUAT_PRINCIPALS:
+        return ['SQUAT_CASE_UNKNOWN:' + name]
+    issues += _principal_issues(name, SQUAT_PRINCIPALS[name][0], sq.get('facts'), parent, None)
     cpp = c.get('cpp_client') if isinstance(c.get('cpp_client'), dict) else {}
     py = c.get('py_client') if isinstance(c.get('py_client'), dict) else {}
     for proc in (sq, cpp):
@@ -349,6 +408,8 @@ def _squat_issues(name: str, c, parent: dict, mode) -> list[str]:
         return issues
     if type(rep_.get('received')) is not int or rep_['received'] != 0:
         issues.append('SQUATTER_RECEIVED_DATA:' + name)
+    if name == 'squat_medium_il_production':
+        return issues + _medium_squat_issues(name, rep_, cpp, py, parent, mode)
     if rep_.get('label_rid') != LOW_RID:
         issues.append('SQUATTER_LABEL_NOT_LOW:' + name)
     owner = rep_.get('owner')
@@ -367,6 +428,40 @@ def _squat_issues(name: str, c, parent: dict, mode) -> list[str]:
             issues.append('CPP_CLIENT_ACCEPTED_SQUATTER:' + name)
         if (py.get('reason'), py.get('sent')) != ('PIPE_OWNER_MISMATCH', False):
             issues.append('PY_CLIENT_ACCEPTED_SQUATTER:' + name)
+    return issues
+
+
+def _medium_squat_issues(name: str, rep_: dict, cpp: dict, py: dict, parent: dict, mode) -> list[str]:
+    """W26: elevated client vs a Medium squatter that is indistinguishable from a
+    legitimate Medium server of the same user (see SQUAT_CASES_BY_MODE)."""
+    issues = []
+    sid = parent.get('user_sid')
+    if mode != 'elevated_admin' or parent.get('integrity_rid') != HIGH_RID:
+        issues.append('CROSS_IL_NEEDS_ELEVATED_PARENT:' + name)
+    try:
+        want_sddl = production_sddl(sid, MEDIUM_RID) if isinstance(sid, str) else None
+    except ValueError:
+        want_sddl = None
+    # The squatter must have used the project's own Medium production descriptor;
+    # otherwise the case would not show indistinguishability from a real server.
+    if want_sddl is None or rep_.get('sddl') != want_sddl:
+        issues.append('SQUATTER_SD_NOT_THE_MEDIUM_PRODUCTION_SD:' + name)
+    if rep_.get('label_rid') != MEDIUM_RID:
+        issues.append('SQUATTER_LABEL_NOT_MEDIUM:' + name)
+    if sid is None or rep_.get('owner') != sid:
+        issues.append('SQUATTER_OWNER_NOT_THE_USER:' + name)
+    label = parse_label_line(cpp.get('stderr'))
+    if cpp.get('exit') != EXIT_PIPE_LABEL:
+        issues.append('CPP_CLIENT_ACCEPTED_SQUATTER:' + name)
+    elif label is None or (label['count'], label['rid'], label['own']) != (1, MEDIUM_RID, HIGH_RID):
+        # exit 7 alone is unspecific (count/flags/mask/floor); only rid 0x2000
+        # against own 0x3000 shows the UT6-02 equality rule fired.
+        issues.append('CPP_LABEL_REFUSAL_NOT_ATTRIBUTED:' + name)
+    if (py.get('reason'), py.get('sent'), py.get('pipe_label')) != ('PIPE_LABEL_MISMATCH', False, MEDIUM_RID):
+        issues.append('PY_CLIENT_ACCEPTED_SQUATTER:' + name)
+    if sid is None or py.get('pipe_owner') != sid:
+        # the owner check must have PASSED: only the label rule separates the two
+        issues.append('PY_OWNER_CHECK_NOT_PASSED:' + name)
     return issues
 
 
@@ -422,7 +517,7 @@ def evaluate(report) -> tuple[str, list[str]]:
     if ac_sid is None:
         issues.append('APPCONTAINER_SID_INVALID')
     cases = report.get('cases') if isinstance(report.get('cases'), dict) else {}
-    # an invalid mode is already MODE_INVALID (BLOCKED); the case set is the same in both modes
+    # an invalid mode is already MODE_INVALID (BLOCKED); the case set differs by mode
     expected = expected_cases(report.get('mode') if report.get('mode') in MODES else MODES[0])
     if set(cases) != set(expected):
         issues.append('CASE_SET_DRIFT')
@@ -473,9 +568,10 @@ def evaluate(report) -> tuple[str, list[str]]:
                     or type(got.get('level')) is not int or got['level'] < 1:
                 issues.append('CPP_DENIAL_NOT_ATTRIBUTED:' + name)
     squats = report.get('squat') if isinstance(report.get('squat'), dict) else {}
-    if set(squats) != set(SQUAT_CASES):
+    want_squats = squat_cases(report.get('mode') if report.get('mode') in MODES else MODES[0])
+    if set(squats) != set(want_squats):
         issues.append('SQUAT_SET_DRIFT')
-    for name in sorted(set(SQUAT_CASES) & set(squats)):
+    for name in sorted(set(want_squats) & set(squats)):
         issues += _squat_issues(name, squats[name], parent, report.get('mode'))
     cleanup = report.get('cleanup') if isinstance(report.get('cleanup'), dict) else {}
     want = {'appcontainer_profile': 'deleted', 'workdir': 'deleted'}
@@ -705,7 +801,7 @@ class Win:
 
     # -- principals -------------------------------------------------------
     def primary_token(self, principal: str):
-        """A primary token for same_token / low_il / restricted (caller closes it)."""
+        """A primary token for same_token / low_il / medium_il / restricted (caller closes it)."""
         c, api = self.ctypes, self.api
         base = self.process_token(api['GetCurrentProcess'](),
                                   TOKEN_ASSIGN_PRIMARY | TOKEN_DUPLICATE | TOKEN_QUERY | TOKEN_ADJUST_DEFAULT)
@@ -721,9 +817,10 @@ class Win:
                 return new
             self.check(api['DuplicateTokenEx'](base, TOKEN_ALL_ACCESS, None, SecurityImpersonation,
                                                TokenPrimary, c.byref(new)), 'DuplicateTokenEx')
-            if principal == 'low_il':
+            if principal in LOWERED_LABELS:          # W26: Low or Medium, always DOWN from the parent
                 low = c.c_void_p()
-                self.check(api['ConvertStringSidToSidW']('S-1-16-4096', c.byref(low)), 'ConvertStringSidToSidW')
+                self.check(api['ConvertStringSidToSidW'](LOWERED_LABELS[principal], c.byref(low)),
+                           'ConvertStringSidToSidW')
                 try:
                     tml = self.t['TOKEN_MANDATORY_LABEL']()
                     tml.Label.Sid, tml.Label.Attributes = low, SE_GROUP_INTEGRITY
@@ -960,20 +1057,20 @@ def _json_lines(text: str) -> dict:
 
 
 def run_squat_case(win: Win, wp, name: str, client: str) -> dict:
-    kind = 'medium' if name.endswith('medium_label') else 'default'
+    principal, kind = SQUAT_PRINCIPALS[name]
     api = wp.default_api()
     argv = [sys.executable, '-I', '-B', str(REPO / 'tools' / 'w25_principal_matrix.py'), '--squatter',
             '--squat-label', kind]
     box = {}
     t = threading.Thread(target=lambda: box.setdefault(
-        'child', win.launch(argv, 'low_il', None, str(REPO))), daemon=True)
+        'child', win.launch(argv, principal, None, str(REPO))), daemon=True)
     t.start()
     end = time.monotonic() + 8.0
     present = False
     while time.monotonic() < end and not present and t.is_alive():
         present = wp.pipe_name_present(api, wp.DEFAULT_PIPE_NAME)
         time.sleep(0.05)
-    case = {'kind': kind, 'pipe_seen': present}
+    case = {'kind': kind, 'principal': principal, 'pipe_seen': present}
     case['cpp_client'] = win.launch([client, '--budget-ms', '3000'], 'same_token', None,
                                     str(pathlib.Path(client).parent))
     r = wp.client_ping(wp.DEFAULT_PIPE_NAME, connect_timeout_s=3.0, response_timeout_s=2.0)
@@ -989,9 +1086,12 @@ def run_squat_case(win: Win, wp, name: str, client: str) -> dict:
 
 
 def squatter(kind: str) -> int:
-    """Runs as a Low-IL process of the same user: create the production pipe
-    name first (FIRST_PIPE_INSTANCE), report owner and label, then accept up to
-    two connections and count the bytes received. Never outlives SQUAT_LIFETIME_S."""
+    """Runs as a lower-integrity process of the same user (Low IL; W26: Medium
+    for kind 'production'): create the production pipe name first
+    (FIRST_PIPE_INSTANCE), report owner and label, then accept up to two
+    connections and count the bytes received. Never outlives SQUAT_LIFETIME_S.
+    kind 'production' uses build_sddl(sid, own level), the descriptor this
+    project's own server would set at that level."""
     import ctypes
     sys.path.insert(0, str(REPO))
     from udx_ref import windows_pipe as wp
@@ -1004,6 +1104,21 @@ def squatter(kind: str) -> int:
         ok = api.ConvertStringSecurityDescriptorToSecurityDescriptorW(
             f'O:{sid}D:(A;;GA;;;{sid})S:(ML;;NWNR;;;ME)', wp.SDDL_REVISION_1, ctypes.byref(sd), None)
         out['sd_converted'] = bool(ok)
+        sa = wp.SECURITY_ATTRIBUTES(ctypes.sizeof(wp.SECURITY_ATTRIBUTES), sd, False)
+        sa_ref = ctypes.byref(sa)
+    elif kind == 'production':
+        sid = wp.current_user_sid(api)
+        own, err = wp.effective_integrity_rid(api)
+        out['own_rid'] = own
+        sddl = None if own is None else wp.build_sddl(sid, own)
+        out['sddl'] = sddl
+        ok = sddl is not None and api.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl, wp.SDDL_REVISION_1, ctypes.byref(sd), None)
+        out['sd_converted'] = bool(ok)
+        if not ok:
+            out.update(created=False, create_error=err or api.last_error())
+            print(json.dumps(out), flush=True)
+            return 0
         sa = wp.SECURITY_ATTRIBUTES(ctypes.sizeof(wp.SECURITY_ATTRIBUTES), sd, False)
         sa_ref = ctypes.byref(sa)
     h = api.CreateNamedPipeW(wp.DEFAULT_PIPE_NAME, wp.PIPE_ACCESS_DUPLEX | wp.FILE_FLAG_FIRST_PIPE_INSTANCE,
@@ -1079,7 +1194,7 @@ def run_matrix(report: dict, binaries: pathlib.Path, work_parent: str | None = N
             except Exception as exc:                       # recorded, the verdict fails closed
                 report['cases'][name] = {'error': f'{type(exc).__name__}: {exc}'[:300]}
         report['squat'] = {}
-        for name in SQUAT_CASES:                           # last: they hold the production name
+        for name in squat_cases(report['mode']):           # last: they hold the production name
             try:
                 report['squat'][name] = run_squat_case(win, wp, name, client)
             except Exception as exc:
@@ -1223,7 +1338,8 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description='UDX W25 principal matrix (research only)')
     p.add_argument('--output')
     p.add_argument('--squatter', action='store_true', help=argparse.SUPPRESS)
-    p.add_argument('--squat-label', choices=('default', 'medium'), default='default', help=argparse.SUPPRESS)
+    p.add_argument('--squat-label', choices=('default', 'medium', 'production'), default='default',
+                   help=argparse.SUPPRESS)
     p.add_argument('--mode', choices=MODES, default='elevated_admin')
     p.add_argument('--evaluate', action='store_true', help='only evaluate an existing report (portable)')
     p.add_argument('--child-matrix', action='store_true', help=argparse.SUPPRESS)
