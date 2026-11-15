@@ -125,7 +125,10 @@ re-read in this session; the claim rests on the cited summaries.)
   case for the elevated parent; `evaluate()` stays fail-closed; 12 portable
   discriminating mutations (`evidence/w26_dk_spec.json`).
 - Answers: UT-A7-01 -> **design decision, both directions refused on purpose**;
-  measured natively once the W26 CI run is green (see `docs/W26_CROSS_IL_POLICY.md`).
+  measured natively in CI run 43767612816 (head `7f1735a`): `py_medium_il` /
+  `cpp_medium_il` exit 1 with error 5; `squat_medium_il_production` C++ exit 7 with
+  `rid=8192 … own=12288`, Python `PIPE_LABEL_MISMATCH`, 0 bytes to the squatter
+  (see `docs/W26_CROSS_IL_POLICY.md`).
   UT-A7-03 -> **confirmed as out of scope**; LPAC not measured. UT-A7-02 (C++/Python
   parity) -> the squatter case checks both clients against the same real Medium pipe.
 - Still open and unchanged: G2-App (OS application identity / server bootstrap), a

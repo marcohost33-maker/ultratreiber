@@ -77,10 +77,28 @@ Python-Gründe ist feiner. Der Squat-Fall prüft beide Clients gegen dieselbe ec
   `ctl_appcontainer` und `ace_appcontainer` Exit 1, Fehler 5, Server `DENIED/CONNECT_TIMEOUT`.
   Die UT6-02-Vorhersage ist damit gemessen.
 
-## Nativer Beleg
+## Nativer Beleg (CI-Lauf [43767612816](https://github.com/marcohost33-maker/ultratreiber/actions/runs/43767612816), Kopf `7f1735a`, PR #7, 8/8 Jobs grün)
 
-**Ausstehend** bis zum ersten grünen CI-Lauf dieses Stands (Job `windows-principal-matrix`).
-Bis dahin sind die drei neuen Fälle **Vorhersagen**, keine Belege.
+Windows Server (gehosteter Runner), Python 3.13.17, MSVC-Build aus demselben Lauf.
+
+| Fall (Modus `elevated_admin`, Eltern = eingebauter Administrator, IL 0x3000) | Gemessen |
+|---|---|
+| `py_medium_il` | Kind IL 0x2000, gleiche SID; `client_exit=1`, `open_error=5`; Server `DENIED/CONNECT_TIMEOUT` |
+| `cpp_medium_il` | Kind IL 0x2000; `client_exit=1`, `open_error=5`; C++-Server Exit 22 (kein Client) |
+| `squat_medium_il_production` | Squatter IL 0x2000, `created=True`, Owner = Benutzer, Label 0x2000; C++ Exit 7 mit `UDX_CLIENT_PIPE_LABEL count=1 rid=8192 flags=0 mask=3 own=12288`; Python `PIPE_LABEL_MISMATCH`; **Squatter empfing 0 Bytes** |
+
+- Verdikt `PRINCIPAL_MATRIX_OK`, `issues: []`, Bericht-SHA-256
+  `8890ceabe3f56f3ee6ee3a50a638aec00abde503f9f2215a9ae76ba816a9a26c` (erhöhter Admin) und
+  `c18f1b79a1d8d957a18c537f6e400705bc30a996e7fd328586eb2ba20a9caed9` (Standardkonto, ohne die neuen
+  Fälle, alle W25-Fälle unverändert). Artefakt `udx-w25-principal-matrix-e00369aa…` (PR-Merge-Ref).
+- Alle übrigen Fälle beider Modi wie in Lauf 42939565127; Collector, Kontomatrix, C++-Kreuzlauf
+  und die Suiten (Ubuntu/Windows, Python 3.13/3.14) grün.
+- Die Maske `mask=3` (NW|NR) und `flags=0` (nicht INHERIT_ONLY) zeigen: Das Label des Squatters war
+  wirksam und vollständig; abgewiesen hat allein `rid != own`.
+
+Damit sind beide Richtungen von UT-A7-01 nativ gemessen: Medium → High verweigert der Kernel beim
+Öffnen, High → Medium verweigert die UT6-02-Regel gegen einen Squatter, der Owner, DACL und Label
+eines echten Medium-Servers trägt.
 
 ## Grenzen
 
