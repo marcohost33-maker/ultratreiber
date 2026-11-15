@@ -6,7 +6,7 @@
   "pytest"
  ],
  "timeout_s": 120,
- "hinweis": "W26 Cross-IL (UT-A7-01): portable Diskriminierung des Verdikts fuer medium_il-Clients gegen den erhoehten Server und den Medium-Squatter mit der projekteigenen Medium-SD. Jede Mutation muss den genannten Test rot machen. Native Belege: CI-Job windows-principal-matrix (Modus elevated_admin), CASE-/SQUAT-Zeilen im Job-Log.",
+ "hinweis": "W26 Cross-IL (UT-A7-01): portable Diskriminierung des Verdikts fuer medium_il-Clients gegen den erhoehten Server und den Medium-Squatter mit der projekteigenen Medium-SD. W26-Haertung: Token-Praemissen (NO_WRITE_UP, UIAccess, Virtualisierung) und korrekte Owner-Logzeile. Jede Mutation muss den genannten Test rot machen. Native Belege: CI-Job windows-principal-matrix (Modus elevated_admin), CASE-/SQUAT-Zeilen im Job-Log.",
  "faelle": [
   {
    "name": "W26-DK1 Exit 7 ohne Zuordnung zur Gleichheitsregel akzeptiert",
@@ -91,6 +91,27 @@
    "alt": "        'py_medium_il': ('python', 'production', 'medium_il', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,",
    "neu": "        'py_medium_il': ('python', 'production', 'medium_il', EXIT_PIPE_LABEL, None,",
    "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_cross_il_cases_are_elevated_only"
+  },
+  {
+   "name": "W26-DK13 NO_WRITE_UP-Praemisse der abgesenkten Kinder nicht geprueft",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        if type(pol) is not int or not pol & TOKEN_MANDATORY_POLICY_NO_WRITE_UP:",
+   "neu": "        if type(pol) is not int:",
+   "test": "tests/test_w25_principal_matrix.py::TokenPremisesW26::test_lowered_children_must_carry_no_write_up"
+  },
+  {
+   "name": "W26-DK14 UIAccess/Virtualisierung nicht ausgeschlossen",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if facts.get('ui_access') is not False or facts.get('virtualization') is not False:",
+   "neu": "    if False:",
+   "test": "tests/test_w25_principal_matrix.py::TokenPremisesW26::test_uiaccess_or_virtualization_blocks_every_case"
+  },
+  {
+   "name": "W26-DK15 Logzeile meldet wieder 'Owner vorhanden' statt Owner-Art",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        owner_kind = 'none' if owner is None else 'user' if owner == user else \\\n",
+   "neu": "        owner_kind = 'none' if owner is None else 'user' if owner is not None else \\\n",
+   "test": "tests/test_w25_principal_matrix.py::TokenPremisesW26::test_summary_names_the_real_owner"
   }
  ]
 }

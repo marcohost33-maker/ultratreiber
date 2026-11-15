@@ -67,7 +67,7 @@ Python-Gründe ist feiner. Der Squat-Fall prüft beide Clients gegen dieselbe ec
 
 ## Absicherung
 
-- 12 neue portable Tests (`CrossIntegrityW26` in `tests/test_w25_principal_matrix.py`); Suite lokal
+- 12 neue portable Tests (`CrossIntegrityW26` in `tests/test_w25_principal_matrix.py`; W26.1: +4 in `TokenPremisesW26`, +9 in `tests/test_w26_dk_runner.py`); Suite lokal
   (Linux, Python 3.13.18): **459 OK, 111 übersprungen** (Windows-only).
 - `evidence/w26_dk_spec.json`: **12/12** diskriminierende Mutationen töten ihren Test (lokal, mit
   `-B`). Die W25-Spezifikation bleibt bei **39/39**. Ein erster Lauf meldete DK28 als überlebend;
@@ -99,6 +99,27 @@ Windows Server (gehosteter Runner), Python 3.13.17, MSVC-Build aus demselben Lau
 Damit sind beide Richtungen von UT-A7-01 nativ gemessen: Medium → High verweigert der Kernel beim
 Öffnen, High → Medium verweigert die UT6-02-Regel gegen einen Squatter, der Owner, DACL und Label
 eines echten Medium-Servers trägt.
+
+## W26.1 – Selbstreview: Befunde und Härtung (2026-11-15)
+
+Kritische Nachprüfung der eigenen W26-Lieferung und der Evidenzkette des Repos. Befunde
+getrennt nach „am Ziel-Repo“ und „an unserem Prüfwerkzeug“ (Vermerk 007acc2 vom 15.11.).
+
+| ID | Art | Befund | Behebung |
+|---|---|---|---|
+| W26-SR-01 | Repo, Evidenzkette | Die DK-Spezifikationen („n/n getötet“) liefen nur mit einem externen, privaten Runner; nicht reproduzierbar (A7 UT6-04). | `tools/dk_runner.py`: Arbeitskopie statt Baum-Mutation, `-B` + `PYTHONDONTWRITEBYTECODE`, Byte-I/O, Anker genau einmal, Skip/Timeout zählen nie als Kill, Pfade bleiben in der Kopie. 9 eigene Tests (`tests/test_w26_dk_runner.py`). CI führt die Specs aus. |
+| W26-SR-02 | Repo, Evidenzkette | Replay aller 12 Specs am Kopf: **14 veraltete Anker** (W12 4, W13 2, W14 5, W18 1, W24 1): Der Code hat sich seit der jeweiligen Welle geändert, die Mutation trifft nichts mehr. 49 Fälle sind Windows-only und liefen nie reproduzierbar. | Historische Specs bleiben unverändert (Beleg ihrer Welle). Die noch relevanten Schutzmechanismen sind neu verankert: `w26_carryover_dk_spec.json` (7 portabel) und `w26_carryover_native_dk_spec.json` (5 nativ). Native Specs W19, W25.2, W26-Carry-over laufen im Windows-Suite-Job. |
+| W26-SR-03 | Werkzeug | Bytecode-Falle: `.pyc` gilt bei gleicher mtime-Sekunde und Grösse als gültig (PEP 552, Standard `TIMESTAMP`); eine gleich lange Mutation oder ihre Wiederherstellung kann maskiert werden (falsches „DK28 überlebt“). | Runner ohne Bytecode-Cache; Regression im Runner-Test gepinnt. |
+| W26-SR-04 | Werkzeug (Windows) | Text-Modus-Schreiben übersetzt unter Windows LF→CRLF; Mutation **und** Wiederherstellung hätten jede Datei auf CRLF gestellt und Hash-Pins gebrochen (falsche Kills). | Nur Byte-I/O; Test mit CRLF-Inhalt prüft byte-genaue Wiederherstellung. |
+| W26-SR-05 | Werkzeug | `datei` aus einer Spec wurde ungeprüft an den Arbeitspfad gehängt (`../` hätte ausserhalb geschrieben). | `_inside()`: nur Dateien innerhalb der Arbeitskopie; Test mit `../` und absolutem Pfad. |
+| W26-SR-06 | Repo, Log | Die SQUAT-Logzeile druckte `owner_is_user=True`, wenn **irgendein** Owner existierte (Admin-Squatter: tatsächlich `BUILTIN\Administrators`). Das Verdikt war korrekt (`evaluate()` prüft separat), die Logzeile irreführend. | `owner=user|administrators|other|none`; Test + DK15. |
+| W26-SR-07 | Repo, Prämisse | „Abweisung beim Öffnen durch NO_WRITE_UP“ (W25.2, ADR-007 §2) war erschlossen, nie als Token-Fakt gemessen. ADR-007 §4 („identisch auf jeder Eingabe, die der Kernel durchlässt“) gilt nur bei dieser Policy. | Matrix liest `TokenMandatoryPolicy` (27), `TokenUIAccess` (26), `TokenVirtualizationEnabled` (24); abgesenkte Kinder müssen NO_WRITE_UP tragen, kein Kind UIAccess/Virtualisierung. ADR §4 präzisiert (`TOKEN_MANDATORY_POLICY_OFF` braucht `SeTcbPrivilege`). DK13/DK14. |
+| W26-SR-08 | Doku | ADR §3 sagte „byte-for-byte indistinguishable“; gleich ist die **Sicherheitsbeschreibung**, nicht die Pipe-Modus-Flags. | Präzisiert. |
+| W26-SR-09 | Doku, Quelle | ADR §6 stützte die UAC-Einordnung auf Sekundärquellen. | MSRC-Seite gelesen: UAC = Defense-in-depth, „Intent is to service? No“; AppContainer-Sandbox = gewartete Grenze. learn.microsoft.com war aus der Sitzung nicht erreichbar (DNS), MS-DTYP-Zitat stammt aus dem Suchergebnis. |
+
+Lokaler Stand nach W26.1: Suite grün; DK-Replay aller **aktiven** portablen Specs **84/84**
+(public_prep 13, W16 5, W20 5, W25 39, W26 15, Carry-over 7). Native Specs: Ergebnis im
+CI-Artefakt `udx-dk-windows-latest-<sha>`.
 
 ## Grenzen
 

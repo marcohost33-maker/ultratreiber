@@ -352,6 +352,16 @@ def _principal_issues(name: str, principal: str, facts, parent: dict, ac_sid) ->
         issues.append('CHILD_APPCONTAINER_WRONG:' + name)
     if restricted is not want[2]:
         issues.append('CHILD_RESTRICTED_WRONG:' + name)
+    # W26: the "refused at open" outcomes of low_il / medium_il are attributed to
+    # the token's NO_WRITE_UP policy (W25.2, ADR-UDX-007 §2); that premise is a
+    # measured fact of the child, not an assumption. UIAccess and virtualization
+    # would confound every case (A7 UT6-01): required off for every principal.
+    if principal in LOWERED_LABELS:
+        pol = facts.get('mandatory_policy')
+        if type(pol) is not int or not pol & TOKEN_MANDATORY_POLICY_NO_WRITE_UP:
+            issues.append('CHILD_NO_WRITE_UP_POLICY_MISSING:' + name)
+    if facts.get('ui_access') is not False or facts.get('virtualization') is not False:
+        issues.append('CHILD_UIACCESS_OR_VIRTUALIZATION:' + name)
     if principal == 'appcontainer':
         if facts.get('appcontainer_sid') != ac_sid or ac_sid is None:
             issues.append('CHILD_APPCONTAINER_SID_WRONG:' + name)
@@ -612,6 +622,7 @@ def summary_lines(report) -> list[str]:
         rid = f.get('integrity_rid')
         out.append(f"CASE {name}: rid={rid:#x} " if type(rid) is int else f"CASE {name}: rid=None ")
         out[-1] += (f"appc={f.get('appcontainer')} restricted={f.get('restricted')} "
+                    f"policy={f.get('mandatory_policy')} uia={f.get('ui_access')} virt={f.get('virtualization')} "
                     f"client_exit={child.get('exit')} open_error={child.get('open_error')} "
                     f"t={child.get('elapsed_s')}s inherit={child.get('inherit')} server={server} "
                     f"denial={srv.get('denial')} error={c.get('error')}")
@@ -624,8 +635,14 @@ def summary_lines(report) -> list[str]:
         cpp = c.get('cpp_client') if isinstance(c.get('cpp_client'), dict) else {}
         py = c.get('py_client') if isinstance(c.get('py_client'), dict) else {}
         f = sq.get('facts') if isinstance(sq.get('facts'), dict) else {}
+        # W26 fix: until W26 this printed ``owner is not None`` under the name
+        # owner_is_user (True for an Administrators-owned pipe, CI run 42939565127).
+        user = (report.get('parent') or {}).get('user_sid') if isinstance(report.get('parent'), dict) else None
+        owner = rep_.get('owner')
+        owner_kind = 'none' if owner is None else 'user' if owner == user else \
+            'administrators' if owner == ADMINISTRATORS_SID_TEXT else 'other'
         out.append(f"SQUAT {name}: squatter_rid={f.get('integrity_rid')} created={rep_.get('created')} "
-                   f"create_error={rep_.get('create_error')} owner_is_user={rep_.get('owner') is not None} "
+                   f"create_error={rep_.get('create_error')} owner={owner_kind} "
                    f"label_rid={rep_.get('label_rid')} received={rep_.get('received')} "
                    f"cpp_exit={cpp.get('exit')} cpp_stderr={(cpp.get('stderr') or '').strip()[:80]!r} "
                    f"py={py.get('reason')}/{py.get('open_error')} error={c.get('error')}")
@@ -716,6 +733,10 @@ TOKEN_ASSIGN_PRIMARY, TOKEN_DUPLICATE, TOKEN_QUERY, TOKEN_ADJUST_DEFAULT = 0x1, 
 TOKEN_ALL_ACCESS = 0xF01FF
 TokenUser, TokenGroups, TokenIntegrityLevel = 1, 2, 25
 TokenIsAppContainer, TokenAppContainerSid = 29, 31
+# W26: facts the W25.2 / ADR-UDX-007 conclusions rest on, now read from the
+# child token instead of assumed (TOKEN_INFORMATION_CLASS values, winnt.h).
+TokenVirtualizationEnabled, TokenUIAccess, TokenMandatoryPolicy = 24, 26, 27
+TOKEN_MANDATORY_POLICY_NO_WRITE_UP = 0x1
 SecurityImpersonation, TokenPrimary = 2, 1
 SE_GROUP_ENABLED, SE_GROUP_USE_FOR_DENY_ONLY = 0x4, 0x10
 SE_GROUP_INTEGRITY, SE_GROUP_INTEGRITY_ENABLED = 0x20, 0x40
@@ -771,8 +792,15 @@ class Win:
             sbuf = self.token_info(tok, TokenAppContainerSid)
             p = c.c_void_p.from_buffer(sbuf, 0).value
             ac_sid = self.sid_text(p) if p else None
+        dword = {}
+        for key, klass in (('mandatory_policy', TokenMandatoryPolicy), ('ui_access', TokenUIAccess),
+                           ('virtualization', TokenVirtualizationEnabled)):
+            dbuf = self.token_info(tok, klass)
+            dword[key] = c.c_uint32.from_buffer(dbuf, 0).value
         return {'user_sid': user_text, 'integrity_rid': rid, 'appcontainer': bool(appc),
-                'appcontainer_sid': ac_sid, 'restricted': bool(self.api['IsTokenRestricted'](tok))}
+                'appcontainer_sid': ac_sid, 'restricted': bool(self.api['IsTokenRestricted'](tok)),
+                'mandatory_policy': dword['mandatory_policy'], 'ui_access': bool(dword['ui_access']),
+                'virtualization': bool(dword['virtualization'])}
 
     def process_token(self, hproc, access=TOKEN_QUERY):
         tok = self.w.HANDLE()

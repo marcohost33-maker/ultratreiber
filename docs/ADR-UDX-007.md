@@ -61,8 +61,11 @@ A Medium process of the same user can create the production name with **exactly*
 descriptor this project's own Medium server sets — `build_sddl(sid, MEDIUM)`: owner =
 the user, the same DACL, label `ME` with NW|NR (it may label at its own level, only
 not above it; W25.2 measured 1314 for Low -> Medium). To the elevated client such a
-squatter is byte-for-byte indistinguishable from a legitimate Medium UDX server: the
-owner check passes, and only the level separates them. W26 adds this squatter
+squatter's **security descriptor** is identical to that of a legitimate Medium UDX
+server (owner, DACL, label; the W26 harness compares the squatter's SDDL string with
+`production_sddl(sid, MEDIUM)`). Pipe-mode flags may differ, but no client of this
+project checks them, and the squatter could copy them. The owner check passes, and
+only the level separates the two. W26 adds this squatter
 (`squat_medium_il_production`) and requires: C++ exit 7 with the label line
 `rid=8192 … own=12288`, Python `PIPE_LABEL_MISMATCH` with the owner check passed,
 squatter received **0 bytes**. Under the pre-UT6-02 rule (`label >= Medium`) the
@@ -87,7 +90,16 @@ Let `c` be the client's level, `s` the server's level; the server labels the pip
 | `c` Low / AppContainer, pipe Medium or High | refused at open (Low) or by the DACL / label (AppContainer, W25/W25.1) | refuse if reached | refuse if reached | refuse if reached |
 
 The two rules differ only where the label is above the client's level and carries
-NO_WRITE_UP, and there the kernel already refuses the open. Gemini's server-side rule
+NO_WRITE_UP, and there the kernel already refuses the open — **provided the client
+token carries the mandatory policy `TOKEN_MANDATORY_POLICY_NO_WRITE_UP`**. That is
+the default; turning it off (`TOKEN_MANDATORY_POLICY_OFF`) needs `SeTcbPrivilege`.
+A TCB-privileged client is outside every trust model of this probe, but under such a
+token the two rules would differ (Gemini's would accept a higher label, equality
+would not), and equality is the safer one. W26 makes the premise a measured fact:
+the principal matrix reads `TokenMandatoryPolicy` from every lowered child and
+blocks the verdict unless the NO_WRITE_UP bit is set
+(`CHILD_NO_WRITE_UP_POLICY_MISSING`); it also requires UIAccess and virtualization
+off for every child, so neither confounds a case (A7 UT6-01). Gemini's server-side rule
 (`client_il >= min`) would admit a High client at a Medium server; that pairing is
 refused one step earlier by both client rules. **Decision: keep equality.** It is the
 tightest rule, it mirrors the server's `INTEGRITY_MISMATCH`, and it is observationally
@@ -108,22 +120,31 @@ queue and its own server-side checks), never a widening of the Medium/High pipe.
 
 ### 6. Where Microsoft draws the line
 
-Microsoft's servicing criteria treat administrator-to-kernel as not a boundary and
-handle UAC as a defense-in-depth feature rather than a serviced security boundary
-([MSRC Windows security servicing criteria](https://www.microsoft.com/en-us/msrc/windows-security-servicing-criteria);
-the classification was disputed for CVE-2024-6769,
-[Dark Reading](https://www.darkreading.com/vulnerabilities-threats/exploit-chain-windows-uac-bypass)).
-This ADR does not rely on Windows servicing a Medium -> High bypass. It keeps the
-research probe from **adding** a cross-level channel of its own, which is the
-conservative reading of ADR-UDX-006 §1. (The exact MSRC list entry for UAC was not
-re-read in this session; the claim rests on the cited summaries.)
+The [MSRC Windows security servicing criteria](https://www.microsoft.com/en-us/msrc/windows-security-servicing-criteria)
+(read 2026-11-15, revision of 2026-05-20) list **User Account Control** under
+"Defense-in-depth security features" with "Intent is to service? No": these
+features "do not have a servicing plan". "Administrator-to-kernel is not a
+security boundary". The **AppContainer sandbox** ("cannot access or tamper with
+code and data outside of the sandbox") and the process and session boundaries are
+listed as security boundaries that Microsoft does service. Integrity levels are not
+named on the page.
+
+Consequences for this ADR: (a) it does not rely on Windows servicing a
+Medium -> High bypass; it only keeps the probe from **adding** a cross-level channel
+of its own (conservative reading of ADR-UDX-006 §1). (b) The refusal of AppContainer
+clients (§5) rests on a boundary Microsoft does service. (c) The CVE-2024-6769
+dispute ([Dark Reading](https://www.darkreading.com/vulnerabilities-threats/exploit-chain-windows-uac-bypass))
+shows the practical cost: a UAC bypass is not treated as a vulnerability, so an
+elevated UDX endpoint must never trust a Medium peer.
 
 ## Consequences
 
 - No behaviour change. `tools/w25_principal_matrix.py` gains the principal `medium_il`
   (the parent's token lowered to `S-1-16-8192`), two client cases and one squatter
-  case for the elevated parent; `evaluate()` stays fail-closed; 12 portable
-  discriminating mutations (`evidence/w26_dk_spec.json`).
+  case for the elevated parent, and reads the token premises (mandatory policy,
+  UIAccess, virtualization) of every child; `evaluate()` stays fail-closed; 15
+  portable discriminating mutations (`evidence/w26_dk_spec.json`), executed in CI by
+  `tools/dk_runner.py`.
 - Answers: UT-A7-01 -> **design decision, both directions refused on purpose**;
   measured natively in CI run 43767612816 (head `7f1735a`): `py_medium_il` /
   `cpp_medium_il` exit 1 with error 5; `squat_medium_il_production` C++ exit 7 with

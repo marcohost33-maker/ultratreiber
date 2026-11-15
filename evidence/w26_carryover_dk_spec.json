@@ -1,0 +1,61 @@
+{
+ "repo": ".",
+ "test_befehl": [
+  "python",
+  "-m",
+  "unittest"
+ ],
+ "timeout_s": 120,
+ "hinweis": "Carry-over: die Schutzmechanismen der veralteten Anker aus W12/W13/W14/W18/W24 neu am aktuellen Code verankert (Lauf mit tools/dk_runner.py; Specs aelterer Wellen bleiben unveraendert als Beleg ihrer Welle). Portabel (Linux/Windows).",
+ "faelle": [
+  {
+   "name": "W26-CO1 (Carry-over W14-DK1) SYSTEM-ACE wieder GA im Python-Port",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "'D:P(A;;' + ace + ';;;SY)(A;;'",
+   "neu": "'D:P(A;;GA;;;SY)(A;;'",
+   "test": "tests/test_w18_least_privilege.py::PortableLeastPrivilegeMask::test_every_ace_carries_the_mask"
+  },
+  {
+   "name": "W26-CO2 (Carry-over W13-DK16/W14-DK4) Nutzer-ACE wieder GA",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "';;;SY)(A;;' + ace + ';;;' + sid + ')",
+   "neu": "';;;SY)(A;;GA;;;' + sid + ')",
+   "test": "tests/test_w18_least_privilege.py::PortableLeastPrivilegeMask::test_every_ace_carries_the_mask"
+  },
+  {
+   "name": "W26-CO3 (Carry-over W12-DK1) Everyone-ACE eingeschleust",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "';;;OW)'\n            + label)",
+   "neu": "';;;OW)(A;;GA;;;WD)'\n            + label)",
+   "test": "tests/test_w12_windows_pipe.py::PortableParityAndValidation::test_sddl_prefix_identical_to_cpp"
+  },
+  {
+   "name": "W26-CO4 (Carry-over W13-DK17/W14-DK5) No-Write-Up aus dem Label entfernt",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    return 'S:(ML;;NWNR;;;' + LABEL_SDDL_ALIASES[integrity_rid] + ')'",
+   "neu": "    return 'S:(ML;;NR;;;' + LABEL_SDDL_ALIASES[integrity_rid] + ')'",
+   "test": "tests/test_ut6_02_label_parity.py::PortableLabelParity::test_label_sddl_maps_exactly_the_supported_levels"
+  },
+  {
+   "name": "W26-CO5 (Carry-over W14-DK3) SYSTEM-ACE wieder GA im C++-Probe [Quelltext-Pin]",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "    sddl += L\"D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;\";",
+   "neu": "    sddl += L\"D:P(A;;GA;;;SY)(A;;0x12008b;;;\";",
+   "test": "tests/test_windows_source_guards.py::WindowsCandidateSourceAudit::test_no_default_dacl_or_remote_flag_omission"
+  },
+  {
+   "name": "W26-CO6 (Carry-over W18-DK4) C++-Client wieder GENERIC_READ|GENERIC_WRITE [Quelltext-Pin]",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "        pipe = CreateFileW(name, access, 0, nullptr, OPEN_EXISTING, flags, nullptr);",
+   "neu": "        pipe = CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, flags, nullptr);",
+   "test": "tests/test_windows_source_guards.py::WindowsCandidateSourceAudit::test_client_opens_with_individual_rights"
+  },
+  {
+   "name": "W26-CO7 (Carry-over W24-DK10) C++-Client-Open ohne Frist [Quelltext-Pin]",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "        if ((err != ERROR_FILE_NOT_FOUND && err != ERROR_PIPE_BUSY) || deadline.expired()) {",
+   "neu": "        if (err != ERROR_FILE_NOT_FOUND && err != ERROR_PIPE_BUSY) {",
+   "test": "tests/test_w24_bounded_cpp_io.py::BoundedSourceGuards::test_client_open_retry_is_bounded"
+  }
+ ]
+}

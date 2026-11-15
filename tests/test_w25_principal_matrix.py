@@ -29,6 +29,14 @@ HIGH = 0x3000
 
 
 def facts(principal: str) -> dict:
+    f = _facts(principal)
+    # W26: token policy NO_WRITE_UP|NEW_PROCESS_MIN (3, the default), no UIAccess,
+    # no virtualization
+    f.update(mandatory_policy=3, ui_access=False, virtualization=False)
+    return f
+
+
+def _facts(principal: str) -> dict:
     return {
         'same_token': {'user_sid': USER, 'integrity_rid': HIGH, 'appcontainer': False,
                        'appcontainer_sid': None, 'restricted': False},
@@ -771,3 +779,43 @@ class CrossIntegrityW26(unittest.TestCase):
         self.assertIn('wp.build_sddl(sid, own)', body)
         self.assertEqual(tool.SQUAT_PRINCIPALS[self.NAME], ('medium_il', 'production'))
         self.assertEqual(tool.LOWERED_LABELS['medium_il'], 'S-1-16-8192')
+
+
+class TokenPremisesW26(unittest.TestCase):
+    """W26: the facts the refusal-at-open attribution rests on are measured."""
+
+    def _issues(self, mutate, mode='elevated_admin'):
+        r = good_report(mode)
+        mutate(r)
+        return tool.evaluate(r)[1]
+
+    def test_lowered_children_must_carry_no_write_up(self):
+        for case, pol in (('py_medium_il', 0), ('cpp_low_il', 2), ('py_low_il', None)):
+            self.assertIn('CHILD_NO_WRITE_UP_POLICY_MISSING:' + case, self._issues(
+                lambda r, case=case, pol=pol: r['cases'][case]['child']['facts'].update(mandatory_policy=pol)))
+        self.assertIn('CHILD_NO_WRITE_UP_POLICY_MISSING:squat_medium_il_production', self._issues(
+            lambda r: r['squat']['squat_medium_il_production']['squatter']['facts'].update(mandatory_policy=0)))
+        # the premise is about lowered tokens only: a same-token child may differ
+        self.assertNotIn('CHILD_NO_WRITE_UP_POLICY_MISSING:py_same_token', self._issues(
+            lambda r: r['cases']['py_same_token']['child']['facts'].update(mandatory_policy=0)))
+
+    def test_uiaccess_or_virtualization_blocks_every_case(self):
+        self.assertIn('CHILD_UIACCESS_OR_VIRTUALIZATION:py_same_token', self._issues(
+            lambda r: r['cases']['py_same_token']['child']['facts'].update(ui_access=True)))
+        self.assertIn('CHILD_UIACCESS_OR_VIRTUALIZATION:ctl_appcontainer', self._issues(
+            lambda r: r['cases']['ctl_appcontainer']['child']['facts'].update(virtualization=True)))
+        self.assertIn('CHILD_UIACCESS_OR_VIRTUALIZATION:cpp_restricted', self._issues(
+            lambda r: r['cases']['cpp_restricted']['child']['facts'].pop('ui_access')))
+
+    def test_token_class_constants(self):
+        self.assertEqual((tool.TokenVirtualizationEnabled, tool.TokenUIAccess, tool.TokenMandatoryPolicy),
+                         (24, 26, 27))
+        self.assertEqual(tool.TOKEN_MANDATORY_POLICY_NO_WRITE_UP, 1)
+
+    def test_summary_names_the_real_owner(self):
+        r = good_report('elevated_admin')
+        lines = {ln.split(':', 1)[0]: ln for ln in tool.summary_lines(r) if ln.startswith('SQUAT ')}
+        self.assertIn(' owner=administrators ', lines['SQUAT squat_low_il_default'])
+        self.assertIn(' owner=user ', lines['SQUAT squat_medium_il_production'])
+        self.assertIn(' owner=none ', lines['SQUAT squat_low_il_medium_label'])
+        self.assertNotIn('owner_is_user', '\n'.join(lines.values()))
