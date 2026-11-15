@@ -117,9 +117,16 @@ getrennt nach „am Ziel-Repo“ und „an unserem Prüfwerkzeug“ (Vermerk 007
 | W26-SR-08 | Doku | ADR §3 sagte „byte-for-byte indistinguishable“; gleich ist die **Sicherheitsbeschreibung**, nicht die Pipe-Modus-Flags. | Präzisiert. |
 | W26-SR-09 | Doku, Quelle | ADR §6 stützte die UAC-Einordnung auf Sekundärquellen. | MSRC-Seite gelesen: UAC = Defense-in-depth, „Intent is to service? No“; AppContainer-Sandbox = gewartete Grenze. learn.microsoft.com war aus der Sitzung nicht erreichbar (DNS), MS-DTYP-Zitat stammt aus dem Suchergebnis. |
 
+| W26-SR-10 | Repo, Test | **Erster reproduzierbarer nativer DK-Lauf** (CI-Lauf 43771825189, Kopf `ca5a357`, erhöhter Runner): `w25_2_native_dk_spec.json` nur **12/14**. UT6-02-N9 (Vergleich mit fester Medium-Konstante) und N10 (eigene IL fest Medium) überlebten. Ursache: `test_client_refuses_a_real_label_below_or_above_its_level` prüfte nur Abweisungen; bei eigener IL High lehnt der Mutant alle drei Fälle ab, wie erwartet. Die frühere Angabe „14/14“ galt nur für einen Medium-Host. | Zweiseitiges Orakel: Gleiche Stufe über dieselbe Naht muss zuerst angenommen werden (`SILENT_HOLD`), dann die drei Abweisungen. Damit diskriminiert der Test auf Medium- und High-Hosts. W19 9/9 und Carry-over nativ 5/5 im selben Lauf. |
+
 Lokaler Stand nach W26.1: Suite grün; DK-Replay aller **aktiven** portablen Specs **84/84**
-(public_prep 13, W16 5, W20 5, W25 39, W26 15, Carry-over 7). Native Specs: Ergebnis im
-CI-Artefakt `udx-dk-windows-latest-<sha>`.
+(public_prep 13, W16 5, W20 5, W25 39, W26 15, Carry-over 7), auf Linux und Windows identisch
+(CI-Lauf 43771825189). Native Specs (nur Windows): W19 9/9, Carry-over 5/5, W25.2 vor dem Fix
+12/14; Ergebnis nach dem Fix im CI-Artefakt `udx-dk-windows-latest-<sha>`.
+
+**Methodische Lehre:** Ein Abweisungstest ohne Positivkontrolle tötet „lehne alles ab“-Mutanten
+nur zufällig, abhängig vom Host. Jede Abweisungsregel braucht im selben Test den Fall, der
+angenommen werden muss.
 
 ## Grenzen
 
