@@ -100,6 +100,31 @@ class RunnerVerdicts(unittest.TestCase):
         self.assertEqual(len(self.result['spec_sha256']), 64)
 
 
+class StalePin(unittest.TestCase):
+    """A historical spec: exactly the pinned number of stale anchors is tolerated."""
+
+    def _run(self, expect):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = pathlib.Path(tmp)
+            (work / 'tests').mkdir()
+            (work / 'mod.py').write_bytes(MOD)
+            (work / 'tests' / 'test_syn.py').write_text(TESTS, encoding='utf-8')
+            spec = {'timeout_s': 20, 'faelle': [case('kill', '    return 1\r\n', '    return 7\r\n', 'test_strong'),
+                                                case('stale', 'return 99', 'return 7', 'test_strong')]}
+            (work / 'spec.json').write_text(json.dumps(spec), encoding='utf-8')
+            return dk.run_spec(work / 'spec.json', work, expect)
+
+    def test_exact_pin_passes_and_any_other_count_fails(self):
+        self.assertTrue(self._run(1)['ok'])
+        self.assertEqual(self._run(1)['killed'], '1/1')
+        self.assertFalse(self._run(0)['ok'])         # an unpinned stale anchor fails
+        self.assertFalse(self._run(2)['ok'])         # pin larger than reality fails too
+
+    def test_cli_rejects_a_pin_for_a_spec_that_is_not_run(self):
+        with self.assertRaises(SystemExit):
+            dk.main(['evidence/w26_dk_spec.json', '--expect-stale', 'evidence/w12_dk_spec.json=4'])
+
+
 class RunnerPureLogic(unittest.TestCase):
     def test_decide(self):
         self.assertEqual(dk.decide(1, 'PASS', 'FAIL'), 'KILLED')

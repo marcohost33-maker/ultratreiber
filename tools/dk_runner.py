@@ -22,6 +22,8 @@ mutation harness ... missing"). This runner makes every claim reproducible:
 
 Exit code 0 only if every applicable case is KILLED and nothing is stale, red
 or timed out; SKIPPED_ON_PLATFORM cases are reported and do not count as kills.
+``--expect-stale SPEC=N`` pins the known stale anchors of a historical spec:
+exactly N are tolerated, the anchored rest must be killed, N+1 fails.
 Usage:
   python tools/dk_runner.py evidence/w26_dk_spec.json [more specs] [--json out.json]
 """
@@ -124,7 +126,7 @@ def _run(work: pathlib.Path, tid: str, timeout_s: float):
     return r.returncode, (r.stdout or '') + (r.stderr or '')
 
 
-def run_spec(spec_path: pathlib.Path, work: pathlib.Path) -> dict:
+def run_spec(spec_path: pathlib.Path, work: pathlib.Path, expect_stale: int = 0) -> dict:
     raw = spec_path.read_bytes()
     spec = json.loads(raw)
     timeout_s = float(spec.get('timeout_s', 120))
@@ -161,9 +163,15 @@ def run_spec(spec_path: pathlib.Path, work: pathlib.Path) -> dict:
         out['cases'].append(rec)
     counts = {v: sum(1 for c in out['cases'] if c['verdict'] == v) for v in VERDICTS}
     out['counts'] = {k: v for k, v in counts.items() if v}
-    applicable = len(out['cases']) - counts['SKIPPED_ON_PLATFORM']
+    # A historical spec keeps the anchors of its own wave. Its known number of
+    # stale anchors is pinned by the caller (--expect-stale); exactly that many
+    # are tolerated, every other anchored case must be killed, and one more
+    # stale anchor (code moved on again) fails the run.
+    out['expect_stale'] = expect_stale
+    stale_ok = counts['STALE_ANCHOR'] == expect_stale
+    applicable = len(out['cases']) - counts['SKIPPED_ON_PLATFORM'] - (expect_stale if stale_ok else 0)
     out['killed'] = f"{counts['KILLED']}/{applicable}"
-    out['ok'] = applicable > 0 and counts['KILLED'] == applicable
+    out['ok'] = stale_ok and applicable > 0 and counts['KILLED'] == applicable
     return out
 
 
@@ -171,7 +179,18 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description='UDX discriminating-mutation runner (research only)')
     p.add_argument('specs', nargs='+')
     p.add_argument('--json', help='write the full result as JSON')
+    p.add_argument('--expect-stale', action='append', default=[], metavar='SPEC=N',
+                   help='pin the known number of stale anchors of a historical spec')
     args = p.parse_args(argv)
+    expect = {}
+    for item in args.expect_stale:
+        spec, sep, n = item.rpartition('=')
+        if not sep or not spec or not n.isdigit():
+            p.error('--expect-stale needs SPEC=N')
+        expect[spec] = int(n)
+    unknown = set(expect) - set(args.specs)
+    if unknown:
+        p.error('--expect-stale for a spec that is not run: ' + ', '.join(sorted(unknown)))
     head = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=REPO, stdin=subprocess.DEVNULL,
                           capture_output=True, text=True).stdout.strip() or None
     result = {'tool': 'dk_runner', 'head': head, 'python': platform.python_version(),
@@ -181,12 +200,13 @@ def main(argv=None) -> int:
         _copy_tree(work)
         for s in args.specs:
             path = (REPO / s) if not os.path.isabs(s) else pathlib.Path(s)
-            r = run_spec(path, work)
+            r = run_spec(path, work, expect.get(s, 0))
             result['specs'].append(r)
             for c in r['cases']:
                 if c['verdict'] != 'KILLED':
                     print(f"  {c['verdict']}: {c['name']}")
-            print(f"{r['spec']}: {r['killed']} killed {r['counts']} {'OK' if r['ok'] else 'NOT_OK'}")
+            pinned = f" (stale pinned {r['expect_stale']})" if r['expect_stale'] else ''
+            print(f"{r['spec']}: {r['killed']} killed {r['counts']}{pinned} {'OK' if r['ok'] else 'NOT_OK'}")
     result['ok'] = all(r['ok'] for r in result['specs'])
     if args.json:
         pathlib.Path(args.json).write_text(json.dumps(result, indent=1, sort_keys=True), encoding='utf-8')

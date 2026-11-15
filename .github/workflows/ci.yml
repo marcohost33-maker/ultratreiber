@@ -70,8 +70,11 @@ jobs:
       # W26: the DK specs (discriminating mutations) are executed reproducibly
       # in CI instead of only by an external runner (A7 UT6-04). The runner works
       # on a private copy, never on this checkout, and runs without bytecode cache.
-      # Historical specs of W12/W13/W14/W18/W24 keep anchors of their own wave;
-      # their still-relevant mutations are re-anchored in w26_carryover_*.
+      # Historical specs of W12/W13/W14/W18/W24 keep anchors of their own wave:
+      # their known stale anchors are pinned (--expect-stale; one more fails),
+      # every still-anchored case must be killed, and the still-relevant stale
+      # mutations are re-anchored in w26_carryover_*. W14 (5/5 stale) is fully
+      # superseded by the carry-over and not run.
       - name: Discriminating mutations (portable DK specs)
         if: matrix.python == '3.13'
         env:
@@ -80,6 +83,9 @@ jobs:
           python tools/dk_runner.py
           evidence/public_prep_dk_spec.json evidence/w16_dk_spec.json evidence/w20_dk_spec.json
           evidence/w25_dk_spec.json evidence/w26_dk_spec.json evidence/w26_carryover_dk_spec.json
+          evidence/w13_dk_spec.json evidence/w18_dk_spec.json evidence/w24_dk_spec.json
+          --expect-stale evidence/w13_dk_spec.json=2 --expect-stale evidence/w18_dk_spec.json=1
+          --expect-stale evidence/w24_dk_spec.json=1
           --json "$RUNNER_TEMP/udx_dk_portable.json"
       - name: Discriminating mutations (native Windows DK specs)
         if: runner.os == 'Windows' && matrix.python == '3.13'
@@ -88,6 +94,8 @@ jobs:
         run: >-
           python tools/dk_runner.py
           evidence/w19_dk_spec.json evidence/w25_2_native_dk_spec.json evidence/w26_carryover_native_dk_spec.json
+          evidence/w12_dk_spec.json evidence/w13_dk_carryover_spec.json
+          --expect-stale evidence/w12_dk_spec.json=4
           --json "$RUNNER_TEMP/udx_dk_native.json"
       # actions/upload-artifact, same SHA pin as the evidence jobs below
       - name: Upload DK results
