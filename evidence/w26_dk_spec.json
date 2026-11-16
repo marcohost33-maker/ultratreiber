@@ -11,7 +11,7 @@
   {
    "name": "W26-DK1 Exit 7 ohne Zuordnung zur Gleichheitsregel akzeptiert",
    "datei": "tools/w25_principal_matrix.py",
-   "alt": "    elif label is None or (label['count'], label['rid'], label['own']) != (1, MEDIUM_RID, HIGH_RID):",
+   "alt": "    elif label is None or (label['count'], label['rid'], label['flags'], label['mask'], label['own']) \\\n            != (1, MEDIUM_RID, 0, LABEL_MASK_NW_NR, HIGH_RID):",
    "neu": "    elif label is None:",
    "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_exit_7_must_be_the_equality_rule"
   },
@@ -112,6 +112,13 @@
    "alt": "        owner_kind = 'none' if owner is None else 'user' if owner == user else \\\n",
    "neu": "        owner_kind = 'none' if owner is None else 'user' if owner is not None else \\\n",
    "test": "tests/test_w25_principal_matrix.py::TokenPremisesW26::test_summary_names_the_real_owner"
+  },
+  {
+   "name": "W26-DK16 Exit 7 durch unwirksames Label (Flags/Maske) als Gleichheitsregel gewertet (Codex-Befund)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    elif label is None or (label['count'], label['rid'], label['flags'], label['mask'], label['own']) \\\n            != (1, MEDIUM_RID, 0, LABEL_MASK_NW_NR, HIGH_RID):",
+   "neu": "    elif label is None or (label['count'], label['rid'], label['own']) \\\n            != (1, MEDIUM_RID, HIGH_RID):",
+   "test": "tests/test_w25_principal_matrix.py::CrossIntegrityW26::test_exit_7_must_be_the_equality_rule"
   }
  ]
 }

@@ -204,6 +204,7 @@ ADMINISTRATORS_SID_TEXT = 'S-1-5-32-544'
 EXIT_OWNER_MISMATCH = 5
 SQUAT_LIFETIME_S = 12.0
 EXIT_PIPE_LABEL = 7
+LABEL_MASK_NW_NR = 0x3          # SYSTEM_MANDATORY_LABEL_NO_WRITE_UP | _NO_READ_UP (SDDL "NWNR")
 ERROR_FILE_NOT_FOUND = 2
 
 # UT6-02 (cross-family A7-R2): the clients accept only a pipe label EQUAL to
@@ -463,9 +464,13 @@ def _medium_squat_issues(name: str, rep_: dict, cpp: dict, py: dict, parent: dic
     label = parse_label_line(cpp.get('stderr'))
     if cpp.get('exit') != EXIT_PIPE_LABEL:
         issues.append('CPP_CLIENT_ACCEPTED_SQUATTER:' + name)
-    elif label is None or (label['count'], label['rid'], label['own']) != (1, MEDIUM_RID, HIGH_RID):
-        # exit 7 alone is unspecific (count/flags/mask/floor); only rid 0x2000
-        # against own 0x3000 shows the UT6-02 equality rule fired.
+    elif label is None or (label['count'], label['rid'], label['flags'], label['mask'], label['own']) \
+            != (1, MEDIUM_RID, 0, LABEL_MASK_NW_NR, HIGH_RID):
+        # exit 7 alone is unspecific: the C++ client also exits 7 for a label
+        # that is not effective (INHERIT_ONLY flag, or NO_WRITE_UP missing) or
+        # below the floor. Only one effective NW|NR label (flags 0, mask 3, as
+        # build_sddl sets it) at rid 0x2000 against own 0x3000 leaves the
+        # equality rule as the sole reason (Codex review on 6e79ce0).
         issues.append('CPP_LABEL_REFUSAL_NOT_ATTRIBUTED:' + name)
     if (py.get('reason'), py.get('sent'), py.get('pipe_label')) != ('PIPE_LABEL_MISMATCH', False, MEDIUM_RID):
         issues.append('PY_CLIENT_ACCEPTED_SQUATTER:' + name)

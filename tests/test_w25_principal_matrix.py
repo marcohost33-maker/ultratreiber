@@ -737,6 +737,11 @@ class CrossIntegrityW26(unittest.TestCase):
     def test_exit_7_must_be_the_equality_rule(self):
         for line in ('', 'UDX_CLIENT_PIPE_LABEL query_failed\n',
                      MEDIUM_LABEL_LINE.replace('own=12288', 'own=8192'),       # floor rule, not equality
+                     # Codex review on 6e79ce0: an ineffective label also exits 7
+                     MEDIUM_LABEL_LINE.replace('flags=0', 'flags=8'),          # INHERIT_ONLY
+                     MEDIUM_LABEL_LINE.replace('mask=3', 'mask=0'),            # no NO_WRITE_UP
+                     MEDIUM_LABEL_LINE.replace('mask=3', 'mask=2'),            # NR only
+                     MEDIUM_LABEL_LINE.replace('mask=3', 'mask=1'),            # not the production NWNR
                      MEDIUM_LABEL_LINE.replace('count=1', 'count=2'),
                      MEDIUM_LABEL_LINE * 2):
             self.assertIn('CPP_LABEL_REFUSAL_NOT_ATTRIBUTED:' + self.NAME, self._squat(
