@@ -29,6 +29,14 @@ HIGH = 0x3000
 
 
 def facts(principal: str) -> dict:
+    f = _facts(principal)
+    # W26: token policy NO_WRITE_UP|NEW_PROCESS_MIN (3, the default), no UIAccess,
+    # no virtualization
+    f.update(mandatory_policy=3, ui_access=False, virtualization=False)
+    return f
+
+
+def _facts(principal: str) -> dict:
     return {
         'same_token': {'user_sid': USER, 'integrity_rid': HIGH, 'appcontainer': False,
                        'appcontainer_sid': None, 'restricted': False},
@@ -38,6 +46,8 @@ def facts(principal: str) -> dict:
                          'appcontainer_sid': AC, 'restricted': False},
         'restricted': {'user_sid': USER, 'integrity_rid': HIGH, 'appcontainer': False,
                        'appcontainer_sid': None, 'restricted': True},
+        'medium_il': {'user_sid': USER, 'integrity_rid': 0x2000, 'appcontainer': False,
+                      'appcontainer_sid': None, 'restricted': False},
     }[principal]
 
 
@@ -45,8 +55,20 @@ BIN = {'client': 'a' * 64, 'probe': 'b' * 64}
 DENIAL = {'level': 1, 'rid': HIGH, 'appc': 0, 'restricted': 1, 'session_ok': 1, 'sid_ok': 1}
 
 
+MEDIUM_LABEL_LINE = 'UDX_CLIENT_PIPE_LABEL count=1 rid=8192 flags=0 mask=3 own=12288\n'
+
+
 def squat_case(name: str, mode: str) -> dict:
     lowf = dict(facts('low_il'))
+    if name == 'squat_medium_il_production':
+        rep = {'created': True, 'owner': USER, 'label_rid': 0x2000, 'received': 0, 'own_rid': 0x2000,
+               'sddl': tool.production_sddl(USER, 0x2000), 'sd_converted': True}
+        cpp = {'exit': 7, 'open_error': None, 'inherit': 'handle_list:1', 'stderr': MEDIUM_LABEL_LINE}
+        py = {'reason': 'PIPE_LABEL_MISMATCH', 'sent': False, 'open_error': None, 'pipe_label': 0x2000,
+              'pipe_owner': USER}
+        return {'kind': 'production', 'principal': 'medium_il',
+                'squatter': {'facts': dict(facts('medium_il')), 'inherit': 'handle_list:1', 'report': rep},
+                'cpp_client': cpp, 'py_client': py}
     if name == 'squat_low_il_medium_label':
         rep = {'created': False, 'create_error': 1314}
         cpp = {'exit': 1, 'open_error': 2, 'inherit': 'handle_list:1'}
@@ -97,7 +119,7 @@ def good_report(mode: str = 'elevated_admin') -> dict:
         'cases': cases,
         'cleanup': {'appcontainer_profile': 'deleted', 'workdir': 'deleted'},
     }
-    report['squat'] = {name: squat_case(name, mode) for name in tool.SQUAT_CASES}
+    report['squat'] = {name: squat_case(name, mode) for name in tool.squat_cases(mode)}
     if mode == 'standard_account':
         report['account'] = {'name': 'udxw25s', 'sid': USER}
         report['cleanup'].update(account='deleted', batch_logon_right='removed', workroot='deleted')
@@ -289,7 +311,8 @@ class HardeningW251(unittest.TestCase):
         # Falsified hypothesis (CI run 42593419596): the Medium label does NOT stop
         # a lowbox token once the DACL grants AC. UT6-02: the C++ client then refuses
         # the Medium label itself (!= its own Low level, exit 7, no byte); with the
-        # elevated parent's High label the open is refused (prediction, see tool).
+        # elevated parent's High label the open is refused (predicted in UT6-02,
+        # measured in CI run 42939565127, both cases exit 1 / error 5).
         std, adm = tool.expected_cases('standard_account'), tool.expected_cases('elevated_admin')
         for name in ('ace_appcontainer', 'ctl_appcontainer'):
             self.assertEqual(std[name][3:6], (7, None, ('DENIED', ('CONNECT_FAILED', 'READ_FAILED'), False)))
@@ -494,8 +517,8 @@ class SquatterW252(unittest.TestCase):
 class Summary(unittest.TestCase):
     def test_one_line_per_case_without_failing_on_junk(self):
         lines = tool.summary_lines(good_report())
-        self.assertEqual(len(lines), len(tool.expected_cases('elevated_admin')) + len(tool.SQUAT_CASES))
-        self.assertEqual(sum(1 for x in lines if x.startswith('SQUAT ')), len(tool.SQUAT_CASES))
+        self.assertEqual(len(lines), len(tool.expected_cases('elevated_admin')) + len(tool.squat_cases('elevated_admin')))
+        self.assertEqual(sum(1 for x in lines if x.startswith('SQUAT ')), len(tool.squat_cases('elevated_admin')))
         self.assertTrue(any('CASE py_low_il: rid=0x1000' in x and 'open_error=5' in x for x in lines))
         self.assertEqual(tool.summary_lines(None), [])
         self.assertEqual(len(tool.summary_lines({'cases': {'x': {'error': 'E'}, 'y': 3}})), 1)
@@ -642,3 +665,162 @@ class CiWiring(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CrossIntegrityW26(unittest.TestCase):
+    """W26 (UT-A7-01 / A7-R4 UT6-02 open gate): same user, different integrity
+    level. A Medium client is refused AT OPEN by the kernel when the server is
+    elevated; an elevated client refuses a Medium pipe that is byte-identical
+    to this project's own Medium server (owner, DACL, label)."""
+
+    NAME = 'squat_medium_il_production'
+
+    def _issues(self, mutate, mode='elevated_admin'):
+        r = good_report(mode)
+        mutate(r)
+        return tool.evaluate(r)[1]
+
+    def _squat(self, mutate):
+        return self._issues(lambda r: mutate(r['squat'][self.NAME]))
+
+    def test_cross_il_cases_are_elevated_only(self):
+        adm, std = tool.expected_cases('elevated_admin'), tool.expected_cases('standard_account')
+        for name in ('py_medium_il', 'cpp_medium_il'):
+            self.assertIn(name, adm)
+            self.assertNotIn(name, std)
+            self.assertEqual(adm[name][1:5], ('production', 'medium_il', 1, 5))
+        self.assertEqual(adm['py_medium_il'][5], ('DENIED', 'CONNECT_TIMEOUT', False))
+        self.assertEqual(adm['cpp_medium_il'][5], (22, None))
+        self.assertIn(self.NAME, tool.squat_cases('elevated_admin'))
+        self.assertNotIn(self.NAME, tool.squat_cases('standard_account'))
+        with self.assertRaises(ValueError):
+            tool.squat_cases('admin')
+
+    def test_complete_reports_pass_in_both_modes(self):
+        for mode in tool.MODES:
+            self.assertEqual(tool.evaluate(good_report(mode)), ('PRINCIPAL_MATRIX_OK', []), mode)
+
+    def test_cross_il_cases_cannot_be_dropped(self):
+        self.assertIn('CASE_SET_DRIFT', self._issues(lambda r: r['cases'].pop('cpp_medium_il')))
+        self.assertIn('SQUAT_SET_DRIFT', self._issues(lambda r: r['squat'].pop(self.NAME)))
+        # and they must not appear in the standard-account report either
+        self.assertIn('SQUAT_SET_DRIFT', self._issues(
+            lambda r: r['squat'].__setitem__(self.NAME, squat_case(self.NAME, 'elevated_admin')),
+            mode='standard_account'))
+
+    def test_medium_child_must_really_be_medium(self):
+        self.assertIn('CHILD_INTEGRITY_WRONG:py_medium_il', self._issues(
+            lambda r: r['cases']['py_medium_il']['child']['facts'].update(integrity_rid=HIGH)))
+        self.assertIn('CHILD_INTEGRITY_WRONG:' + self.NAME, self._squat(
+            lambda c: c['squatter']['facts'].update(integrity_rid=0x1000)))
+
+    def test_medium_client_must_be_refused_at_open(self):
+        def opened(r):
+            child = r['cases']['py_medium_il']['child']
+            child.update(exit=7, open_error=None)
+        issues = self._issues(opened)
+        self.assertIn('CLIENT_EXIT_WRONG:py_medium_il', issues)
+        self.assertIn('CLIENT_OPEN_ERROR_WRONG:py_medium_il', issues)
+        self.assertIn('SERVER_SAW_A_CLIENT:py_medium_il', self._issues(
+            lambda r: r['cases']['py_medium_il']['server_result'].update(client_sid=USER)))
+
+    def test_elevated_client_that_writes_to_the_medium_squatter_blocks(self):
+        # The pre-UT6-02 rule (label >= Medium) admits this pipe: the client writes.
+        def old_rule(c):
+            c['cpp_client'].update(exit=0, stderr='')
+            c['py_client'].update(reason='OK', sent=True)
+            c['squatter']['report'].update(received=2)
+        issues = self._squat(old_rule)
+        for issue in ('SQUATTER_RECEIVED_DATA', 'CPP_CLIENT_ACCEPTED_SQUATTER', 'PY_CLIENT_ACCEPTED_SQUATTER'):
+            self.assertIn(issue + ':' + self.NAME, issues)
+
+    def test_exit_7_must_be_the_equality_rule(self):
+        for line in ('', 'UDX_CLIENT_PIPE_LABEL query_failed\n',
+                     MEDIUM_LABEL_LINE.replace('own=12288', 'own=8192'),       # floor rule, not equality
+                     # Codex review on 6e79ce0: an ineffective label also exits 7
+                     MEDIUM_LABEL_LINE.replace('flags=0', 'flags=8'),          # INHERIT_ONLY
+                     MEDIUM_LABEL_LINE.replace('mask=3', 'mask=0'),            # no NO_WRITE_UP
+                     MEDIUM_LABEL_LINE.replace('mask=3', 'mask=2'),            # NR only
+                     MEDIUM_LABEL_LINE.replace('mask=3', 'mask=1'),            # not the production NWNR
+                     MEDIUM_LABEL_LINE.replace('count=1', 'count=2'),
+                     MEDIUM_LABEL_LINE * 2):
+            self.assertIn('CPP_LABEL_REFUSAL_NOT_ATTRIBUTED:' + self.NAME, self._squat(
+                lambda c, line=line: c['cpp_client'].update(stderr=line)), repr(line))
+
+    def test_owner_check_must_have_passed(self):
+        # Only then is the label rule the one that separates squatter and client.
+        self.assertIn('PY_OWNER_CHECK_NOT_PASSED:' + self.NAME, self._squat(
+            lambda c: c['py_client'].update(pipe_owner='S-1-5-32-544')))
+        self.assertIn('SQUATTER_OWNER_NOT_THE_USER:' + self.NAME, self._squat(
+            lambda c: c['squatter']['report'].update(owner='S-1-5-32-544')))
+
+    def test_squatter_must_use_the_projects_own_medium_descriptor(self):
+        self.assertIn('SQUATTER_SD_NOT_THE_MEDIUM_PRODUCTION_SD:' + self.NAME, self._squat(
+            lambda c: c['squatter']['report'].update(sddl=tool.production_sddl(USER, HIGH))))
+        self.assertIn('SQUATTER_SD_NOT_THE_MEDIUM_PRODUCTION_SD:' + self.NAME, self._squat(
+            lambda c: c['squatter']['report'].pop('sddl')))
+        self.assertIn('SQUATTER_LABEL_NOT_MEDIUM:' + self.NAME, self._squat(
+            lambda c: c['squatter']['report'].update(label_rid=0x1000)))
+        self.assertIn('SQUATTER_COULD_NOT_CREATE:' + self.NAME, self._squat(
+            lambda c: c['squatter']['report'].update(created=False)))
+
+    def test_parse_label_line(self):
+        self.assertEqual(tool.parse_label_line(MEDIUM_LABEL_LINE),
+                         {'count': 1, 'rid': 8192, 'flags': 0, 'mask': 3, 'own': 12288})
+        for bad in (None, 7, '', 'UDX_CLIENT_PIPE_LABEL query_failed', MEDIUM_LABEL_LINE * 2,
+                    'UDX_CLIENT_PIPE_LABEL count=1 rid=8192 flags=0 mask=3',
+                    'UDX_CLIENT_PIPE_LABEL count=1 rid=8192 rid=8192 flags=0 mask=3 own=1',
+                    'UDX_CLIENT_PIPE_LABEL count=1 rid=-1 flags=0 mask=3 own=12288'):
+            self.assertIsNone(tool.parse_label_line(bad), repr(bad))
+
+    def test_cpp_label_line_format_matches_the_parser(self):
+        src = (ROOT / 'windows' / 'udx_sid_client.cpp').read_text(encoding='utf-8')
+        self.assertIn('L"UDX_CLIENT_PIPE_LABEL count=%u rid=%lu flags=%u mask=%lu own=%lu\\n"', src)
+
+    def test_squatter_production_kind_uses_build_sddl_at_its_own_level(self):
+        src = (ROOT / 'tools' / 'w25_principal_matrix.py').read_text(encoding='utf-8')
+        body = src[src.index('def squatter('):src.index('def _new_report(')]
+        self.assertIn('wp.effective_integrity_rid(api)', body)
+        self.assertIn('wp.build_sddl(sid, own)', body)
+        self.assertEqual(tool.SQUAT_PRINCIPALS[self.NAME], ('medium_il', 'production'))
+        self.assertEqual(tool.LOWERED_LABELS['medium_il'], 'S-1-16-8192')
+
+
+class TokenPremisesW26(unittest.TestCase):
+    """W26: the facts the refusal-at-open attribution rests on are measured."""
+
+    def _issues(self, mutate, mode='elevated_admin'):
+        r = good_report(mode)
+        mutate(r)
+        return tool.evaluate(r)[1]
+
+    def test_lowered_children_must_carry_no_write_up(self):
+        for case, pol in (('py_medium_il', 0), ('cpp_low_il', 2), ('py_low_il', None)):
+            self.assertIn('CHILD_NO_WRITE_UP_POLICY_MISSING:' + case, self._issues(
+                lambda r, case=case, pol=pol: r['cases'][case]['child']['facts'].update(mandatory_policy=pol)))
+        self.assertIn('CHILD_NO_WRITE_UP_POLICY_MISSING:squat_medium_il_production', self._issues(
+            lambda r: r['squat']['squat_medium_il_production']['squatter']['facts'].update(mandatory_policy=0)))
+        # the premise is about lowered tokens only: a same-token child may differ
+        self.assertNotIn('CHILD_NO_WRITE_UP_POLICY_MISSING:py_same_token', self._issues(
+            lambda r: r['cases']['py_same_token']['child']['facts'].update(mandatory_policy=0)))
+
+    def test_uiaccess_or_virtualization_blocks_every_case(self):
+        self.assertIn('CHILD_UIACCESS_OR_VIRTUALIZATION:py_same_token', self._issues(
+            lambda r: r['cases']['py_same_token']['child']['facts'].update(ui_access=True)))
+        self.assertIn('CHILD_UIACCESS_OR_VIRTUALIZATION:ctl_appcontainer', self._issues(
+            lambda r: r['cases']['ctl_appcontainer']['child']['facts'].update(virtualization=True)))
+        self.assertIn('CHILD_UIACCESS_OR_VIRTUALIZATION:cpp_restricted', self._issues(
+            lambda r: r['cases']['cpp_restricted']['child']['facts'].pop('ui_access')))
+
+    def test_token_class_constants(self):
+        self.assertEqual((tool.TokenVirtualizationEnabled, tool.TokenUIAccess, tool.TokenMandatoryPolicy),
+                         (24, 26, 27))
+        self.assertEqual(tool.TOKEN_MANDATORY_POLICY_NO_WRITE_UP, 1)
+
+    def test_summary_names_the_real_owner(self):
+        r = good_report('elevated_admin')
+        lines = {ln.split(':', 1)[0]: ln for ln in tool.summary_lines(r) if ln.startswith('SQUAT ')}
+        self.assertIn(' owner=administrators ', lines['SQUAT squat_low_il_default'])
+        self.assertIn(' owner=user ', lines['SQUAT squat_medium_il_production'])
+        self.assertIn(' owner=none ', lines['SQUAT squat_low_il_medium_label'])
+        self.assertNotIn('owner_is_user', '\n'.join(lines.values()))

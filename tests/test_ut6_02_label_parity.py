@@ -213,6 +213,18 @@ class WindowsLabelParity(unittest.TestCase):
         # (on the runner: a Medium client vs the real High label)
         # one fresh single-instance pipe per case: a connected-and-closed
         # instance stays busy until the server end disconnects
+        # W26.1 (first reproducible native DK run, tools/dk_runner.py): a
+        # refusal-only oracle does not discriminate a "refuse everything" mutant
+        # on every host. On the elevated runner (own = High, label HI) the
+        # mutants "compare with a fixed Medium constant" (UT6-02-N9) and "own
+        # level fixed Medium" (N10) refused all three cases below, exactly as
+        # expected, and survived; only a Medium host killed them. Two-sided
+        # oracle: the EQUAL level through the same seam must be accepted first.
+        name, _ = self._pipe(wp.label_sddl(self.own))
+        api = wp.WinApi()
+        _patch_own_level(api, self.own)
+        r = self._ping_silent(name, api)
+        self.assertEqual((r.reason, r.sent), ('SILENT_HOLD', False), 'equal level must pass (positive control)')
         for own in (self.own + 0x1000, self.own - 0x1000, wp.SECURITY_MANDATORY_HIGH_RID + 0x100):
             with self.subTest(own=hex(own)):
                 name, _ = self._pipe(wp.label_sddl(self.own))

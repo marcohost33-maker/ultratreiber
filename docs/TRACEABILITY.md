@@ -32,6 +32,10 @@ Sources marked "(private, not publicly accessible)" are internal Coworker Resear
 - OWASP API Security Top 10: https://api-security.owasp.org/editions/2023/en/0x11-t10/
 - NIST SSDF SP 800-218: https://csrc.nist.gov/pubs/sp/800/218/final
 
+- MSRC Windows security servicing criteria (UAC defense-in-depth, AppContainer boundary; read 2026-11-15): https://www.microsoft.com/en-us/msrc/windows-security-servicing-criteria
+- MS-DTYP 2.4.8 TOKEN_MANDATORY_POLICY: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp/de8373ec-206f-4dc8-b3fe-c638fed7b282
+- PEP 552 deterministic pycs (timestamp-based invalidation is the default): https://peps.python.org/pep-0552/
+
 These sources inform a design; citations are not proof that this prototype implements their security guarantees.
 
 ## Transfer to CodeFactory after independent gate
