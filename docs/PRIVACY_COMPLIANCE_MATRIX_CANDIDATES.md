@@ -10,3 +10,5 @@
 | UDX-DP-06 | OS safety/permission accessibility | native permission prompt, graceful denial, accessibility-tested UI | missing |
 
 **Current prototype:** synthetic fixture; test UID appears only in process-local policy. No telemetry, cloud, user file reads, personal document store or persistent audit. Swiss FADP/DSG and EU GDPR scope depends on deployment/users/data flow; legal review remains a release gate.
+
+W27 (2026-11-17): no new data flow. `evidence/W27_FD_HANDOFF_LOAD.json` holds timings, counts, CPU count, kernel and Python version of the measuring machine; no host name, account name, path or UID. The new tests use temporary fixture files only. No entry of this matrix changes state.
