@@ -95,8 +95,10 @@ class Core(unittest.TestCase):
 
 class FakePeerSocket:
     """Stand-in for a kernel that reports an impossible peer (pid 0)."""
-    family = socket.AF_UNIX
-    type = socket.SOCK_SEQPACKET
+    # getattr: Windows builds of Python have neither constant; the classes that
+    # use this stand-in are skipped there, but the module must still import.
+    family = getattr(socket, 'AF_UNIX', None)
+    type = getattr(socket, 'SOCK_SEQPACKET', None)
 
     def __init__(self, pid, uid, gid):
         self._raw = struct.pack('3i', pid, uid, gid)
