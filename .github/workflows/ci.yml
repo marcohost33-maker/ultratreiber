@@ -134,8 +134,11 @@ jobs:
     # W18 (UDX14-04, first step): the C++ sources had never been compiled.
     # Builds both with cl /W4 /WX and runs the fixed-name handshake C++<->C++,
     # C++<->Python in both directions, plus the W18 legacy-open refusal.
-    # Elevated hosted runner; NOT evidence for the open C++ deadline gaps.
-    timeout-minutes: 15
+    # W24: bounded overlapped I/O; six negative-first native cases (connect /
+    # read / drain stall, silent server vs C++ client, bad arguments, small-budget
+    # positive control). Elevated hosted runner; the cancel-race path (exit 31)
+    # is not provoked. Never a release approval.
+    timeout-minutes: 20
     defaults:
       run:
         shell: pwsh

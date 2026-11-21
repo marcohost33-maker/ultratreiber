@@ -1,0 +1,85 @@
+{
+ "repo": ".",
+ "test_befehl": ["python", "-m", "pytest"],
+ "timeout_s": 120,
+ "hinweis": "Portable Diskriminierung der W24-Quellwaechter und des Harness-Verdikts (Linux ausfuehrbar). Jede Mutation muss den genannten Test rot machen. Die nativen Laufzeitbelege (MSVC /W4 /WX, Stall-Faelle auf echtem Windows-Kernel) stehen im CI-Artefakt udx-w18-cpp-crossrun-<sha>.",
+ "faelle": [
+  {
+   "name": "W24-DK1 Server-Pipe ohne FILE_FLAG_OVERLAPPED (blockierende I/O zurueck)",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "        PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,",
+   "neu": "        PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,",
+   "test": "tests/test_w24_bounded_cpp_io.py::BoundedSourceGuards::test_handles_are_opened_overlapped"
+  },
+  {
+   "name": "W24-DK2 FlushFileBuffers wieder vor DisconnectNamedPipe (unbegrenzte Drain-Phase)",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "    DisconnectNamedPipe(pipe);\n    CloseHandle(pipe);\n    return peer_closed ? 0 : udx::kExitPeerNotClosed;",
+   "neu": "    FlushFileBuffers(pipe);\n    DisconnectNamedPipe(pipe);\n    CloseHandle(pipe);\n    return peer_closed ? 0 : udx::kExitPeerNotClosed;",
+   "test": "tests/test_w24_bounded_cpp_io.py::BoundedSourceGuards::test_no_flush_file_buffers_call"
+  },
+  {
+   "name": "W24-DK3 Frische Frist fuer die Drain-Phase (Gesamtbudget ueberschreitbar)",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "    const udx::IoResult drain = udx::bounded_io(pipe, deadline,",
+   "neu": "    const udx::Deadline drain_deadline(budget_ms);\n    const udx::IoResult drain = udx::bounded_io(pipe, drain_deadline,",
+   "test": "tests/test_w24_bounded_cpp_io.py::BoundedSourceGuards::test_one_deadline_per_exchange"
+  },
+  {
+   "name": "W24-DK4 Cancel-Race als Erfolg umgedeutet",
+   "datei": "windows/udx_bounded_pipe_io.hpp",
+   "alt": "        return {IoStatus::timeout, n, ERROR_SUCCESS};   // completed in the race: still a timeout",
+   "neu": "        return {IoStatus::ok, n, ERROR_SUCCESS};",
+   "test": "tests/test_w24_bounded_cpp_io.py::BoundedSourceGuards::test_cancel_path_never_reports_success_and_dies_when_unsettled"
+  },
+  {
+   "name": "W24-DK5 Unklare Completion fuehrt nicht mehr zum Prozessabbruch (OVERLAPPED auf dem Stack freigegeben)",
+   "datei": "windows/udx_bounded_pipe_io.hpp",
+   "alt": "    if (err == WAIT_TIMEOUT || err == ERROR_IO_INCOMPLETE || !HasOverlappedIoCompleted(&ov))\n        die_cancel_uncertain();\n",
+   "neu": "",
+   "test": "tests/test_w24_bounded_cpp_io.py::BoundedSourceGuards::test_cancel_path_never_reports_success_and_dies_when_unsettled"
+  },
+  {
+   "name": "W24-DK6 Alertable Wait (APC kann die Frist umgehen)",
+   "datei": "windows/udx_bounded_pipe_io.hpp",
+   "alt": "        if (GetOverlappedResultEx(handle, &ov, &n, deadline.remaining_ms(), FALSE))",
+   "neu": "        if (GetOverlappedResultEx(handle, &ov, &n, deadline.remaining_ms(), TRUE))",
+   "test": "tests/test_w24_bounded_cpp_io.py::BoundedSourceGuards::test_cancel_waits_for_completion_and_never_blocks_unbounded"
+  },
+  {
+   "name": "W24-DK7 Drain akzeptiert Daten statt EOF als Peer-Close",
+   "datei": "windows/udx_sid_probe.cpp",
+   "alt": "    const bool peer_closed = drain.status == udx::IoStatus::failure\n",
+   "neu": "    const bool peer_closed = drain.status != udx::IoStatus::timeout\n",
+   "test": "tests/test_w24_bounded_cpp_io.py::BoundedSourceGuards::test_peer_closed_requires_eof_not_data"
+  },
+  {
+   "name": "W24-DK8 Harness: Stall-Verdikt ohne Zeitgrenze (Exit nach Loslassen des Halters waere gruen)",
+   "datei": "tools/w18_cpp_crossrun.py",
+   "alt": "    return exit_code == expected_exit and elapsed_s <= STALL_LIMIT_S",
+   "neu": "    return exit_code == expected_exit",
+   "test": "tests/test_w24_bounded_cpp_io.py::HarnessVerdict::test_stall_verdict_is_fail_closed"
+  },
+  {
+   "name": "W24-DK9 Harness: Fallmenge nicht mehr exakt (zusaetzlicher, ungeprufter Fall faellt nicht auf)",
+   "datei": "tools/w18_cpp_crossrun.py",
+   "alt": "    return (type(cases) is dict and set(cases) == set(EXPECTED_CASES)",
+   "neu": "    return (type(cases) is dict and set(EXPECTED_CASES).issubset(cases)",
+   "test": "tests/test_w24_bounded_cpp_io.py::HarnessVerdict::test_all_cases_pass_requires_exact_set"
+  },
+  {
+   "name": "W24-DK10 Client-Open ohne Fristpruefung (endlose Wiederholung bei abwesendem Server)",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "        if ((err != ERROR_FILE_NOT_FOUND && err != ERROR_PIPE_BUSY) || deadline.expired()) return 1;",
+   "neu": "        if (err != ERROR_FILE_NOT_FOUND && err != ERROR_PIPE_BUSY) return 1;",
+   "test": "tests/test_w24_bounded_cpp_io.py::BoundedSourceGuards::test_client_open_retry_is_bounded"
+  },
+  {
+   "name": "W24-DK11 (Carry-over W18-DK4, Anker durch die begrenzte Open-Schleife verschoben) C++-Client wieder GENERIC_READ|GENERIC_WRITE",
+   "datei": "windows/udx_sid_client.cpp",
+   "alt": "        pipe = CreateFileW(name, access, 0, nullptr, OPEN_EXISTING, flags, nullptr);",
+   "neu": "        pipe = CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, flags, nullptr);",
+   "test": "tests/test_windows_source_guards.py::WindowsCandidateSourceAudit::test_client_opens_with_individual_rights"
+  }
+ ]
+}

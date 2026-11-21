@@ -1,5 +1,11 @@
 # W5 Gate review — Fail closed
 
+> **Historical snapshot (W5).** Kept unchanged as a record; it does not describe
+> the current state. Current status: `README.md` status box and `docs/ROADMAP.md`
+> (W24). In particular the Windows lines below predate the first MSVC build (W18),
+> the account lane (W20) and bounded C++ I/O (W24). No gate was set to PASS
+> retroactively.
+
 **RESEARCH CANDIDATE — NO PRODUCTION RELEASE.**
 
 | Gate | Minimum evidence | Measured | Decision |
