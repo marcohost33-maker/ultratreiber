@@ -135,7 +135,9 @@ class DurableGrantStore:
                 raise ValueError
         except (ValueError,AttributeError):
             raise GrantDenied('BAD_REQUEST_ID') from None
-        if not _valid_uid(issuer_uid) or not _valid_uid(recipient_uid):
+        # The issuer is bound to the descriptor owner by _fd_properties (BAD_OWNER,
+        # pinned since W27); the recipient was compared with == only (W28.1).
+        if not _valid_uid(recipient_uid):
             raise GrantDenied('BAD_PRINCIPAL')
         props = _fd_properties(fd,issuer_uid)
         expired = False

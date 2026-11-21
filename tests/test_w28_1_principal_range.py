@@ -45,11 +45,13 @@ class PrincipalRange(unittest.TestCase):
     def test_claim_refuses_equal_but_wrongly_typed_principals(self):
         recipient = self.uid + 1
         gid = self.issue(recipient)
-        for issuer, rec in ((self.uid, float(recipient)), (self.uid, 2**64 + recipient),
-                            (float(self.uid), recipient), (self.uid, None)):
-            with self.subTest(issuer=issuer, recipient=rec), \
-                    self.assertRaisesRegex(self.d.GrantDenied, '^BAD_PRINCIPAL$'):
-                self.claim(gid, issuer, rec)
+        for rec in (float(recipient), 2**64 + recipient, None):
+            with self.subTest(recipient=rec), self.assertRaisesRegex(self.d.GrantDenied, '^BAD_PRINCIPAL$'):
+                self.claim(gid, self.uid, rec)
+        # The issuer keeps its W27 contract: bound to the descriptor owner, BAD_OWNER.
+        for issuer in (float(self.uid), True, -1):
+            with self.subTest(issuer=issuer), self.assertRaisesRegex(self.d.GrantDenied, '^BAD_OWNER$'):
+                self.claim(gid, issuer, recipient)
         self.assertIsNone(self.claim(gid, self.uid, recipient))           # positive control
         self.assertEqual(self.store.state(gid), 'INFLIGHT')
 

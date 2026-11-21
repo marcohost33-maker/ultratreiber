@@ -6,7 +6,7 @@
   "pytest"
  ],
  "timeout_s": 180,
- "hinweis": "W28: UDX28-01 (Siegelkonstanten zur Laufzeit, typisierte Abweisung), UDX28-02 (Uhrwerte ausserhalb des float-/SQLite-Bereichs typisiert; widerlegt den W27-Pin BAD_CLOCK), Guard-Sweep v2 (return/handler-Formen, zuordenbare Kills, Zeugen), neue Negativkontrollen aus dem v2-Sweep, Startmatrix (U6-2), statisches Gate fuer uebernommene Sockets (U6-3). DK13/DK14 tragen die zwei W27-Faelle weiter, deren Anker sich durch W28 geaendert haben (w27-Spec: --expect-stale 2). Linux-only Faelle melden unter Windows SKIPPED_ON_PLATFORM.",
+ "hinweis": "W28: UDX28-01 (Siegelkonstanten zur Laufzeit, typisierte Abweisung), UDX28-02 (Uhrwerte ausserhalb des float-/SQLite-Bereichs typisiert; widerlegt den W27-Pin BAD_CLOCK), Guard-Sweep v2 (return/handler-Formen, zuordenbare Kills, Zeugen), neue Negativkontrollen aus dem v2-Sweep, Startmatrix (U6-2), statisches Gate fuer uebernommene Sockets (U6-3). DK13/DK14 tragen die zwei W27-Faelle weiter, deren Anker sich durch W28 geaendert haben (w27-Spec: --expect-stale 2). Linux-only Faelle melden unter Windows SKIPPED_ON_PLATFORM. W28.1: DK13/DK14 neu verankert (seiteneffekt-erhaltende Mutanten); DK17-DK23 fuer Kill-Bestaetigung, Seiteneffekte, UDX28-03 und das Lastwerkzeug.",
  "faelle": [
   {
    "name": "W28-DK1 Siegelkonstanten wieder beim Import gelesen (UDX28-01)",
@@ -95,15 +95,15 @@
   {
    "name": "W28-DK13 (W27-GS6 neu verankert) REFUSE-Mutant schreibt False",
    "datei": "tools/guard_sweep.py",
-   "alt": "KINDS = {'ADMIT': b'False', 'REFUSE': b'True', 'UNTYPED': b'()'}",
-   "neu": "KINDS = {'ADMIT': b'False', 'REFUSE': b'False', 'UNTYPED': b'()'}",
+   "alt": "KINDS = {'ADMIT': (b'((', b') and False)'), 'REFUSE': (b'((', b') or True)'), 'UNTYPED': (b'', b'()')}",
+   "neu": "KINDS = {'ADMIT': (b'((', b') and False)'), 'REFUSE': (b'((', b') and False)'), 'UNTYPED': (b'', b'()')}",
    "test": "tests/test_w27_guard_sweep.py::EndToEnd::test_real_sweep_on_a_synthetic_tree_reports_exactly_the_untested_direction"
   },
   {
    "name": "W28-DK14 (W27-GS8 neu verankert) Mutant wird nach dem Lauf nicht zurueckgeschrieben",
    "datei": "tools/guard_sweep.py",
-   "alt": "            finally:\n                target.write_bytes(orig)\n            mutant = classify(rc, output)\n",
-   "neu": "            finally:\n                pass\n            mutant = classify(rc, output)\n",
+   "alt": "            finally:\n                target.write_bytes(orig)\n            return rec\n",
+   "neu": "            finally:\n                pass\n            return rec\n",
    "test": "tests/test_w27_guard_sweep.py::EndToEnd::test_real_sweep_on_a_synthetic_tree_reports_exactly_the_untested_direction"
   },
   {
@@ -119,6 +119,55 @@
    "alt": "CONFIGURE = ('settimeout', 'setblocking')\n",
    "neu": "CONFIGURE = ('settimeout', 'setblocking', 'recv', None)\n",
    "test": "tests/test_w28_static_gates.py::AdoptedSocketsSetTheirOwnTimeout::test_the_gate_detects_an_unconfigured_adoption"
+  },
+  {
+   "name": "W28.1-DK17 ADMIT-Mutant ersetzt die Bedingung wieder (Seiteneffekt geht verloren, Codex #8)",
+   "datei": "tools/guard_sweep.py",
+   "alt": "    return source[:guard['begin']] + head + source[guard['begin']:guard['end']] + tail + source[guard['end']:]\n",
+   "neu": "    return source[:guard['begin']] + (b'False' if kind == 'ADMIT' else b'True') + source[guard['end']:]\n",
+   "test": "tests/test_w28_guard_sweep_v2.py::SideEffectsArePreserved::test_mutants_still_evaluate_the_condition"
+  },
+  {
+   "name": "W28.1-DK18 Kill wird nicht bestaetigt (flackernder Test zaehlt als Kill)",
+   "datei": "tools/guard_sweep.py",
+   "alt": "                    if not rec['confirmed']:\n                        rec['verdict'] = 'UNRELIABLE'\n",
+   "neu": "                    if False:\n                        rec['verdict'] = 'UNRELIABLE'\n",
+   "test": "tests/test_w28_guard_sweep_v2.py::W281EndToEnd::test_a_kill_that_does_not_reproduce_is_unreliable"
+  },
+  {
+   "name": "W28.1-DK19 UNRELIABLE gilt nicht als Nicht-Kill",
+   "datei": "tools/guard_sweep.py",
+   "alt": "NOT_KILLED = ('SURVIVED', 'STRUCTURAL', 'UNRELIABLE')",
+   "neu": "NOT_KILLED = ('SURVIVED', 'STRUCTURAL')",
+   "test": "tests/test_w28_guard_sweep_v2.py::W281EndToEnd::test_a_kill_that_does_not_reproduce_is_unreliable"
+  },
+  {
+   "name": "W28.1-DK20 UDX28-03 claim prueft den Empfaenger nicht",
+   "datei": "udx_ref/durable_grants.py",
+   "alt": "            raise GrantDenied('BAD_REQUEST_ID') from None\n        # The issuer is bound to the descriptor owner by _fd_properties (BAD_OWNER,\n        # pinned since W27); the recipient was compared with == only (W28.1).\n        if not _valid_uid(recipient_uid):\n            raise GrantDenied('BAD_PRINCIPAL')\n",
+   "neu": "            raise GrantDenied('BAD_REQUEST_ID') from None\n",
+   "test": "tests/test_w28_1_principal_range.py::PrincipalRange::test_claim_refuses_equal_but_wrongly_typed_principals"
+  },
+  {
+   "name": "W28.1-DK21 UDX28-03 uid_t-Obergrenze entfernt",
+   "datei": "udx_ref/durable_grants.py",
+   "alt": "    return type(value) is int and 0 <= value <= MAX_UID\n",
+   "neu": "    return type(value) is int and 0 <= value\n",
+   "test": "tests/test_w28_1_principal_range.py::PrincipalRange::test_out_of_range_or_wrongly_typed_recipient_is_bad_principal_at_issue"
+  },
+  {
+   "name": "W28.1-DK22 UDX28-03 bool/float als Principal zugelassen",
+   "datei": "udx_ref/durable_grants.py",
+   "alt": "    return type(value) is int and 0 <= value <= MAX_UID\n",
+   "neu": "    return isinstance(value, (int, float)) and 0 <= value <= MAX_UID\n",
+   "test": "tests/test_w28_1_principal_range.py::PrincipalRange::test_bool_principal_equal_to_one_is_refused"
+  },
+  {
+   "name": "W28.1-DK23 Lastwerkzeug startet Brenner wieder ausserhalb von try/finally (Codex #8)",
+   "datei": "tools/w27_fd_handoff_load.py",
+   "alt": "            burners = []\n            try:\n                for _ in range(level):\n                    burners.append(subprocess.Popen([sys.executable, '-c', 'while True: pass'],\n                                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,\n                                                    stderr=subprocess.DEVNULL))\n                time.sleep(1.0)\n",
+   "neu": "            burners = []\n            for _ in range(level):\n                burners.append(subprocess.Popen([sys.executable, '-c', 'while True: pass'],\n                                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,\n                                                stderr=subprocess.DEVNULL))\n            try:\n                time.sleep(1.0)\n",
+   "test": "tests/test_w28_1_load_tool_cleanup.py::BurnerCleanup::test_partial_start_failure_kills_and_reaps_the_started_burners"
   }
  ]
 }
