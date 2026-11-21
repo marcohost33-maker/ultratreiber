@@ -261,6 +261,11 @@ def decide(base: str, mutant: str | None) -> str:
     return 'STRUCTURAL' if mutant == 'FAIL_STRUCTURAL' else 'KILLED'
 
 
+def not_killed(cases) -> set:
+    """Idents of every mutant that needs a pin: survived, structural or unreliable."""
+    return {f"{c['kind']} {c['key']}" for c in cases if c['verdict'] in NOT_KILLED}
+
+
 def compare(survivors: set, baseline: dict) -> dict:
     """Ratchet (pure): new survivors and stale baseline entries both fail."""
     pinned = set(baseline)
@@ -419,7 +424,7 @@ def main(argv=None) -> int:
         print(f'  MISSING_WITNESS {item}')
     result = sweep(args.modules, args.jobs, args.timeout, confirm=not args.no_confirm)
     result['confirm_kills'] = not args.no_confirm
-    survivors = {f"{c['kind']} {c['key']}" for c in result['cases'] if c['verdict'] in NOT_KILLED}
+    survivors = not_killed(result['cases'])
     result.update(compare(survivors, baseline))
     result['missing_witnesses'] = witnesses
     blocking = [c for c in result['cases'] if c['verdict'] in ('TIMEOUT', 'BASELINE_RED')]

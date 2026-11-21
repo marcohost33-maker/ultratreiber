@@ -193,6 +193,14 @@ class KillAttribution(unittest.TestCase):
                          'FAIL_ASSERTION')
 
 
+class RatchetInput(unittest.TestCase):
+    def test_survived_structural_and_unreliable_all_need_a_pin(self):
+        cases = [{'kind': 'ADMIT', 'key': k, 'verdict': v} for k, v in
+                 (('a', 'SURVIVED'), ('b', 'STRUCTURAL'), ('c', 'UNRELIABLE'), ('d', 'KILLED'),
+                  ('e', 'TIMEOUT'), ('f', 'BASELINE_RED'))]
+        self.assertEqual(gs.not_killed(cases), {'ADMIT a', 'ADMIT b', 'ADMIT c'})
+
+
 class WitnessedBaseline(unittest.TestCase):
     def test_equivalent_needs_a_witness_and_kinds_are_known(self):
         good = {'kind': 'UNTYPED', 'key': 'k', 'class': 'DEFENSE_IN_DEPTH', 'reason': 'r'}

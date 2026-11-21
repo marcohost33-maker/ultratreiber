@@ -139,7 +139,7 @@
    "datei": "tools/guard_sweep.py",
    "alt": "NOT_KILLED = ('SURVIVED', 'STRUCTURAL', 'UNRELIABLE')",
    "neu": "NOT_KILLED = ('SURVIVED', 'STRUCTURAL')",
-   "test": "tests/test_w28_guard_sweep_v2.py::W281EndToEnd::test_a_kill_that_does_not_reproduce_is_unreliable"
+   "test": "tests/test_w28_guard_sweep_v2.py::RatchetInput::test_survived_structural_and_unreliable_all_need_a_pin"
   },
   {
    "name": "W28.1-DK20 UDX28-03 claim prueft den Empfaenger nicht",
