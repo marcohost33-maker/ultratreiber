@@ -360,7 +360,10 @@ Consequence for the principal matrix: an AppContainer child (Low) can no longer
 reach the server's `INTEGRITY_TOO_LOW` check. Under a Medium parent the lowbox
 token still opens the AC-ACE pipe (measured W25.1) and the C++ client refuses the
 label (exit 7). Under the elevated parent the label is High; the expected outcome
-(open refused with 5) is a PREDICTION until the first CI run measures it. The server
+(open refused with 5) is a PREDICTION until the first CI run measures it.
+*W26 note (2026-11-15): measured in CI run 42939565127 (head `a736ca8`): both
+AppContainer cases exit 1 with error 5, the server sees no client. The cross-level
+policy (Medium <-> High) is written down in `docs/ADR-UDX-007.md`.* The server
 check stays as defense in depth and keeps its fault-injection tests.
 
 Evidence on the development host (Windows 11, standard user, Medium): real token

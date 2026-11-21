@@ -251,7 +251,10 @@ Folge für die Matrix: `ctl_appcontainer` und `ace_appcontainer` sind modusabhä
 (`EXPECTED_BY_MODE`). Standardkonto: der Lowbox-Client öffnet die Medium-Pipe, lehnt das
 Label ab (Exit 7, kein Byte), der Server endet mit `CONNECT_FAILED` oder `READ_FAILED`.
 Erhöhter Admin: High-Label, erwartet wird Ablehnung beim Öffnen (5) – **Vorhersage, noch
-nicht gemessen**. `INTEGRITY_TOO_LOW` ist für ein echtes AppContainer-Token damit nicht
+nicht gemessen**. *Nachtrag W26 (2026-11-15): gemessen im CI-Lauf 42939565127 (Kopf
+`a736ca8`): `ctl_appcontainer` und `ace_appcontainer` mit `client_exit=1`, `open_error=5`,
+Server `DENIED/CONNECT_TIMEOUT`; Standardkonto wie oben (Exit 7, `READ_FAILED`). Siehe
+`docs/W26_CROSS_IL_POLICY.md`.* `INTEGRITY_TOO_LOW` ist für ein echtes AppContainer-Token damit nicht
 mehr erreichbar (Tiefenverteidigung, weiter durch Fehlerinjektion belegt).
 
 ## Grenzen (nicht belegt)

@@ -1,0 +1,47 @@
+{
+ "repo": ".",
+ "test_befehl": [
+  "python",
+  "-m",
+  "unittest"
+ ],
+ "timeout_s": 120,
+ "hinweis": "Carry-over: die Schutzmechanismen der veralteten Anker aus W12/W13/W14/W18/W24 neu am aktuellen Code verankert (Lauf mit tools/dk_runner.py; Specs aelterer Wellen bleiben unveraendert als Beleg ihrer Welle). Nur Windows (CI-Job suite windows-latest); auf Linux SKIPPED_ON_PLATFORM.",
+ "faelle": [
+  {
+   "name": "W26-CN1 (Carry-over W12-DK1) Everyone-ACE, native DACL-Ruecklesung",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "';;;OW)'\n            + label)",
+   "neu": "';;;OW)(A;;GA;;;WD)'\n            + label)",
+   "test": "tests/test_w12_windows_pipe.py::WindowsPipeRuntime::test_dacl_exactly_system_and_current_user"
+  },
+  {
+   "name": "W26-CN2 (Carry-over W14-DK1) SYSTEM-ACE GA, native DACL-Ruecklesung",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "'D:P(A;;' + ace + ';;;SY)(A;;'",
+   "neu": "'D:P(A;;GA;;;SY)(A;;'",
+   "test": "tests/test_w12_windows_pipe.py::WindowsPipeRuntime::test_dacl_exactly_system_and_current_user"
+  },
+  {
+   "name": "W26-CN3 (Carry-over W13-DK17) Mandatory-Label fehlt ganz: Low-IL-Lesezugriff",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "            + label)",
+   "neu": "            )",
+   "test": "tests/test_w12_windows_pipe.py::WindowsPipeRuntime::test_low_integrity_read_only_open_denied"
+  },
+  {
+   "name": "W26-CN4 (Carry-over W12-DK4) absolute Deadline entfernt (Wait INFINITE)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "                ms = 0 if remaining <= 0 else min(int(math.ceil(remaining * 1000)), INFINITE - 1)",
+   "neu": "                ms = INFINITE",
+   "test": "tests/test_w12_windows_pipe.py::WindowsPipeRuntime::test_silent_client_hits_deadline_without_hang"
+  },
+  {
+   "name": "W26-CN5 (Carry-over W12-DK11) unbegrenzte Gnadenfrist nach fehlgeschlagenem CancelIoEx",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "                if api.WaitForSingleObject(event, CANCEL_GRACE_MS) != WAIT_OBJECT_0:\n                    _park(",
+   "neu": "                if api.WaitForSingleObject(event, INFINITE) != WAIT_OBJECT_0:\n                    _park(",
+   "test": "tests/test_w12_windows_pipe.py::WindowsPipeFaultInjection::test_failed_cancel_does_not_extend_deadline_unbounded"
+  }
+ ]
+}
