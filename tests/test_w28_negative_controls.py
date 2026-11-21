@@ -15,6 +15,16 @@ into a typed refusal. On the W27 tests nine of these survived:
   still passed.
 
 Each test below asserts the exact refusal code and has a positive control.
+
+Second sweep (with the tests above) found two more:
+
+* ``core.decode_response``: the handler that turns undecodable bytes into
+  INVALID_RESPONSE. In the first v2 run it counted as killed, but only by
+  ``test_linux_ipc.test_real_kernel_uid_and_fixture`` - a test that never sends
+  malformed JSON and evidently failed on timing under sweep load. A kill by a
+  load-flaky test is not evidence; the handler had no deterministic test.
+* ``PreviewGate`` (W28 ``_finite_number``): without the type check
+  ``math.isfinite(True)`` is True, so a clock returning a bool was accepted.
 """
 from __future__ import annotations
 
@@ -27,9 +37,11 @@ import unittest
 import uuid
 
 from udx_ref import fd_handoff, fd_reader, linux_ipc
-from udx_ref.core import Refusal
+import json
+
+from udx_ref.core import VERSION, Refusal, decode_response
 from udx_ref.portal_boundary import PortalRejected, validate_chooser_result
-from udx_ref.preview_gate import PreviewGate, PreviewProposal
+from udx_ref.preview_gate import GateError, PreviewGate, PreviewProposal
 
 LINUX = sys.platform.startswith('linux')
 
@@ -153,6 +165,31 @@ class TypedHandlerConversions(unittest.TestCase):
         with self.assertRaisesRegex(Refusal, 'UNAUTHENTICATED_PEER') as ctx:
             linux_ipc.peer_identity(a)
         self.assertIsInstance(ctx.exception.__cause__, OSError)
+
+
+class ResponseDecoderTypedConversion(unittest.TestCase):
+    RID = '00000000-0000-4000-8000-000000000001'
+
+    def test_undecodable_response_bytes_are_invalid_response(self):
+        good = json.dumps({'version': VERSION, 'request_id': self.RID, 'status': 'OK', 'code': 'OK',
+                           'data': {'object_id': 'sample-1', 'kind': 'fixture', 'size_bytes': 42}},
+                          separators=(',', ':')).encode()
+        self.assertEqual(decode_response(good)['code'], 'OK')                 # positive control
+        for bad in (b'\xff\xfe', b'{', b'{"version": }', good[:-1], b'{"a":1,}'):
+            with self.subTest(bad=bad[:12]), self.assertRaisesRegex(Refusal, '^INVALID_RESPONSE$'):
+                decode_response(bad)
+
+
+class PreviewGateNonNumericClock(unittest.TestCase):
+    def test_bool_none_and_text_clocks_are_clock_anomaly(self):
+        for now in (True, False, None, '100', 100j):
+            gate = PreviewGate(clock=lambda now=now: now)
+            with self.subTest(now=now), self.assertRaisesRegex(GateError, '^CLOCK_ANOMALY$'):
+                gate.issue(human_approved=True, principal='p', session_id='s', resource_id='r',
+                           frame_epoch=1, width=2, height=2)
+        gate = PreviewGate(clock=lambda: 100)
+        self.assertTrue(gate.issue(human_approved=True, principal='p', session_id='s', resource_id='r',
+                                   frame_epoch=1, width=2, height=2))
 
 
 class PortalUriParseFailure(unittest.TestCase):

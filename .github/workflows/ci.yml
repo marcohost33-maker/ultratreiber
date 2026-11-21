@@ -83,10 +83,10 @@ jobs:
           python tools/dk_runner.py
           evidence/public_prep_dk_spec.json evidence/w16_dk_spec.json evidence/w20_dk_spec.json
           evidence/w25_dk_spec.json evidence/w26_dk_spec.json evidence/w26_carryover_dk_spec.json
-          evidence/w27_dk_spec.json
+          evidence/w27_dk_spec.json evidence/w28_dk_spec.json
           evidence/w13_dk_spec.json evidence/w18_dk_spec.json evidence/w24_dk_spec.json
           --expect-stale evidence/w13_dk_spec.json=2 --expect-stale evidence/w18_dk_spec.json=1
-          --expect-stale evidence/w24_dk_spec.json=1
+          --expect-stale evidence/w24_dk_spec.json=1 --expect-stale evidence/w27_dk_spec.json=2
           --json "$RUNNER_TEMP/udx_dk_portable.json"
       - name: Discriminating mutations (native Windows DK specs)
         if: runner.os == 'Windows' && matrix.python == '3.13'
@@ -120,8 +120,12 @@ jobs:
     # W27: every refusal of the portable runtime is removed (ADMIT) and forced
     # (REFUSE) in turn; a refusal that no test notices in one of the two
     # directions fails this job unless it is pinned with a reason in
-    # evidence/w27_guard_sweep_baseline.json. A pin that no longer survives
+    # evidence/w28_guard_sweep_baseline.json. A pin that no longer survives
     # fails it as well. Linux only: the swept modules are skipped on Windows.
+    # W28 (sweep v2): also 'if ...: return <refusal>' and typed except handlers
+    # (mutant UNTYPED); import/setUpClass errors are STRUCTURAL, never a kill;
+    # EQUIVALENT pins must name an existing witness test. The W27 DK cases
+    # GS6/GS8 are re-anchored in w28_dk_spec.json (w27: --expect-stale 2).
     timeout-minutes: 30
     defaults:
       run:
@@ -146,7 +150,7 @@ jobs:
         env:
           PYTHONPATH: .
         run: >-
-          python tools/guard_sweep.py --baseline evidence/w27_guard_sweep_baseline.json
+          python tools/guard_sweep.py --baseline evidence/w28_guard_sweep_baseline.json
           --json "$RUNNER_TEMP/udx_guard_sweep.json"
       # actions/upload-artifact, same SHA pin as the other jobs
       - name: Upload sweep result

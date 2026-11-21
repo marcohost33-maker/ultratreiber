@@ -147,6 +147,10 @@ class KillAttribution(unittest.TestCase):
         self.assertEqual(gs.failing_tests(IN_TEST), [('ERROR', 'tests.test_m.T.test_a', False),
                                                      ('ERROR', 'tests.test_m.U', True)])
 
+    def test_subtest_parameters_are_not_part_of_the_test_id(self):
+        out = "FAIL: test_v (tests.test_m.T.test_v) (vector='b (1)')\n----\nFAILED (failures=1)\n"
+        self.assertEqual(gs.failing_tests(out), [('FAIL', 'tests.test_m.T.test_v', False)])
+
     def test_a_failure_is_an_assertion_kill_whatever_else_happened(self):
         self.assertEqual(gs.classify(1, IMPORT_FAIL.replace('errors=1', 'failures=1, errors=1')),
                          'FAIL_ASSERTION')

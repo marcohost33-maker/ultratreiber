@@ -79,7 +79,8 @@ FORM_KINDS = {'raise': ('ADMIT', 'REFUSE'), 'return': ('ADMIT', 'REFUSE'), 'hand
 ACCEPTED_CLASSES = ('DEFENSE_IN_DEPTH', 'EQUIVALENT', 'OPEN_NO_TEST', 'STRUCTURAL_ONLY')
 NOT_KILLED = ('SURVIVED', 'STRUCTURAL')
 _FAILED_RE = re.compile(r'^FAILED \((.*)\)$', re.M)
-_HEADER_RE = re.compile(r'^(FAIL|ERROR): (\S+) \((.*)\)\s*$', re.M)
+# 'FAIL: test_x (pkg.mod.Class.test_x)' optionally followed by ' (subtest params)'
+_HEADER_RE = re.compile(r'^(FAIL|ERROR): (\S+) \(([^()\s]+)\)(?: \(.*\))?\s*$', re.M)
 _STRUCTURAL_NAMES = ('setUpClass', 'tearDownClass', 'setUpModule', 'tearDownModule')
 _CODE_RE = re.compile(r'^[A-Z][A-Z0-9_]{2,}$')
 
