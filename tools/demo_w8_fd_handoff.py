@@ -35,7 +35,7 @@ STARTUP_BUDGET_S = 60.0
 EXIT_BUDGET_S = 60.0
 MAX_INJECTED_DELAY_S = 30.0
 READY = b'R'
-FAULTS = ('none', 'exit_before_ready', 'ready_then_silent')
+FAULTS = ('none', 'exit_before_ready', 'ready_then_silent', 'bad_ready_byte')   # W28: bad_ready_byte
 
 EXIT_OK = 0
 EXIT_USAGE = 2
@@ -61,6 +61,10 @@ def _child(argv):
     s = socket.socket(fileno=fd)
     try:
         s.settimeout(PROTOCOL_TIMEOUT_S)
+        if fault == 'bad_ready_byte':
+            os.write(ready_fd, b'X')
+            time.sleep(MAX_INJECTED_DELAY_S)
+            return 9
         os.write(ready_fd, READY)
         os.close(ready_fd)
         if fault == 'ready_then_silent':

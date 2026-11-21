@@ -73,7 +73,7 @@ DEFAULT_MODULES = ('udx_ref/core.py', 'udx_ref/credentialed_handoff.py', 'udx_re
                    'udx_ref/linux_ipc.py', 'udx_ref/perception.py', 'udx_ref/portal_boundary.py',
                    'udx_ref/portal_request.py', 'udx_ref/preview_gate.py', 'udx_ref/sealed_snapshot.py')
 # Tests of the mutation tooling itself run nested mutation runs; they say nothing about a guard.
-EXCLUDED_TESTS = ('test_w26_dk_runner', 'test_w27_guard_sweep')
+EXCLUDED_TESTS = ('test_w26_dk_runner', 'test_w27_guard_sweep', 'test_w28_guard_sweep_v2')
 KINDS = {'ADMIT': b'False', 'REFUSE': b'True', 'UNTYPED': b'()'}
 FORM_KINDS = {'raise': ('ADMIT', 'REFUSE'), 'return': ('ADMIT', 'REFUSE'), 'handler': ('UNTYPED',)}
 ACCEPTED_CLASSES = ('DEFENSE_IN_DEPTH', 'EQUIVALENT', 'OPEN_NO_TEST', 'STRUCTURAL_ONLY')
