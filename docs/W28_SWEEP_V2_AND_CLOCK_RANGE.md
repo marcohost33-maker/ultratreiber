@@ -61,8 +61,8 @@ Ausnahme. Erreichbar nur über eine fehlerhafte oder feindliche Uhr (Injektion d
 
 | Interpreter | W27 | W28 |
 |---|---|---|
-| `/usr/bin/python3.13` (3.13.18, GCC, Konstanten vorhanden) | 551 OK, 93 übersprungen | 591 OK, 93 übersprungen |
-| `/usr/local/bin/python3` (3.13.18, Clang, ohne Konstanten) | 11 Fehler (Import) | OK, 115 übersprungen |
+| `/usr/bin/python3.13` (3.13.18, GCC, Konstanten vorhanden) | 551 OK, 93 übersprungen | 603 OK, 93 übersprungen |
+| `/usr/local/bin/python3` (3.13.18, Clang, ohne Konstanten) | 11 Fehler (Import) | 603 OK, 116 übersprungen |
 
 Die zusätzlichen Überspringungen sind genau die Positivläufe, die einen echten versiegelten
 Snapshot brauchen; jeder nennt den Grund. Die Negativfälle laufen weiter. Ein `OSError` beim
@@ -72,12 +72,12 @@ Versiegeln wird `SNAPSHOT_UNSEALED` (Ursache angehängt), die memfd-Kopie wird g
 
 | | W27 (Sweep v1) | W28 Erstlauf (v2, W27-Tests) | W28 (v2, mit W28-Tests) |
 |---|---|---|---|
-| Abweisungen im Inventar | 163 (`raise`) | 164 raise · 11 return · 18 handler | SWEEP_INVENTORY |
-| Mutanten | 326 | 368 | SWEEP_MUTANTS |
-| getötet | 313 | 346 | SWEEP_KILLED |
-| davon durch Assertion / Fehler in Testmethode | 239 / 74 (nicht getrennt ausgewiesen) | 260 / 86 | SWEEP_MODES |
-| strukturell (kein Kill) | nicht erkannt | 0 | SWEEP_STRUCT |
-| nicht getötet | 13 (gepinnt) | 22 (13 W27 + 9 neu) | SWEEP_NOTKILLED |
+| Abweisungen im Inventar | 163 (`raise`) | 164 raise · 11 return · 18 handler | 164 raise · 13 return · 20 handler (197) |
+| Mutanten | 326 | 368 | 374 |
+| getötet | 313 | 346 | 363 |
+| davon durch Assertion / Fehler in Testmethode | 239 / 74 (nicht getrennt ausgewiesen) | 260 / 86 | 279 / 84 |
+| strukturell (kein Kill) | nicht erkannt | 0 | 0 |
+| nicht getötet | 13 (gepinnt) | 22 (13 W27 + 9 neu) | 11 (alle gepinnt, 0 neu, 0 veraltet) |
 
 Antwort auf PR-R17-06: Von den 74 „Fehler-Kills“ von W27 war **keiner strukturell**; alle entstanden
 in Testmethoden (in der Regel: die erwartete typisierte Abweisung fehlt, eine spätere Operation
@@ -86,7 +86,13 @@ Dass die Unterscheidung greift, zeigte sich beim ersten W28-Lauf: Neue, noch nic
 Testmodule fehlten in den Arbeitskopien, der Ausgangsstand wurde `FAIL_STRUCTURAL` statt grün
 gemeldet.
 
-Die 9 neuen Lücken (Antwort auf U6-4) und ihre Tests (`tests/test_w28_negative_controls.py`):
+Ein Zwischenlauf (mit den Tests unten) fand zwei weitere: den Handler in `core.decode_response`,
+der im ersten v2-Lauf nur scheinbar getötet war – allein durch `test_linux_ipc.test_real_kernel_uid_and_fixture`,
+der nie fehlerhaftes JSON sendet und unter Sweep-Last offenbar am Timing scheiterte (ein Kill durch einen
+lastabhängig flackernden Test ist kein Beleg) – und die Typprüfung der Uhr in `PreviewGate` (ohne sie
+akzeptiert `math.isfinite(True)` eine bool-Uhr). Beide jetzt getestet.
+
+Die 9 neuen Lücken des Erstlaufs (Antwort auf U6-4) und ihre Tests (`tests/test_w28_negative_controls.py`):
 
 | Abweisung | Form | Folge ohne Abweisung (Test vorher grün) |
 |---|---|---|
@@ -103,7 +109,7 @@ Die 9 neuen Lücken (Antwort auf U6-4) und ihre Tests (`tests/test_w28_negative_
 Der Code war in allen neun Fällen richtig; die Tests hätten eine Entfernung nicht bemerkt.
 `assert`: 0 im Laufzeitpaket; ein statisches Gate hält das fest (`python -O` entfernt Asserts).
 
-Baseline `evidence/w28_guard_sweep_baseline.json`: BASELINE_SUMMARY
+Baseline `evidence/w28_guard_sweep_baseline.json`: 11 Einträge (W27: 13): 8 DEFENSE_IN_DEPTH, 3 EQUIVALENT mit Zeugen, 0 OPEN_NO_TEST, 0 STRUCTURAL_ONLY. Entfallen: der widerlegte EQUIVALENT-Pin `BAD_CLOCK` (UDX28-02) und der DEFENSE_IN_DEPTH-Pin auf die frühe Stempelprüfung in `ApprovedFdReader.read` – den tötet jetzt der Wachstums-Zeuge (ohne frühe Prüfung lautet der Code `SIZE_LIMIT` statt `RESOURCE_CHANGED`). Zusammenfassung aller Läufe: `evidence/W28_GUARD_SWEEP.json`.
 
 ## 4. U6-1: die W27-EQUIVALENT-Pins
 
@@ -134,7 +140,7 @@ Länge, weit unter `MAX_WIRE`. Lange oder escapende IDs enden vorher in `BAD_ARG
 
 ## 6. Belege
 
-- Lokal (E2), Linux 6.18, unprivilegierter Benutzer, CPython 3.13.18 (GCC): Suite LOCAL_SUITE;
+- Lokal (E2), Linux 6.18, unprivilegierter Benutzer, CPython 3.13.18 (GCC): Suite 603 Tests, OK, 93 übersprungen (Clang-Build ohne Siegelkonstanten: 603, OK, 116 übersprungen);
   Guard-Sweep wie oben; DK: `w28_dk_spec.json` 16/16 getötet, alle CI-Specs OK
   (`w27_dk_spec.json` 14/14 mit 2 veralteten Ankern, die DK13/DK14 neu verankern).
 - CI: siehe PR #9.
@@ -145,6 +151,8 @@ Länge, weit unter `MAX_WIRE`. Lange oder escapende IDs enden vorher in `BAD_ARG
   `False`, Aufruf mit literalem `False`), nicht semantisch.
 - Nicht erfasst: `udx_ref/windows_pipe.py`, C++, die Werkzeuge; Abweisungen über Ausnahmebehandler,
   die nur `return` (ohne Wert) ausführen.
+- Ein Kill durch einen lastabhängig flackernden Test ist vom Sweep nicht zu unterscheiden (einmal
+  beobachtet, siehe §3); Gegenmittel bleibt ein zweiter Lauf.
 - Die Property-Tests sind deterministisch, kein Hypothesis-Shrinking; ein Gegenbeispiel ausserhalb
   des Korpus ist nicht ausgeschlossen, die Grenzwerte sind analytisch begründet.
 - Keine unabhängige Reproduktion; Zahlen dieses Dokuments sind für Prüfer E0.
