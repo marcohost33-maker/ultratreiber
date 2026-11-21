@@ -15,6 +15,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from .fd_reader import MAX_READ, ApprovedFdReader
 
+# Largest accepted clock value: room for the 300 s TTL below 2**63 - 1 (W28).
+MAX_CLOCK_NS = 2**63 - 1 - 300 * 10**9
+
 class GrantDenied(RuntimeError):
     pass
 
@@ -93,7 +96,9 @@ class DurableGrantStore:
                 raise
     def _clock(self):
         now = self._now()
-        if type(now) is not int or now <= 0:
+        # W28 (UDX28-02): the journal stores nanoseconds (and now + 300 s) in a
+        # signed 64-bit SQLite INTEGER; a larger clock raised OverflowError there.
+        if type(now) is not int or not 0 < now <= MAX_CLOCK_NS:
             raise GrantDenied('INVALID_CLOCK')
         last = self.db.execute('SELECT high_ns FROM clock_guard WHERE id=1').fetchone()
         if last is not None and now < last[0]:

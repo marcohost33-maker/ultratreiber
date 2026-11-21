@@ -116,13 +116,17 @@ class Verdicts(unittest.TestCase):
         self.assertEqual(gs.classify(0, 'Ran 3 tests in 0.1s\n\nOK\n'), 'PASS')
         self.assertEqual(gs.classify(1, 'Ran 3 tests\n\nFAILED (failures=1)\n'), 'FAIL_ASSERTION')
         self.assertEqual(gs.classify(1, 'Ran 3 tests\n\nFAILED (failures=1, errors=2)\n'), 'FAIL_ASSERTION')
-        self.assertEqual(gs.classify(1, 'Ran 3 tests\n\nFAILED (errors=2)\n'), 'FAIL_ERROR')
-        self.assertEqual(gs.classify(1, 'Traceback ...'), 'FAIL_ERROR')
+        # W28: an error counts only when a test method raised; see test_w28_guard_sweep_v2.
+        err = 'ERROR: test_a (tests.test_m.T.test_a)\n----\nRan 3 tests\n\nFAILED (errors=2)\n'
+        self.assertEqual(gs.classify(1, err), 'FAIL_ERROR_IN_TEST')
+        self.assertEqual(gs.classify(1, 'Ran 3 tests\n\nFAILED (errors=2)\n'), 'FAIL_STRUCTURAL')
+        self.assertEqual(gs.classify(1, 'Traceback ...'), 'FAIL_STRUCTURAL')
         self.assertEqual(gs.classify(None, ''), 'TIMEOUT')
 
     def test_a_timeout_is_never_a_kill_and_a_red_baseline_is_not_a_result(self):
         self.assertEqual(gs.decide('PASS', 'FAIL_ASSERTION'), 'KILLED')
-        self.assertEqual(gs.decide('PASS', 'FAIL_ERROR'), 'KILLED')
+        self.assertEqual(gs.decide('PASS', 'FAIL_ERROR_IN_TEST'), 'KILLED')
+        self.assertEqual(gs.decide('PASS', 'FAIL_STRUCTURAL'), 'STRUCTURAL')
         self.assertEqual(gs.decide('PASS', 'PASS'), 'SURVIVED')
         self.assertEqual(gs.decide('PASS', 'TIMEOUT'), 'TIMEOUT')
         self.assertEqual(gs.decide('TIMEOUT', 'FAIL_ASSERTION'), 'TIMEOUT')
