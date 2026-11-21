@@ -33,6 +33,7 @@ from udx_ref.core import (MAX_MESSAGE_BYTES, VERSION, PeerIdentity, Refusal, dec
 from udx_ref.fd_handoff import supported as handoff_supported
 
 LINUX = handoff_supported()
+SEALING = LINUX and sealed_snapshot.sealing_available()
 RID = '00000000-0000-4000-8000-000000000001'
 
 
@@ -454,7 +455,7 @@ class FdReaderAndSnapshot(unittest.TestCase):
                 with self.assertRaisesRegex(fd_reader.ReadGuardError, 'RESOURCE_CHANGED'):
                     reader.read()
 
-    @unittest.skipUnless(LINUX, 'Linux memfd sealing required')
+    @unittest.skipUnless(SEALING, 'Linux memfd sealing with fcntl seal constants required')
     def test_closed_snapshot_cannot_be_entered(self):
         snap = sealed_snapshot.SealedSnapshot(self.fd, expected_uid=self.uid)
         with snap:
@@ -463,13 +464,13 @@ class FdReaderAndSnapshot(unittest.TestCase):
             with snap:
                 self.fail('entered a closed snapshot')
 
-    @unittest.skipUnless(LINUX, 'Linux memfd sealing required')
+    @unittest.skipUnless(SEALING, 'Linux memfd sealing with fcntl seal constants required')
     def test_snapshot_platform_without_fcntl_is_refused(self):
         with mock.patch.object(sealed_snapshot, 'fcntl', None):
             with self.assertRaisesRegex(fd_reader.ReadGuardError, 'UNSUPPORTED_PLATFORM'):
                 sealed_snapshot.SealedSnapshot(self.fd, expected_uid=self.uid)
 
-    @unittest.skipUnless(LINUX, 'Linux memfd sealing required')
+    @unittest.skipUnless(SEALING, 'Linux memfd sealing with fcntl seal constants required')
     def test_copy_that_makes_no_progress_is_refused(self):
         real_write = os.write
         calls = []
@@ -483,7 +484,7 @@ class FdReaderAndSnapshot(unittest.TestCase):
                 sealed_snapshot.SealedSnapshot(self.fd, expected_uid=self.uid)
         self.assertEqual(calls, [len(b'stable-source')])
 
-    @unittest.skipUnless(LINUX, 'Linux memfd sealing required')
+    @unittest.skipUnless(SEALING, 'Linux memfd sealing with fcntl seal constants required')
     def test_copy_whose_seals_did_not_take_is_refused(self):
         real = sealed_snapshot.fcntl
 
@@ -499,7 +500,7 @@ class FdReaderAndSnapshot(unittest.TestCase):
             with self.assertRaisesRegex(fd_reader.ReadGuardError, 'SNAPSHOT_UNSEALED'):
                 sealed_snapshot.SealedSnapshot(self.fd, expected_uid=self.uid)
 
-    @unittest.skipUnless(LINUX, 'Linux memfd sealing required')
+    @unittest.skipUnless(SEALING, 'Linux memfd sealing with fcntl seal constants required')
     def test_two_differing_reads_are_an_unstable_source(self):
         # Stand-in for a source whose bytes differ between two reads although its
         # stat data did not change (the reader's own checks cannot see that).
@@ -520,7 +521,7 @@ class FdReaderAndSnapshot(unittest.TestCase):
             with self.assertRaisesRegex(fd_reader.ReadGuardError, 'SOURCE_UNSTABLE'):
                 sealed_snapshot.SealedSnapshot(self.fd, expected_uid=self.uid)
 
-    @unittest.skipUnless(LINUX, 'Linux memfd sealing required')
+    @unittest.skipUnless(SEALING, 'Linux memfd sealing with fcntl seal constants required')
     def test_snapshot_read_checks_size_and_digest(self):
         with sealed_snapshot.SealedSnapshot(self.fd, expected_uid=self.uid) as snap:
             self.assertEqual(snap.read(), b'stable-source')
