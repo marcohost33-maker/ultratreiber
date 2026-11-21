@@ -17,6 +17,15 @@ from .fd_reader import MAX_READ, ApprovedFdReader
 
 # Largest accepted clock value: room for the 300 s TTL below 2**63 - 1 (W28).
 MAX_CLOCK_NS = 2**63 - 1 - 300 * 10**9
+# POSIX uid_t is 32 bit; (uid_t)-1 is the "unchanged" sentinel of chown/setreuid
+# and never a real user (W28.1, UDX28-03).
+MAX_UID = 2**32 - 2
+
+
+def _valid_uid(value) -> bool:
+    """An exact int in the uid_t range. bool and float are refused: the grant
+    journal compares principals with ==, where True == 1 and 1000.0 == 1000."""
+    return type(value) is int and 0 <= value <= MAX_UID
 
 class GrantDenied(RuntimeError):
     pass
@@ -106,7 +115,7 @@ class DurableGrantStore:
         self.db.execute('INSERT INTO clock_guard(id,high_ns) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET high_ns=excluded.high_ns',(now,))
         return now
     def issue(self, fd: int, *, issuer_uid: int, recipient_uid: int, ttl_seconds: int=60):
-        if type(issuer_uid) is not int or type(recipient_uid) is not int or min(issuer_uid,recipient_uid)<0:
+        if not _valid_uid(issuer_uid) or not _valid_uid(recipient_uid):
             raise GrantDenied('BAD_PRINCIPAL')
         if type(ttl_seconds) is not int or not 1 <= ttl_seconds <= 300:
             raise GrantDenied('BAD_TTL')
@@ -126,6 +135,8 @@ class DurableGrantStore:
                 raise ValueError
         except (ValueError,AttributeError):
             raise GrantDenied('BAD_REQUEST_ID') from None
+        if not _valid_uid(issuer_uid) or not _valid_uid(recipient_uid):
+            raise GrantDenied('BAD_PRINCIPAL')
         props = _fd_properties(fd,issuer_uid)
         expired = False
         with self._tx():

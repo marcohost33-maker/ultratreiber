@@ -100,10 +100,15 @@ def measure(levels, runs, baseline_rev) -> dict:
         old = pathlib.Path(tmp) / 'demo_w8_fd_handoff_baseline.py'
         old.write_bytes(old_bytes)
         for level in levels:
-            burners = [subprocess.Popen([sys.executable, '-c', 'while True: pass'],
-                                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                        stderr=subprocess.DEVNULL) for _ in range(level)]
+            # W28.1 (Codex review on #8): start the burners inside the protected
+            # region, so a failure or interrupt half-way still kills and reaps
+            # every burner that did start.
+            burners = []
             try:
+                for _ in range(level):
+                    burners.append(subprocess.Popen([sys.executable, '-c', 'while True: pass'],
+                                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                                    stderr=subprocess.DEVNULL))
                 time.sleep(1.0)
                 base, cur = [], []
                 for _ in range(runs):                    # alternate, so drift hits both variants

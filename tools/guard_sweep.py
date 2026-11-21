@@ -74,10 +74,17 @@ DEFAULT_MODULES = ('udx_ref/core.py', 'udx_ref/credentialed_handoff.py', 'udx_re
                    'udx_ref/portal_request.py', 'udx_ref/preview_gate.py', 'udx_ref/sealed_snapshot.py')
 # Tests of the mutation tooling itself run nested mutation runs; they say nothing about a guard.
 EXCLUDED_TESTS = ('test_w26_dk_runner', 'test_w27_guard_sweep', 'test_w28_guard_sweep_v2')
-KINDS = {'ADMIT': b'False', 'REFUSE': b'True', 'UNTYPED': b'()'}
+# W28.1 (Codex review on #8): a condition may have side effects, e.g.
+# 'if len(raw) > MAX_STATUS or sock.send(raw) != len(raw)'. Replacing it by a bare
+# literal also removed the send, so positive tests failed and counted as a kill
+# of a refusal they never exercise. The condition is now still evaluated and only
+# its result is forced: ADMIT '((cond) and False)', REFUSE '((cond) or True)'.
+KINDS = {'ADMIT': (b'((', b') and False)'), 'REFUSE': (b'((', b') or True)'), 'UNTYPED': (b'', b'()')}
 FORM_KINDS = {'raise': ('ADMIT', 'REFUSE'), 'return': ('ADMIT', 'REFUSE'), 'handler': ('UNTYPED',)}
 ACCEPTED_CLASSES = ('DEFENSE_IN_DEPTH', 'EQUIVALENT', 'OPEN_NO_TEST', 'STRUCTURAL_ONLY')
-NOT_KILLED = ('SURVIVED', 'STRUCTURAL')
+# A kill whose failing tests pass when re-run alone against the same mutant is
+# UNRELIABLE (W28.1): a non-kill, never pinnable as a class of its own.
+NOT_KILLED = ('SURVIVED', 'STRUCTURAL', 'UNRELIABLE')
 _FAILED_RE = re.compile(r'^FAILED \((.*)\)$', re.M)
 # 'FAIL: test_x (pkg.mod.Class.test_x)' optionally followed by ' (subtest params)'
 _HEADER_RE = re.compile(r'^(FAIL|ERROR): (\S+) \(([^()\s]+)\)(?: \(.*\))?\s*$', re.M)
@@ -173,7 +180,10 @@ def kinds_for(guard: dict) -> tuple:
 def mutate(source: bytes, guard: dict, kind: str) -> bytes:
     if kind not in kinds_for(guard):
         raise ValueError(f'KIND_NOT_APPLICABLE: {kind} {guard.get("form", "raise")}')
-    return source[:guard['begin']] + KINDS[kind] + source[guard['end']:]
+    head, tail = KINDS[kind]
+    if kind == 'UNTYPED':               # the handler type is replaced, not wrapped
+        return source[:guard['begin']] + tail + source[guard['end']:]
+    return source[:guard['begin']] + head + source[guard['begin']:guard['end']] + tail + source[guard['end']:]
 
 
 def _stems_importing(target_stem: str, repo: pathlib.Path) -> set:
@@ -302,7 +312,8 @@ def _run(work: pathlib.Path, modules: list, timeout_s: float):
     return r.returncode, (r.stdout or '') + (r.stderr or '')
 
 
-def sweep(modules, jobs: int, timeout_s: float, repo: pathlib.Path = REPO, copy_tree=None) -> dict:
+def sweep(modules, jobs: int, timeout_s: float, repo: pathlib.Path = REPO, copy_tree=None,
+          confirm: bool = True) -> dict:
     copy_tree = copy_tree or dk_runner._copy_tree
     plan = []
     for rel in modules:
@@ -341,14 +352,22 @@ def sweep(modules, jobs: int, timeout_s: float, repo: pathlib.Path = REPO, copy_
             try:
                 target.write_bytes(mutate(orig, guard, kind))
                 rc, output = _run(work, tests, timeout_s)
+                mutant = classify(rc, output)
+                rec.update(mutant=mutant, verdict=decide(base, mutant))
+                if rec['verdict'] in ('KILLED', 'STRUCTURAL'):
+                    rec['kill_mode'] = {'FAIL_ASSERTION': 'ASSERTION',
+                                        'FAIL_ERROR_IN_TEST': 'ERROR_IN_TEST'}.get(mutant, 'STRUCTURAL')
+                    rec['failing'] = sorted({tid for kind_, tid, structural in failing_tests(output)
+                                             if not structural})
+                if rec['verdict'] == 'KILLED' and confirm:
+                    # W28.1: a kill must reproduce (Shi, Bell, Marinov, ISSTA 2019): the
+                    # failing tests run again, alone, against the same mutant.
+                    again = classify(*_run(work, rec['failing'], timeout_s))
+                    rec['confirmed'] = again in ('FAIL_ASSERTION', 'FAIL_ERROR_IN_TEST')
+                    if not rec['confirmed']:
+                        rec['verdict'] = 'UNRELIABLE'
             finally:
                 target.write_bytes(orig)
-            mutant = classify(rc, output)
-            rec.update(mutant=mutant, verdict=decide(base, mutant))
-            if rec['verdict'] in ('KILLED', 'STRUCTURAL'):
-                rec['kill_mode'] = {'FAIL_ASSERTION': 'ASSERTION', 'FAIL_ERROR_IN_TEST': 'ERROR_IN_TEST'}.get(
-                    mutant, 'STRUCTURAL')
-                rec['failing'] = sorted({tid for _, tid, _ in failing_tests(output)})[:5]
             return rec
 
         # One thread per work copy: cases of the same copy never run concurrently.
@@ -384,6 +403,8 @@ def main(argv=None) -> int:
     p.add_argument('--jobs', type=int, default=max(1, min(4, os.cpu_count() or 1)))
     p.add_argument('--timeout', type=float, default=180.0)
     p.add_argument('--list', action='store_true', help='print the guard inventory and exit')
+    p.add_argument('--no-confirm', action='store_true',
+                   help='do not re-run the failing tests of a kill (faster, weaker; never in CI)')
     args = p.parse_args(argv)
     if args.list:
         for rel in args.modules:
@@ -396,7 +417,8 @@ def main(argv=None) -> int:
     witnesses = missing_witnesses(baseline)
     for item in witnesses:
         print(f'  MISSING_WITNESS {item}')
-    result = sweep(args.modules, args.jobs, args.timeout)
+    result = sweep(args.modules, args.jobs, args.timeout, confirm=not args.no_confirm)
+    result['confirm_kills'] = not args.no_confirm
     survivors = {f"{c['kind']} {c['key']}" for c in result['cases'] if c['verdict'] in NOT_KILLED}
     result.update(compare(survivors, baseline))
     result['missing_witnesses'] = witnesses

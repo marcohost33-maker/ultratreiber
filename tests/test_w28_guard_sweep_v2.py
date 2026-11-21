@@ -135,6 +135,43 @@ FAILED (errors=2)
 '''
 
 
+class SideEffectsArePreserved(unittest.TestCase):
+    """W28.1 (Codex review on #8): forcing a condition must not drop its side effects."""
+
+    SRC = b"""class E(Exception):
+    pass
+
+
+def reply(raw, sock):
+    if len(raw) > 4 or sock.send(raw) != len(raw):
+        raise E('REPLY_FAILED')
+    return 'SENT'
+"""
+
+    def test_mutants_still_evaluate_the_condition(self):
+        guard, = gs.inventory('udx_ref/m.py', self.SRC)
+
+        class Sock:
+            sent = []
+
+            def send(self, data):
+                self.sent.append(data)
+                return len(data)
+
+        for kind, expect in (('ADMIT', 'SENT'), ('REFUSE', 'E')):
+            ns = {}
+            exec(compile(gs.mutate(self.SRC, guard, kind), 'm.py', 'exec'), ns)
+            sock = Sock()
+            Sock.sent = []
+            try:
+                got = ns['reply'](b'ok', sock)
+            except ns['E']:
+                got = 'E'
+            with self.subTest(kind=kind):
+                self.assertEqual(got, expect)
+                self.assertEqual(Sock.sent, [b'ok'])        # the send happened in both mutants
+
+
 class KillAttribution(unittest.TestCase):
     def test_structural_errors_are_not_kills(self):
         for name, output in (('import', IMPORT_FAIL), ('setUpClass', SETUP_FAIL)):
@@ -237,6 +274,95 @@ class T(unittest.TestCase):
         self.assertEqual(small(10), 'TOO_LARGE')
         self.assertEqual(small(1), 'OK')
 '''
+
+
+SIDE_MOD = """class E(Exception):
+    pass
+
+
+class Sock:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, data):
+        self.sent.append(data)
+        return len(data)
+
+
+def reply(raw, sock):
+    if len(raw) > 4 or sock.send(raw) != len(raw):
+        raise E('REPLY_FAILED')
+    return 'SENT'
+"""
+SIDE_TESTS = """import unittest
+from udx_ref.m import reply, Sock, E
+
+
+class T(unittest.TestCase):
+    def test_positive_path_sends(self):
+        s = Sock()
+        self.assertEqual(reply(b'ok', s), 'SENT')
+        self.assertEqual(s.sent, [b'ok'])
+"""
+FLAKY_MOD = """class E(Exception):
+    pass
+
+
+def parse(text):
+    try:
+        return int(text)
+    except ValueError as exc:
+        raise E('NOT_INT') from exc
+"""
+FLAKY_TESTS = """import pathlib, unittest
+from udx_ref.m import parse
+
+COUNTER = pathlib.Path(COUNTER_PATH)
+
+
+class T(unittest.TestCase):
+    def test_flaky_second_run(self):
+        n = int(COUNTER.read_text()) + 1 if COUNTER.exists() else 1
+        COUNTER.write_text(str(n))
+        self.assertEqual(parse('4'), 4)
+        self.assertNotEqual(n, 2)            # fails on the second run only
+"""
+
+
+def _tree(tmp, mod, tests):
+    repo = pathlib.Path(tmp) / 'repo'
+    for d in ('udx_ref', 'tests', 'tools'):
+        (repo / d).mkdir(parents=True)
+    (repo / 'udx_ref' / '__init__.py').write_bytes(b'')
+    (repo / 'udx_ref' / 'm.py').write_bytes(mod.encode())
+    (repo / 'tests' / '__init__.py').write_bytes(b'')
+    (repo / 'tests' / 'test_m.py').write_bytes(tests.encode())
+    return repo
+
+
+class W281EndToEnd(unittest.TestCase):
+    def test_side_effecting_guard_without_negative_test_survives(self):
+        # W27/W28 counted this ADMIT mutant as killed: the positive test failed
+        # because the mutant also dropped the send.
+        with tempfile.TemporaryDirectory(prefix='udx_gs3_') as tmp:
+            repo = _tree(tmp, SIDE_MOD, SIDE_TESTS)
+            result = gs.sweep(['udx_ref/m.py'], 1, 60.0, repo=repo,
+                              copy_tree=lambda dest: shutil.copytree(repo, dest, dirs_exist_ok=True))
+        got = {c['kind']: c['verdict'] for c in result['cases']}
+        self.assertEqual(got, {'ADMIT': 'SURVIVED', 'REFUSE': 'KILLED'})
+
+    def test_a_kill_that_does_not_reproduce_is_unreliable(self):
+        with tempfile.TemporaryDirectory(prefix='udx_gs4_') as tmp:
+            counter = pathlib.Path(tmp) / 'runs.txt'
+            repo = _tree(tmp, FLAKY_MOD, FLAKY_TESTS.replace('COUNTER_PATH', repr(str(counter))))
+            result = gs.sweep(['udx_ref/m.py'], 1, 60.0, repo=repo,
+                              copy_tree=lambda dest: shutil.copytree(repo, dest, dirs_exist_ok=True))
+            runs = int(counter.read_text())
+        case, = result['cases']
+        # run 1 baseline (pass), run 2 mutant (fails by flakiness), run 3 confirmation (pass)
+        self.assertEqual(runs, 3)
+        self.assertEqual((case['kind'], case['verdict'], case['confirmed']), ('UNTYPED', 'UNRELIABLE', False))
+        self.assertEqual(case['failing'], ['tests.test_m.T.test_flaky_second_run'])
 
 
 class EndToEnd(unittest.TestCase):

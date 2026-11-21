@@ -92,14 +92,14 @@ class Mutation(unittest.TestCase):
         for source in (SRC, SRC.replace(b'\n', b'\r\n')):
             guards = gs.inventory('udx_ref/m.py', source)
             limit = guards[2]
-            for kind, literal in (('ADMIT', b'False'), ('REFUSE', b'True')):
+            # W28.1: the condition is kept and only its result forced.
+            for kind, (head, tail) in (('ADMIT', (b'((', b') and False)')), ('REFUSE', (b'((', b') or True)'))):
                 with self.subTest(kind=kind, crlf=b'\r\n' in source):
                     out = gs.mutate(source, limit, kind)
-                    self.assertEqual(out[:limit['begin']], source[:limit['begin']])
-                    self.assertEqual(out[limit['begin']:limit['begin'] + len(literal)], literal)
-                    self.assertEqual(out[limit['begin'] + len(literal):], source[limit['end']:])
+                    cond = source[limit['begin']:limit['end']]
+                    self.assertEqual(out, source[:limit['begin']] + head + cond + tail + source[limit['end']:])
                     compile(out, 'm.py', 'exec')
-                    self.assertIn(b'if (' + literal + b'):', out)
+                    self.assertIn(head + cond + tail + b'):', out)
 
     def test_non_ascii_before_the_condition_does_not_shift_the_range(self):
         source = 'def f(x):\n    s = "\u00e4\u00f6\u00fc\u20ac"; \n    if s and x:\n        raise ValueError(s)\n'.encode('utf-8')
