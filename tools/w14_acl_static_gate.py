@@ -21,9 +21,9 @@ import sys
 # tools/w15_windows_evidence.py PINNED_SOURCE_SHA256 (a test compares both).
 EXPECTED_HEAD = '26309e997fea1ac90edba8a51e457fd494cac978'
 PINNED_SOURCE_SHA256 = {
-    'udx_ref/windows_pipe.py': 'cca92b5308ed9bf49da3302e10bec7bc32c9939ca6a6dea17307d95a95f520aa',
-    'windows/udx_sid_probe.cpp': '7b70f0c2f404320c75f5566e9f7d80c6dca3f8ad7861c2148b9c99c1fc8e84bc',
-    'windows/udx_sid_client.cpp': '06de216ae6a8970ac94b516ebe5a12357f6b58106d52c952451a55e526575007',
+    'udx_ref/windows_pipe.py': '68ce0f41520030955d712a9e6d51d28c3f197c8654dcd3f924495e7555074c06',
+    'windows/udx_sid_probe.cpp': '2449268ecd44f6fa792b1d98950b759033e4c08a9d91aca1a70f927614105bad',
+    'windows/udx_sid_client.cpp': '6ca051b441996a7d6979e6596bf238466a27d039df5930e39d8ccdbaa668acd3',
     # W24: bounded overlapped I/O shared by both C++ sources.
     'windows/udx_bounded_pipe_io.hpp': '1c5ea2c957aea96b5003a9e3d4c060cdd3247892e17755e7cac7447cd64bfa7c',
 }
@@ -168,7 +168,10 @@ def audit(repo: pathlib.Path) -> dict:
         check('INSTANCE_COUNT_CHANGED', instances == 1, f'CreateNamedPipeW at {line}: instances={instances}')
     cpp = (repo / 'windows' / 'udx_sid_probe.cpp').read_text(encoding='utf-8')
     check('CPP_SDDL_DRIFT', 'L"D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;"' in cpp
-          and 'L")(A;;0x12008b;;;OW)S:(ML;;NWNR;;;ME)"' in cpp,
+          and 'L")(A;;0x12008b;;;OW)S:(ML;;NWNR;;;";\n    sddl += own_label;\n    sddl += L")";' in cpp
+          # UT6-02: label = the probe's own level, ME for Medium and HI for High only
+          and 'server_rid == SECURITY_MANDATORY_MEDIUM_RID ? L"ME"' in cpp
+          and ': server_rid == SECURITY_MANDATORY_HIGH_RID ? L"HI" : nullptr;' in cpp,
           'C++ prototype SDDL differs from the W18 research contract')
     cpp_client = (repo / 'windows' / 'udx_sid_client.cpp').read_text(encoding='utf-8')
     check('CPP_CLIENT_ACCESS_DRIFT', 'constexpr DWORD access = FILE_GENERIC_READ | FILE_WRITE_DATA;' in cpp_client

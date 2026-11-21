@@ -1,0 +1,110 @@
+{
+ "repo": ".",
+ "test_befehl": [
+  "python",
+  "-m",
+  "pytest"
+ ],
+ "timeout_s": 180,
+ "hinweis": "Nur Windows (echte Named Pipes, echte Token-Abfragen): Laufzeit-Diskriminierung der Aegis-W25.2-Befunde fuer den Python-Pfad. Auf Linux werden die Tests uebersprungen und die Mutationen ueberleben -- dort gilt evidence/w25_dk_spec.json (Quelltext-Pins).",
+ "faelle": [
+  {
+   "name": "W25.2-N1 Server laesst hoehere Client-IL zu (nur >= Medium, Aegis P2)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "            if facts['integrity_rid'] != self._own_integrity:\n",
+   "neu": "            if False:\n",
+   "test": "tests/test_w25_2_integrity.py::ServerIntegrityEquality::test_higher_integrity_token_denied"
+  },
+  {
+   "name": "W25.2-N2 Server startet ohne eigene IL (nicht fail-closed)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "        if value is None:\n            raise OSError(err, 'GetTokenInformation(TokenIntegrityLevel) failed')\n",
+   "neu": "        if value is None:\n            return 0\n",
+   "test": "tests/test_w25_2_integrity.py::ServerIntegrityEquality::test_server_without_own_integrity_refuses_to_start"
+  },
+  {
+   "name": "W25.2-N3 Client akzeptiert ein echtes OICIIO-Medium-Label",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if flags & INHERIT_ONLY_ACE:\n",
+   "neu": "    if False:\n",
+   "test": "tests/test_w25_pipe_label.py::PipeLabelCheck::test_inherit_only_label_is_refused"
+  },
+  {
+   "name": "W25.2-N4 Client akzeptiert ein echtes Medium-Label ohne NO_WRITE_UP",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if not mask & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP:\n",
+   "neu": "    if False:\n",
+   "test": "tests/test_w25_pipe_label.py::PipeLabelCheck::test_label_without_no_write_up_is_refused"
+  },
+  {
+   "name": "W25.2-N5 Label-Info liest die ACE-Flags nicht (Inherit-only unsichtbar)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "                                   ace.AceFlags, ace.Mask))\n",
+   "neu": "                                   0, ace.Mask))\n",
+   "test": "tests/test_w25_pipe_label.py::PipeLabelCheck::test_inherit_only_label_is_refused"
+  },
+  {
+   "name": "UT6-02-N6 Client-Label-Gleichheit entfernt (nur noch >= Medium)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if type(own_rid) is not int or rid != own_rid:\n",
+   "neu": "    if False:\n",
+   "test": "tests/test_ut6_02_label_parity.py::WindowsLabelParity::test_client_refuses_a_real_label_below_or_above_its_level"
+  },
+  {
+   "name": "UT6-02-N7 Client akzeptiert Label >= eigene IL (Mutant >= statt ==)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if type(own_rid) is not int or rid != own_rid:\n",
+   "neu": "    if type(own_rid) is not int or rid < own_rid:\n",
+   "test": "tests/test_ut6_02_label_parity.py::WindowsLabelParity::test_client_refuses_a_label_above_its_real_level"
+  },
+  {
+   "name": "UT6-02-N8 Client akzeptiert Label <= eigene IL (Richtung umgekehrt)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if type(own_rid) is not int or rid != own_rid:\n",
+   "neu": "    if type(own_rid) is not int or rid > own_rid:\n",
+   "test": "tests/test_ut6_02_label_parity.py::WindowsLabelParity::test_client_refuses_a_real_label_below_or_above_its_level"
+  },
+  {
+   "name": "UT6-02-N9 Client vergleicht mit fester Medium-Konstante statt eigener IL (Operand getauscht)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if type(own_rid) is not int or rid != own_rid:\n",
+   "neu": "    if type(own_rid) is not int or rid != SECURITY_MANDATORY_MEDIUM_RID:\n",
+   "test": "tests/test_ut6_02_label_parity.py::WindowsLabelParity::test_client_refuses_a_real_label_below_or_above_its_level"
+  },
+  {
+   "name": "UT6-02-N10 Client liest die eigene IL nicht (fest Medium)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    own_rid, err = effective_integrity_rid(api)\n",
+   "neu": "    own_rid, err = SECURITY_MANDATORY_MEDIUM_RID, 0\n",
+   "test": "tests/test_ut6_02_label_parity.py::WindowsLabelParity::test_client_refuses_a_real_label_below_or_above_its_level"
+  },
+  {
+   "name": "UT6-02-N11 Unlesbare eigene IL wird nicht typisiert verweigert (Open laeuft trotzdem)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if own_rid is None:\n        return ClientResult(None, b'', False, 'OWN_INTEGRITY_FAILED', err)\n",
+   "neu": "    if False:\n        return ClientResult(None, b'', False, 'OWN_INTEGRITY_FAILED', err)\n",
+   "test": "tests/test_ut6_02_label_parity.py::WindowsLabelParity::test_unreadable_own_level_refuses_before_opening"
+  },
+  {
+   "name": "UT6-02-N12 OpenThreadToken-Fehler faellt still auf die Prozess-IL zurueck",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "        if err != ERROR_NO_TOKEN:\n            return None, err or ERROR_ACCESS_DENIED\n",
+   "neu": "        if False:\n            return None, err or ERROR_ACCESS_DENIED\n",
+   "test": "tests/test_ut6_02_label_parity.py::WindowsLabelParity::test_thread_token_query_failure_is_not_a_fallback"
+  },
+  {
+   "name": "UT6-02-N13 Effektive IL ignoriert das Thread-Token (immer Prozess-Token)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "    if not api.OpenThreadToken(api.GetCurrentThread(), TOKEN_QUERY, True, ctypes.byref(tok)):\n        err = api.last_error()\n",
+   "neu": "    if True:\n        err = ERROR_NO_TOKEN\n",
+   "test": "tests/test_ut6_02_label_parity.py::WindowsLabelParity::test_effective_level_is_the_thread_token_when_impersonating"
+  },
+  {
+   "name": "UT6-02-N14 Server-Label nicht aus der eigenen IL (wieder fest Medium)",
+   "datei": "udx_ref/windows_pipe.py",
+   "alt": "        self.sddl = build_sddl(self.server_sid, self._own_integrity)\n",
+   "neu": "        self.sddl = build_sddl(self.server_sid)\n",
+   "test": "tests/test_ut6_02_label_parity.py::WindowsLabelParity::test_server_with_an_unsupported_own_level_refuses_to_start"
+  }
+ ]
+}

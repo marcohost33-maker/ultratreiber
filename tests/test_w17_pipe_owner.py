@@ -105,7 +105,7 @@ def run(name):
 
 name = sys.argv[1]
 real_build = wp.build_sddl
-wp.build_sddl = lambda sid: ''' + repr(PRE_W17_SDDL) + r'''.format(sid=wp.validate_sid_text(sid))
+wp.build_sddl = lambda sid, *_: ''' + repr(PRE_W17_SDDL) + r'''.format(sid=wp.validate_sid_text(sid))
 try:
     out['control'] = run(name + '_control')
 finally:
@@ -163,7 +163,7 @@ class WindowsPipeOwner(unittest.TestCase):
         if sddl_template is None:
             with wp.OneShotPipeServer(name):
                 return self._open(name, access)
-        fake = lambda sid: sddl_template.format(sid=wp.validate_sid_text(sid))
+        fake = lambda sid, *_: sddl_template.format(sid=wp.validate_sid_text(sid))
         with mock.patch.object(wp, 'build_sddl', fake), wp.OneShotPipeServer(name):
             return self._open(name, access)
 

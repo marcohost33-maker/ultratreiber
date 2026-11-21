@@ -147,7 +147,7 @@ class WindowsInstanceRight(unittest.TestCase):
             ctx = contextlib.nullcontext()
         else:
             ctx = mock.patch.object(wp, 'build_sddl',
-                                    lambda sid: sddl_template.format(sid=wp.validate_sid_text(sid)))
+                                    lambda sid, *_: sddl_template.format(sid=wp.validate_sid_text(sid)))
         with ctx, wp.OneShotPipeServer(name):
             h = self.api.CreateFileW(name, access, 0, None, wp.OPEN_EXISTING, 0, None)
             if h is None or h == wp.INVALID_HANDLE_VALUE:

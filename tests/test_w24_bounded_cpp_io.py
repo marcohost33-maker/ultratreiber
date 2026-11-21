@@ -236,8 +236,11 @@ class DocumentationDrift(unittest.TestCase):
 
     def test_version_is_consistent(self):
         cff = re.search(r'^version: "([0-9.]+)"$', self._read('CITATION.cff'), re.M).group(1)
-        self.assertIn('Current wave: W24 (version %s)' % cff, self._read('README.md'))
-        self.assertIn('current wave W24, %s' % cff, self._read('SECURITY.md'))
+        # W25: the wave number follows the version minor (0.25.0 -> W25), so the
+        # check no longer pins W24; README, SECURITY.md and CITATION.cff must agree.
+        wave = 'W%d' % int(cff.split('.')[1])
+        self.assertIn('Current wave: %s (version %s)' % (wave, cff), self._read('README.md'))
+        self.assertIn('current wave %s, %s' % (wave, cff), self._read('SECURITY.md'))
 
 
 MINGW = shutil.which('x86_64-w64-mingw32-g++')

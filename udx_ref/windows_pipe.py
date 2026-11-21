@@ -24,6 +24,11 @@ W13 (after the Aegis audit) supersedes parts of the W12 list below:
     (NAME_OCCUPIED_EXIT), instead of a generic PipeSetupError / traceback.
     W20: the C++ probe exits 21 under the same condition (else 14), checked in
     the MSVC cross-run (tools/w18_cpp_crossrun.py)
+  * UT6-02 (cross-family A7-R2): client and server bind the SAME identity. The
+    server's label ACE is its OWN integrity level (build_sddl(sid, rid); Medium
+    -> ME, elevated -> HI, any other own level refuses to start), and the client
+    accepts only a pipe whose label EQUALS its own level (PIPE_LABEL_MISMATCH),
+    the mirror of the server's INTEGRITY_MISMATCH
 
 What is reproduced 1:1 from the C++ candidate (see docs/W12_WINDOWS_LANE.md):
   * protected DACL ``D:P(A;;GA;;;SY)(A;;GA;;;<current user SID>)`` built via
@@ -134,6 +139,12 @@ TokenIsRestricted = 40
 TokenImpersonation = 2
 SE_GROUP_INTEGRITY = 0x00000020
 SECURITY_MANDATORY_MEDIUM_RID = 0x2000
+SECURITY_MANDATORY_HIGH_RID = 0x3000
+# UT6-02: SDDL alias of the label ACE per supported OWN integrity level of a
+# server. Closed list on purpose: Low cannot serve anyone (every client below
+# Medium is refused), and Medium Plus / System / Protected are outside the
+# ADR-UDX-006 desktop trust domain this project evidences.
+LABEL_SDDL_ALIASES = {SECURITY_MANDATORY_MEDIUM_RID: 'ME', SECURITY_MANDATORY_HIGH_RID: 'HI'}
 
 SE_KERNEL_OBJECT = 6
 OWNER_SECURITY_INFORMATION = 0x00000001
@@ -142,6 +153,9 @@ LABEL_SECURITY_INFORMATION = 0x00000010
 SE_DACL_PROTECTED = 0x1000
 SDDL_REVISION_1 = 1
 ACCESS_ALLOWED_ACE_TYPE = 0
+SYSTEM_MANDATORY_LABEL_ACE_TYPE = 0x11
+INHERIT_ONLY_ACE = 0x08                     # AceFlags: the ACE does not apply to the object itself
+SYSTEM_MANDATORY_LABEL_NO_WRITE_UP = 0x1    # label ACE mask (policy) bit
 
 ERROR_FILE_NOT_FOUND = 2
 ERROR_ACCESS_DENIED = 5
@@ -187,8 +201,24 @@ def validate_sid_text(sid_text) -> str:
     return sid_text
 
 
-def build_sddl(sid_text: str) -> str:
+def label_sddl(integrity_rid) -> str:
+    """UT6-02: the SACL ``S:(ML;;NWNR;;;<alias>)`` for EXACTLY ``integrity_rid``.
+
+    Raises ``ValueError('UNSUPPORTED_INTEGRITY_LEVEL')`` for anything that is not
+    an ``int`` (bool included) with an entry in LABEL_SDDL_ALIASES."""
+    if type(integrity_rid) is not int or integrity_rid not in LABEL_SDDL_ALIASES:
+        raise ValueError('UNSUPPORTED_INTEGRITY_LEVEL')
+    return 'S:(ML;;NWNR;;;' + LABEL_SDDL_ALIASES[integrity_rid] + ')'
+
+
+def build_sddl(sid_text: str, integrity_rid: int = SECURITY_MANDATORY_MEDIUM_RID) -> str:
     """W18: ``O:<sid>D:P(A;;0x12008b;;;SY)(A;;0x12008b;;;<sid>)(A;;0x12008b;;;OW)S:(ML;;NWNR;;;ME)``.
+
+    UT6-02: the label ACE is ``label_sddl(integrity_rid)``. OneShotPipeServer
+    passes its OWN token level, so an elevated server labels its pipe High (HI),
+    not Medium; the clients accept only a label equal to their own level. The
+    Medium default keeps the reviewed W14/W18 string for the one-argument form
+    (static gate, pinned tests); no server relies on it.
 
     * W18 (UDX14-01 instance bit, open since W14): all three ACEs grant
       PIPE_ACE_MASK = FILE_GENERIC_READ | FILE_WRITE_DATA (0x12008b) instead of
@@ -238,9 +268,10 @@ def build_sddl(sid_text: str) -> str:
     The SID text is validated first so no SDDL fragment can be smuggled in.
     """
     sid = validate_sid_text(sid_text)
+    label = label_sddl(integrity_rid)
     ace = PIPE_ACE_SDDL
     return ('O:' + sid + 'D:P(A;;' + ace + ';;;SY)(A;;' + ace + ';;;' + sid + ')(A;;' + ace + ';;;OW)'
-            'S:(ML;;NWNR;;;ME)')
+            + label)
 
 
 def validate_deadline(deadline_s) -> float:
@@ -303,6 +334,7 @@ class ClientResult:
     winerror: int | None = None
     server_pid: int | None = None          # logged only, never a security decision
     pipe_owner: str | None = None
+    pipe_label: int | None = None          # W25.2: mandatory-label RID of the pipe object
 
 
 # --- ctypes binding ---------------------------------------------------------
@@ -527,6 +559,45 @@ def own_session_id(api=None) -> int:
         api.CloseHandle(tok)
 
 
+def own_integrity_rid(api=None) -> int:
+    """Integrity RID of this process' primary token (ADR-UDX-006 trust domain)."""
+    api = api or default_api()
+    tok = wintypes.HANDLE()
+    if not api.OpenProcessToken(api.GetCurrentProcess(), TOKEN_QUERY, ctypes.byref(tok)):
+        raise OSError(api.last_error(), 'OpenProcessToken failed')
+    try:
+        value, err = _token_integrity_rid(api, tok)
+        if value is None:
+            raise OSError(err, 'GetTokenInformation(TokenIntegrityLevel) failed')
+        return value
+    finally:
+        api.CloseHandle(tok)
+
+
+def effective_integrity_rid(api=None):
+    """UT6-02: ``(rid, 0)`` of the token that performs this thread's next access
+    check -- the thread's impersonation token if it holds one, else the process
+    token -- or ``(None, winerror)``. Never raises for a Win32 failure; any
+    OpenThreadToken error other than ERROR_NO_TOKEN is a failure (fail-closed),
+    not a silent fall-back to the process level."""
+    api = api or default_api()
+    tok = wintypes.HANDLE()
+    if not api.OpenThreadToken(api.GetCurrentThread(), TOKEN_QUERY, True, ctypes.byref(tok)):
+        err = api.last_error()
+        if err != ERROR_NO_TOKEN:
+            return None, err or ERROR_ACCESS_DENIED
+        tok = wintypes.HANDLE()
+        if not api.OpenProcessToken(api.GetCurrentProcess(), TOKEN_QUERY, ctypes.byref(tok)):
+            return None, api.last_error() or ERROR_ACCESS_DENIED
+    try:
+        value, err = _token_integrity_rid(api, tok)
+        if value is None:
+            return None, err or ERROR_ACCESS_DENIED
+        return value, 0
+    finally:
+        api.CloseHandle(tok)
+
+
 def inspect_dacl(handle, api=None) -> DaclInfo:
     """Read back the DACL actually attached to a kernel handle."""
     api = api or default_api()
@@ -728,10 +799,16 @@ class OneShotPipeServer:
         # (Aegis P3-f: build_sddl(server_sid) used to run after the allocation).
         self.server_sid = validate_sid_text(current_user_sid(api))
         self._own_session = own_session_id(api)
+        # Aegis W25.2-P2: the trust domain is same SID AND same integrity level
+        # (ADR-UDX-006 section 1). Read once; unreadable -> OSError (fail-closed).
+        self._own_integrity = own_integrity_rid(api)
         self.expected_sid = self.server_sid if expected_sid is None else validate_sid_text(expected_sid)
         if self.expected_sid != self.server_sid and not allow_foreign_expected_sid:
             raise ValueError('FOREIGN_EXPECTED_SID_REQUIRES_FLAG')
-        self.sddl = build_sddl(self.server_sid)
+        # UT6-02: the label ACE is the server's OWN level (the clients require
+        # equality); an own level without a label alias raises ValueError
+        # ('UNSUPPORTED_INTEGRITY_LEVEL') here, before anything is allocated.
+        self.sddl = build_sddl(self.server_sid, self._own_integrity)
         sd = ctypes.c_void_p()
         try:
             if not api.ConvertStringSidToSidW(self.expected_sid, ctypes.byref(self._expected_bin)):
@@ -917,6 +994,11 @@ class OneShotPipeServer:
                 return deny('IMPERSONATION_LEVEL_TOO_LOW')
             if facts['integrity_rid'] < SECURITY_MANDATORY_MEDIUM_RID:
                 return deny('INTEGRITY_TOO_LOW')
+            # Aegis W25.2-P2: equal, not merely >= Medium. A Medium client of the
+            # same user talking to an elevated (High) server, or an elevated client
+            # talking to a Medium server, crosses the ADR-UDX-006 trust domain.
+            if facts['integrity_rid'] != self._own_integrity:
+                return deny('INTEGRITY_MISMATCH')
             if facts['appcontainer']:
                 return deny('APPCONTAINER_CLIENT')
             if facts['restricted']:
@@ -981,6 +1063,84 @@ def pipe_owner_sid(api, handle):
     return owner, sd, 0
 
 
+def pipe_label_rid(api, handle):
+    """W25.2: mandatory-label RID of the pipe object behind a CLIENT handle.
+
+    Returns (rid, 0), (None, 0) when the SACL holds no or more than one
+    mandatory-label ACE, or (None, rc) when the query failed. Needs only
+    READ_CONTROL, which CLIENT_ACCESS contains. The RID alone is not the client's
+    decision: see pipe_label_info (ACE flags and policy mask)."""
+    info, rc = pipe_label_info(api, handle)
+    return (None, rc) if info is None else (info[0], 0)
+
+
+def pipe_label_info(api, handle):
+    """Aegis W25.2 label check: ``((rid, ace_flags, policy_mask), 0)`` of the single
+    mandatory-label ACE of the pipe object; ``(None, 0)`` when the SACL holds no or
+    more than one label ACE; ``(None, rc)`` when the query failed."""
+    sacl = ctypes.c_void_p()
+    sd = ctypes.c_void_p()
+    rc = api.GetSecurityInfo(handle, SE_KERNEL_OBJECT, LABEL_SECURITY_INFORMATION,
+                             None, None, None, ctypes.addressof(sacl), ctypes.byref(sd))
+    if rc != 0:
+        return None, rc
+    try:
+        labels = []
+        if sacl.value:
+            header = ACL_HEADER.from_address(sacl.value)
+            for i in range(header.AceCount):
+                p = ctypes.c_void_p()
+                if not api.GetAce(sacl, i, ctypes.byref(p)):
+                    return None, api.last_error()
+                ace = ACCESS_ALLOWED_ACE.from_address(p.value)   # same header/mask/SID layout
+                if ace.AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE:
+                    labels.append((sid_to_text(api, p.value + ACCESS_ALLOWED_ACE.SidStart.offset),
+                                   ace.AceFlags, ace.Mask))
+        if len(labels) != 1 or not re.fullmatch(r'S-1-16-[0-9]{1,10}', labels[0][0]):
+            return None, 0
+        text, flags, mask = labels[0]
+        return (int(text[len('S-1-16-'):]), flags, mask), 0
+    finally:
+        if sd.value:
+            api.LocalFree(sd)
+
+
+def _verify_pipe_label(api, handle, own_rid):
+    """W25.2 decision: the pipe must carry exactly one explicit mandatory label
+    of at least Medium. UT6-02: and that label must EQUAL ``own_rid``, the
+    client's own integrity level (``PIPE_LABEL_MISMATCH``): a Medium client does
+    not talk to an elevated (High) server, nor an elevated client to a Medium
+    one -- the mirror of the server's INTEGRITY_MISMATCH. A non-int ``own_rid``
+    never matches (fail-closed). ADR-UDX-006 makes only same SID AND same integrity level
+    one trust domain; a lower-integrity process of the same user (Low IL) can
+    create a pipe owned by the user, so the owner check alone admits it. Such a
+    process cannot label an object above its own level, so it cannot meet this
+    rule. Every server of this project sets S:(ML;;NWNR;;;<own level>) explicitly
+    (UT6-02: ME for a Medium server, HI for an elevated one).
+
+    Aegis W25.2 hardening: the single label must also be EFFECTIVE on the pipe
+    object itself and enforce No-Write-Up. An INHERIT_ONLY label ACE does not
+    apply to the object (it only seeds children), and a label without the
+    NO_WRITE_UP policy bit does not stop a lower-integrity writer; neither counts
+    as the Medium label (``PIPE_LABEL_INHERIT_ONLY`` /
+    ``PIPE_LABEL_NO_WRITE_UP_MISSING``)."""
+    info, rc = pipe_label_info(api, handle)
+    if rc:
+        return 'PIPE_LABEL_FAILED', rc, None
+    if info is None:
+        return 'PIPE_LABEL_TOO_LOW', 0, None
+    rid, flags, mask = info
+    if flags & INHERIT_ONLY_ACE:
+        return 'PIPE_LABEL_INHERIT_ONLY', 0, rid
+    if not mask & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP:
+        return 'PIPE_LABEL_NO_WRITE_UP_MISSING', 0, rid
+    if rid < SECURITY_MANDATORY_MEDIUM_RID:
+        return 'PIPE_LABEL_TOO_LOW', 0, rid
+    if type(own_rid) is not int or rid != own_rid:
+        return 'PIPE_LABEL_MISMATCH', 0, rid
+    return None, 0, rid
+
+
 def _verify_pipe_owner(api, handle, expected_bin):
     """Decision: owner of the pipe object == expected SID (Forshaw 2019: the
     server PID must not be relied upon for security decisions)."""
@@ -1013,6 +1173,15 @@ def client_ping(name: str = DEFAULT_PIPE_NAME, *, level: str = 'identification',
     * BEFORE the first write: the pipe object's owner must equal
       ``expected_server_sid`` (default: this process' user SID); otherwise no
       byte is sent and a typed reason is returned. The server PID is logged only.
+    * W25.2, also before the first write: exactly one explicit mandatory label of
+      at least Medium on the pipe (``PIPE_LABEL_TOO_LOW`` / ``PIPE_LABEL_FAILED``);
+      a Low-IL squatter of the same user passes the owner check but not this.
+      Aegis W25.2: the label must not be INHERIT_ONLY and must carry NO_WRITE_UP
+      (``PIPE_LABEL_INHERIT_ONLY`` / ``PIPE_LABEL_NO_WRITE_UP_MISSING``).
+      UT6-02: the label must EQUAL the client's own EFFECTIVE integrity level
+      (``PIPE_LABEL_MISMATCH``): the calling thread's impersonation token if it
+      has one (that token performs the open), else the process token. Read
+      before the open; unreadable -> ``OWN_INTEGRITY_FAILED``, nothing opened.
     * write and read run with an absolute deadline (``response_timeout_s``).
     ``send=False`` connects, verifies and stays silent for ``hold_s`` seconds.
     """
@@ -1028,6 +1197,11 @@ def client_ping(name: str = DEFAULT_PIPE_NAME, *, level: str = 'identification',
     budget = validate_deadline(response_timeout_s)
     expected = current_user_sid(api) if expected_server_sid is None else expected_server_sid
     build_sddl(expected)                                  # SID syntax check
+    # UT6-02: the own EFFECTIVE integrity level (the token CreateFileW will use),
+    # before anything is opened or allocated. Typed result, never an exception.
+    own_rid, err = effective_integrity_rid(api)
+    if own_rid is None:
+        return ClientResult(None, b'', False, 'OWN_INTEGRITY_FAILED', err)
     expected_bin = ctypes.c_void_p()
     if not api.ConvertStringSidToSidW(expected, ctypes.byref(expected_bin)):
         raise ValueError('INVALID_EXPECTED_SID')
@@ -1046,6 +1220,9 @@ def client_ping(name: str = DEFAULT_PIPE_NAME, *, level: str = 'identification',
             reason, err, owner_text = _verify_pipe_owner(api, h, expected_bin)
             if reason is not None:
                 return ClientResult(None, b'', False, reason, err, server_pid, owner_text)
+            reason, err, label = _verify_pipe_label(api, h, own_rid)
+            if reason is not None:
+                return ClientResult(None, b'', False, reason, err, server_pid, owner_text, label)
             if not send:
                 time.sleep(hold_s)
                 return ClientResult(None, b'', False, 'SILENT_HOLD', None, server_pid, owner_text)

@@ -13,6 +13,8 @@
 > response, 4/5 owner query/mismatch, 6 own SID, 22, 24, 31. Native stall cases:
 > `tools/w18_cpp_crossrun.py` (CI job `cpp-candidate`). The "blocking I/O" notes
 > below are history. See `docs/W24_BOUNDED_CPP_IO.md`.
+>
+> **W25 (2026-11-09):** the client prints one stderr line `UDX_CLIENT_OPEN_ERROR <win32 error>` before exit 1 (exit codes unchanged). `tools/w25_principal_matrix.py` runs it as a real Low-IL, AppContainer and restricted-token process; see `docs/W25_PRINCIPAL_MATRIX.md`.
 
 > **W18 (2026-10-22): first compiled.** CI job `cpp-candidate` builds both sources with
 > MSVC `cl /nologo /W4 /WX /EHsc /std:c++17` on the hosted `windows-latest` runner
