@@ -18,8 +18,33 @@ import sys
 import threading
 from .fd_reader import ApprovedFdReader, ReadGuardError, MAX_READ
 
-_SEALS = ((fcntl.F_SEAL_WRITE | fcntl.F_SEAL_GROW |
-          fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_SEAL) if fcntl is not None else None)
+_SEAL_NAMES = ('F_SEAL_WRITE', 'F_SEAL_GROW', 'F_SEAL_SHRINK', 'F_SEAL_SEAL')
+
+
+def _sealing(module):
+    """(F_ADD_SEALS, F_GET_SEALS, seal mask) of a ``fcntl`` module, or None.
+
+    W28 (UDX28-01): CPython builds exist whose ``fcntl`` lacks the memfd sealing
+    constants (measured: a Clang-built 3.13.18 on Linux 6.18). Reading them at
+    import time crashed this module and, transitively, every module importing
+    it. They are resolved here, at use, and never guessed from the kernel ABI:
+    without them the snapshot is refused with a typed code.
+    """
+    if module is None:
+        return None
+    try:
+        mask = 0
+        for name in _SEAL_NAMES:
+            mask |= getattr(module, name)
+        return module.F_ADD_SEALS, module.F_GET_SEALS, mask
+    except AttributeError:
+        return None
+
+
+def sealing_available() -> bool:
+    """True if this platform and interpreter can create a sealed snapshot."""
+    return (sys.platform == 'linux' and hasattr(os, 'memfd_create')
+            and _sealing(fcntl) is not None)
 
 
 class SealedSnapshot:
@@ -28,6 +53,10 @@ class SealedSnapshot:
             raise ReadGuardError('UNSUPPORTED_PLATFORM')
         if type(expected_uid) is not int or expected_uid < 0:
             raise ReadGuardError('OWNER_REQUIRED')
+        sealing = _sealing(fcntl)
+        if sealing is None:
+            raise ReadGuardError('SEALING_UNAVAILABLE')
+        add_seals, get_seals, seals = sealing
         self._fd = None
         self._lock = threading.RLock()
         # Perform guarded reads twice and refuse if source changed between them.
@@ -45,8 +74,12 @@ class SealedSnapshot:
                 if written <= 0:
                     raise ReadGuardError('SNAPSHOT_COPY_FAILED')
                 offset += written
-            fcntl.fcntl(memfd, fcntl.F_ADD_SEALS, _SEALS)
-            if fcntl.fcntl(memfd, fcntl.F_GET_SEALS) & _SEALS != _SEALS:
+            try:
+                fcntl.fcntl(memfd, add_seals, seals)
+                present = fcntl.fcntl(memfd, get_seals)
+            except OSError as exc:
+                raise ReadGuardError('SNAPSHOT_UNSEALED') from exc
+            if present & seals != seals:
                 raise ReadGuardError('SNAPSHOT_UNSEALED')
             self._digest = hashlib.sha256(first).digest()
             self._size = len(first)

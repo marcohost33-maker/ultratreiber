@@ -1,5 +1,6 @@
 """W8 tests: private fd transfer, error handling and real child execution."""
 import array, hashlib, json, os, pathlib, socket, subprocess, sys, tempfile, unittest, uuid
+from udx_ref.sealed_snapshot import sealing_available
 from udx_ref.fd_handoff import (HandoffError, private_pair, send_approved_fd,
                                 handle_once, recv_status, _recv_fd, supported, MAX_WIRE)
 from udx_ref.fd_reader import ReadGuardError
@@ -20,6 +21,7 @@ class W8FdTests(unittest.TestCase):
         return self.a.sendmsg([data],anc)
     def wire(self):
         return json.dumps({'v':'udx/fd/0.1','op':'inspect.readonly','id':self.id}).encode()
+    @unittest.skipUnless(sealing_available(), 'W28: the server side needs a sealed snapshot (fcntl seal constants)')
     def test_valid_metadata_no_raw_payload(self):
         fd=os.open(self.p,os.O_RDONLY)
         try:send_approved_fd(self.a,fd,self.id)
@@ -76,6 +78,7 @@ class W8FdTests(unittest.TestCase):
                 try:self.send_raw(raw,fd)
                 finally:os.close(fd)
                 with self.assertRaises(HandoffError):_recv_fd(self.b,os.getuid())
+    @unittest.skipUnless(sealing_available(), 'W28: the server side needs a sealed snapshot (fcntl seal constants)')
     def test_exact_request_id(self):
         fd=os.open(self.p,os.O_RDONLY)
         try:send_approved_fd(self.a,fd,self.id)
@@ -106,9 +109,12 @@ class W8FdTests(unittest.TestCase):
             finally:os.close(fd)
             with self.assertRaises(HandoffError):_recv_fd(self.b,os.getuid())
         self.assertEqual(before,len(os.listdir('/proc/self/fd')))
+    @unittest.skipUnless(sealing_available(), 'W28: the server side needs a sealed snapshot (fcntl seal constants)')
     def test_separate_process(self):
         path=pathlib.Path(__file__).resolve().parent.parent/'tools'/'demo_w8_fd_handoff.py'
-        r=subprocess.run([sys.executable,str(path)],cwd=str(path.parent.parent),capture_output=True,text=True,timeout=5)
+        # W27 (UDX14-06): 60 s is a hang guard only. The demo bounds start-up, protocol and
+        # teardown separately and types each failure (tests/test_w27_fd_handoff_startup.py).
+        r=subprocess.run([sys.executable,str(path)],cwd=str(path.parent.parent),capture_output=True,text=True,timeout=60)
         self.assertEqual(r.returncode,0,r.stderr)
         o=json.loads(r.stdout)
         self.assertEqual(o['child_exit'],0)

@@ -78,7 +78,12 @@ class PerceptionW7(unittest.TestCase):
         self.assertNotEqual(a._hashes,b._hashes)
 
 
-@unittest.skipUnless(sys.platform=='linux' and hasattr(os,'memfd_create'), 'Linux memfd required')
+def _sealing_available():
+    from udx_ref.sealed_snapshot import sealing_available
+    return sealing_available()
+
+
+@unittest.skipUnless(sys.platform=='linux' and _sealing_available(), 'Linux memfd sealing with fcntl seal constants required')
 class SealedSnapshotW7(unittest.TestCase):
     def setUp(self):
         self.t=tempfile.TemporaryDirectory(prefix='udx-w7-')

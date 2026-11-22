@@ -1,0 +1,102 @@
+{
+ "tool": "guard_sweep",
+ "wave": "W28",
+ "sweep_version": 2,
+ "note": "Refusals whose mutant no test notices, each with a class and a reason. Sweep v2 inventories if/elif ending in raise or in return <refusal> (ADMIT/REFUSE) and except handlers converting to a typed refusal (UNTYPED). DEFENSE_IN_DEPTH: another tested check refuses the same input. EQUIVALENT: no input reaches the refusal; needs a witness test that exercises the boundary. OPEN_NO_TEST: reachable and untested (none at W28). STRUCTURAL_ONLY: only import/setup errors (none at W28). The sweep fails on any non-killed mutant that is not listed here, on any entry that is killed, and on a missing witness. W27 had 13 entries; the EQUIVALENT pin on PortalRequest BAD_CLOCK was refuted (UDX28-02: now = 2**1024 - 2**970 - 1 reaches it) and is now killed. The W27 DEFENSE_IN_DEPTH pin on ApprovedFdReader.read RESOURCE_CHANGED (early stamp check) is now killed by the growth-after-admission witness (without it the refusal code becomes SIZE_LIMIT).",
+ "modules": [
+  "udx_ref/core.py",
+  "udx_ref/credentialed_handoff.py",
+  "udx_ref/durable_grants.py",
+  "udx_ref/fd_handoff.py",
+  "udx_ref/fd_reader.py",
+  "udx_ref/frame_lease.py",
+  "udx_ref/linux_ipc.py",
+  "udx_ref/perception.py",
+  "udx_ref/portal_boundary.py",
+  "udx_ref/portal_request.py",
+  "udx_ref/preview_gate.py",
+  "udx_ref/sealed_snapshot.py"
+ ],
+ "accepted_survivors": [
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/credentialed_handoff.py|_receive|HandoffError:CLOEXEC_REQUIRED|667c1622bf29",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "transferred and os.get_inheritable(transferred[0])",
+   "reason": "The descriptor is received with MSG_CMSG_CLOEXEC, so the kernel never hands over an inheritable descriptor. The check guards against a receive call that loses that flag."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/credentialed_handoff.py|send_readonly_request|HandoffError:PARTIAL_SEND|a0823fa3daad",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "sent != len(payload)",
+   "reason": "SOCK_SEQPACKET sends a record completely or not at all; sendmsg cannot return a shorter count for this message."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/credentialed_handoff.py|send_readonly_request|HandoffError:SIZE_LIMIT|7159771efed6",
+   "class": "EQUIVALENT",
+   "condition": "len(payload) > MAX_WIRE",
+   "reason": "The envelope has a fixed shape (protocol tag, operation, canonical 36-character id) and is far below MAX_WIRE; no accepted argument can make it longer.",
+   "witness": "tests.test_w28_equivalence_witnesses.EnvelopeLengthIsFixed.test_every_canonical_uuid_gives_the_same_length_far_below_max_wire"
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/fd_handoff.py|_recv_fd|HandoffError:CLOEXEC_REQUIRED|437c8398d5f9",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "os.get_inheritable(received[0])",
+   "reason": "The descriptor is received with MSG_CMSG_CLOEXEC, so the kernel never hands over an inheritable descriptor. The check guards against a receive call that loses that flag."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/fd_handoff.py|send_approved_fd|HandoffError:PARTIAL_SEND|a5152e991b71",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "sent != len(message)",
+   "reason": "SOCK_SEQPACKET sends a record completely or not at all; sendmsg cannot return a shorter count for this message."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/fd_handoff.py|send_approved_fd|HandoffError:SIZE_LIMIT|ea184ba04978",
+   "class": "EQUIVALENT",
+   "condition": "len(message) > MAX_WIRE",
+   "reason": "The envelope has a fixed shape (protocol tag, operation, canonical 36-character id) and is far below MAX_WIRE; no accepted argument can make it longer.",
+   "witness": "tests.test_w28_equivalence_witnesses.EnvelopeLengthIsFixed.test_every_canonical_uuid_gives_the_same_length_far_below_max_wire"
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/fd_reader.py|ApprovedFdReader.read|ReadGuardError:RESOURCE_CHANGED|ae881f97603d",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "len(data) != before.st_size",
+   "reason": "Fires only if the number of bytes read differs from st_size while size, mtime and ctime are identical before and after the read, i.e. if the file system reports inconsistent data. A real size change is caught by the stat comparison after the read (tested)."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/fd_reader.py|ApprovedFdReader.read|ReadGuardError:SIZE_LIMIT|3febd9ead511",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "len(data) > self._limit",
+   "reason": "More than limit bytes can only be read if the file grew after admission; growth changes st_size and is refused as RESOURCE_CHANGED by the stat comparison after the read."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/fd_reader.py|ApprovedFdReader.read|ReadGuardError:SIZE_LIMIT|6c649be96220",
+   "class": "EQUIVALENT",
+   "condition": "before.st_size > self._limit",
+   "reason": "st_size is part of the stamp that the preceding check compares with the admitted value, and admission already refused a size above the limit; with an unchanged stamp the size cannot exceed the limit.",
+   "witness": "tests.test_w28_equivalence_witnesses.GrowthAfterAdmission.test_growth_past_the_limit_is_resource_changed_before_the_size_check"
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/linux_ipc.py|peer_identity|Refusal:UNAUTHENTICATED_PEER|b208ec750c25",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "len(raw) != UCRED.size",
+   "reason": "A credential buffer of the wrong length makes UCRED.unpack raise struct.error, which the same function turns into UNAUTHENTICATED_PEER."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/linux_ipc.py|peer_identity|Refusal:UNAUTHENTICATED_PEER|c03736f44604",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "not supported() or conn.family != socket.AF_UNIX",
+   "reason": "Measured: SO_PEERCRED on a non-AF_UNIX socket returns pid 0, uid -1, gid -1, which the credential range check refuses with the same code (tested with impossible credentials)."
+  }
+ ]
+}

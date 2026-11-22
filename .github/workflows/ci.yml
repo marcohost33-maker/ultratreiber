@@ -83,10 +83,11 @@ jobs:
           python tools/dk_runner.py
           evidence/public_prep_dk_spec.json evidence/w16_dk_spec.json evidence/w20_dk_spec.json
           evidence/w25_dk_spec.json evidence/w26_dk_spec.json evidence/w26_carryover_dk_spec.json
+          evidence/w27_dk_spec.json evidence/w28_dk_spec.json
           evidence/w13_dk_spec.json evidence/w18_dk_spec.json evidence/w24_dk_spec.json
           evidence/w30_dk_spec.json
           --expect-stale evidence/w13_dk_spec.json=2 --expect-stale evidence/w18_dk_spec.json=1
-          --expect-stale evidence/w24_dk_spec.json=1
+          --expect-stale evidence/w24_dk_spec.json=1 --expect-stale evidence/w27_dk_spec.json=2
           --json "$RUNNER_TEMP/udx_dk_portable.json"
       - name: Discriminating mutations (native Windows DK specs)
         if: runner.os == 'Windows' && matrix.python == '3.13'
@@ -113,6 +114,54 @@ jobs:
         env:
           PYTHONPATH: .
         run: python tools/w14_acl_static_gate.py
+
+  guard-sweep:
+    name: two-sided guard sweep (ubuntu-latest)
+    runs-on: ubuntu-latest
+    # W27: every refusal of the portable runtime is removed (ADMIT) and forced
+    # (REFUSE) in turn; a refusal that no test notices in one of the two
+    # directions fails this job unless it is pinned with a reason in
+    # evidence/w28_guard_sweep_baseline.json. A pin that no longer survives
+    # fails it as well. Linux only: the swept modules are skipped on Windows.
+    # W28 (sweep v2): also 'if ...: return <refusal>' and typed except handlers
+    # (mutant UNTYPED); import/setUpClass errors are STRUCTURAL, never a kill;
+    # EQUIVALENT pins must name an existing witness test. The W27 DK cases
+    # GS6/GS8 are re-anchored in w28_dk_spec.json (w27: --expect-stale 2).
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # actions/setup-python v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+      # actions/setup-node v7.1.0 (the interop tests are part of the controls for udx_ref/core.py)
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - name: Test dependency (jsonschema)
+        run: python -m pip install --disable-pip-version-check -r requirements-test.txt
+      - name: Guard sweep against the pinned baseline
+        env:
+          PYTHONPATH: .
+        run: >-
+          python tools/guard_sweep.py --baseline evidence/w28_guard_sweep_baseline.json
+          --json "$RUNNER_TEMP/udx_guard_sweep.json"
+      # actions/upload-artifact, same SHA pin as the other jobs
+      - name: Upload sweep result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: udx-guard-sweep-${{ github.sha }}
+          path: ${{ runner.temp }}/udx_guard_sweep.json
+          if-no-files-found: warn
+          retention-days: 30
 
   windows-native-evidence:
     name: native evidence collector (windows-latest)

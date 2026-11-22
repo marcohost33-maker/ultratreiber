@@ -1,0 +1,173 @@
+{
+ "repo": ".",
+ "test_befehl": [
+  "python",
+  "-m",
+  "pytest"
+ ],
+ "timeout_s": 180,
+ "hinweis": "W28: UDX28-01 (Siegelkonstanten zur Laufzeit, typisierte Abweisung), UDX28-02 (Uhrwerte ausserhalb des float-/SQLite-Bereichs typisiert; widerlegt den W27-Pin BAD_CLOCK), Guard-Sweep v2 (return/handler-Formen, zuordenbare Kills, Zeugen), neue Negativkontrollen aus dem v2-Sweep, Startmatrix (U6-2), statisches Gate fuer uebernommene Sockets (U6-3). DK13/DK14 tragen die zwei W27-Faelle weiter, deren Anker sich durch W28 geaendert haben (w27-Spec: --expect-stale 2). Linux-only Faelle melden unter Windows SKIPPED_ON_PLATFORM. W28.1: DK13/DK14 neu verankert (seiteneffekt-erhaltende Mutanten); DK17-DK23 fuer Kill-Bestaetigung, Seiteneffekte, UDX28-03 und das Lastwerkzeug.",
+ "faelle": [
+  {
+   "name": "W28-DK1 Siegelkonstanten wieder beim Import gelesen (UDX28-01)",
+   "datei": "udx_ref/sealed_snapshot.py",
+   "alt": "_SEAL_NAMES = ('F_SEAL_WRITE', 'F_SEAL_GROW', 'F_SEAL_SHRINK', 'F_SEAL_SEAL')\n",
+   "neu": "_SEAL_NAMES = ('F_SEAL_WRITE', 'F_SEAL_GROW', 'F_SEAL_SHRINK', 'F_SEAL_SEAL')\n_EAGER = fcntl.F_SEAL_WRITE if fcntl is not None else None\n",
+   "test": "tests/test_w28_sealing_constants.py::SealingResolution::test_module_imports_with_a_fcntl_lacking_the_constants"
+  },
+  {
+   "name": "W28-DK2 fehlende Siegelkonstante nicht mehr abgewiesen",
+   "datei": "udx_ref/sealed_snapshot.py",
+   "alt": "        if sealing is None:\n            raise ReadGuardError('SEALING_UNAVAILABLE')\n",
+   "neu": "        if sealing is None:\n            sealing = (0, 0, 0)\n",
+   "test": "tests/test_w28_sealing_constants.py::SnapshotRefusal::test_missing_constant_is_refused_before_the_source_is_read"
+  },
+  {
+   "name": "W28-DK3 OSError beim Versiegeln wieder untypisiert",
+   "datei": "udx_ref/sealed_snapshot.py",
+   "alt": "            except OSError as exc:\n                raise ReadGuardError('SNAPSHOT_UNSEALED') from exc\n",
+   "neu": "            except ZeroDivisionError as exc:\n                raise ReadGuardError('SNAPSHOT_UNSEALED') from exc\n",
+   "test": "tests/test_w28_sealing_constants.py::SnapshotRefusal::test_os_error_while_sealing_is_typed_and_closes_the_copy"
+  },
+  {
+   "name": "W28-DK4 PortalRequest: OverflowError wieder durchgereicht (UDX28-02)",
+   "datei": "udx_ref/portal_request.py",
+   "alt": "    try:\n        return math.isfinite(value)\n    except OverflowError:\n        return False\n",
+   "neu": "    return math.isfinite(value)\n",
+   "test": "tests/test_w28_equivalence_witnesses.py::PortalClockExtremes::test_deadline_overflow_is_reachable_and_refused"
+  },
+  {
+   "name": "W28-DK5 PortalRequest: Deadline-Pruefung entfernt (frueher als EQUIVALENT gepinnt)",
+   "datei": "udx_ref/portal_request.py",
+   "alt": "        if not _finite_number(self._deadline):\n",
+   "neu": "        if False:\n",
+   "test": "tests/test_w28_equivalence_witnesses.py::PortalClockExtremes::test_deadline_overflow_is_reachable_and_refused"
+  },
+  {
+   "name": "W28-DK6 PreviewGate: OverflowError wieder durchgereicht",
+   "datei": "udx_ref/preview_gate.py",
+   "alt": "    try:\n        return math.isfinite(value)\n    except OverflowError:\n        return False\n",
+   "neu": "    return math.isfinite(value)\n",
+   "test": "tests/test_w28_equivalence_witnesses.py::PreviewGateClockExtremes::test_int_beyond_float_range_is_clock_anomaly_not_overflow"
+  },
+  {
+   "name": "W28-DK7 DurableGrantStore: Obergrenze der Uhr entfernt",
+   "datei": "udx_ref/durable_grants.py",
+   "alt": "        if type(now) is not int or not 0 < now <= MAX_CLOCK_NS:\n",
+   "neu": "        if type(now) is not int or not 0 < now:\n",
+   "test": "tests/test_w28_equivalence_witnesses.py::DurableClockRange::test_beyond_is_invalid_clock_not_overflow"
+  },
+  {
+   "name": "W28-DK8 PreviewGate: Replay-Pruefung entfernt (v2-Sweep-Luecke)",
+   "datei": "udx_ref/preview_gate.py",
+   "alt": "            if proposal.request_id in self._seen:\n",
+   "neu": "            if False:\n",
+   "test": "tests/test_w28_negative_controls.py::PreviewGateReturnRefusals::test_replayed_request_id_is_refused_even_with_a_fresh_grant"
+  },
+  {
+   "name": "W28-DK9 PreviewGate: Request-ID-Pruefung entfernt (v2-Sweep-Luecke)",
+   "datei": "udx_ref/preview_gate.py",
+   "alt": "        if type(p) is not PreviewProposal or not _uuid(p.request_id):\n",
+   "neu": "        if type(p) is not PreviewProposal:\n",
+   "test": "tests/test_w28_negative_controls.py::PreviewGateReturnRefusals::test_non_uuid_request_id_is_refused_and_does_not_consume_the_grant"
+  },
+  {
+   "name": "W28-DK10 Sweep: strukturelle Fehler zaehlen wieder als Kill (PR-R17-06)",
+   "datei": "tools/guard_sweep.py",
+   "alt": "    return 'STRUCTURAL' if mutant == 'FAIL_STRUCTURAL' else 'KILLED'\n",
+   "neu": "    return 'KILLED'\n",
+   "test": "tests/test_w28_guard_sweep_v2.py::KillAttribution::test_structural_errors_are_not_kills"
+  },
+  {
+   "name": "W28-DK11 Sweep: Handler-Formen nicht mehr inventarisiert (U6-4)",
+   "datei": "tools/guard_sweep.py",
+   "alt": "            elif isinstance(child, ast.ExceptHandler) and child.type is not None \\\n",
+   "neu": "            elif False and isinstance(child, ast.ExceptHandler) and child.type is not None \\\n",
+   "test": "tests/test_w28_guard_sweep_v2.py::InventoryForms::test_return_and_handler_refusals_are_found_ordinary_ones_are_not"
+  },
+  {
+   "name": "W28-DK12 Sweep: fehlender Zeuge wird nicht gemeldet",
+   "datei": "tools/guard_sweep.py",
+   "alt": "        if not found:\n            missing.append(f'{ident} -> {witness}')\n",
+   "neu": "        if False:\n            missing.append(f'{ident} -> {witness}')\n",
+   "test": "tests/test_w28_guard_sweep_v2.py::WitnessedBaseline::test_missing_witness_is_reported"
+  },
+  {
+   "name": "W28-DK13 (W27-GS6 neu verankert) REFUSE-Mutant schreibt False",
+   "datei": "tools/guard_sweep.py",
+   "alt": "KINDS = {'ADMIT': (b'((', b') and False)'), 'REFUSE': (b'((', b') or True)'), 'UNTYPED': (b'', b'()')}",
+   "neu": "KINDS = {'ADMIT': (b'((', b') and False)'), 'REFUSE': (b'((', b') and False)'), 'UNTYPED': (b'', b'()')}",
+   "test": "tests/test_w27_guard_sweep.py::EndToEnd::test_real_sweep_on_a_synthetic_tree_reports_exactly_the_untested_direction"
+  },
+  {
+   "name": "W28-DK14 (W27-GS8 neu verankert) Mutant wird nach dem Lauf nicht zurueckgeschrieben",
+   "datei": "tools/guard_sweep.py",
+   "alt": "            finally:\n                target.write_bytes(orig)\n            return rec\n",
+   "neu": "            finally:\n                pass\n            return rec\n",
+   "test": "tests/test_w27_guard_sweep.py::EndToEnd::test_real_sweep_on_a_synthetic_tree_reports_exactly_the_untested_direction"
+  },
+  {
+   "name": "W28-DK15 Demo: Eltern schliessen das Schreibende der Bereitschaftsleitung nicht (U6-2)",
+   "datei": "tools/demo_w8_fd_handoff.py",
+   "alt": "                right.close()\n                os.close(ready_w)\n                ready_w = None\n",
+   "neu": "                right.close()\n",
+   "test": "tests/test_w28_startup_matrix.py::StartupMatrix::test_early_exit_is_detected_through_eof_not_after_the_budget"
+  },
+  {
+   "name": "W28-DK16 Statisches Gate: recv gilt als Konfiguration (U6-3)",
+   "datei": "tests/test_w28_static_gates.py",
+   "alt": "CONFIGURE = ('settimeout', 'setblocking')\n",
+   "neu": "CONFIGURE = ('settimeout', 'setblocking', 'recv', None)\n",
+   "test": "tests/test_w28_static_gates.py::AdoptedSocketsSetTheirOwnTimeout::test_the_gate_detects_an_unconfigured_adoption"
+  },
+  {
+   "name": "W28.1-DK17 ADMIT-Mutant ersetzt die Bedingung wieder (Seiteneffekt geht verloren, Codex #8)",
+   "datei": "tools/guard_sweep.py",
+   "alt": "    return source[:guard['begin']] + head + source[guard['begin']:guard['end']] + tail + source[guard['end']:]\n",
+   "neu": "    return source[:guard['begin']] + (b'False' if kind == 'ADMIT' else b'True') + source[guard['end']:]\n",
+   "test": "tests/test_w28_guard_sweep_v2.py::SideEffectsArePreserved::test_mutants_still_evaluate_the_condition"
+  },
+  {
+   "name": "W28.1-DK18 Kill wird nicht bestaetigt (flackernder Test zaehlt als Kill)",
+   "datei": "tools/guard_sweep.py",
+   "alt": "                    if not rec['confirmed']:\n                        rec['verdict'] = 'UNRELIABLE'\n",
+   "neu": "                    if False:\n                        rec['verdict'] = 'UNRELIABLE'\n",
+   "test": "tests/test_w28_guard_sweep_v2.py::W281EndToEnd::test_a_kill_that_does_not_reproduce_is_unreliable"
+  },
+  {
+   "name": "W28.1-DK19 UNRELIABLE gilt nicht als Nicht-Kill",
+   "datei": "tools/guard_sweep.py",
+   "alt": "NOT_KILLED = ('SURVIVED', 'STRUCTURAL', 'UNRELIABLE')",
+   "neu": "NOT_KILLED = ('SURVIVED', 'STRUCTURAL')",
+   "test": "tests/test_w28_guard_sweep_v2.py::RatchetInput::test_survived_structural_and_unreliable_all_need_a_pin"
+  },
+  {
+   "name": "W28.1-DK20 UDX28-03 claim prueft den Empfaenger nicht",
+   "datei": "udx_ref/durable_grants.py",
+   "alt": "            raise GrantDenied('BAD_REQUEST_ID') from None\n        # The issuer is bound to the descriptor owner by _fd_properties (BAD_OWNER,\n        # pinned since W27); the recipient was compared with == only (W28.1).\n        if not _valid_uid(recipient_uid):\n            raise GrantDenied('BAD_PRINCIPAL')\n",
+   "neu": "            raise GrantDenied('BAD_REQUEST_ID') from None\n",
+   "test": "tests/test_w28_1_principal_range.py::PrincipalRange::test_claim_refuses_equal_but_wrongly_typed_principals"
+  },
+  {
+   "name": "W28.1-DK21 UDX28-03 uid_t-Obergrenze entfernt",
+   "datei": "udx_ref/durable_grants.py",
+   "alt": "    return type(value) is int and 0 <= value <= MAX_UID\n",
+   "neu": "    return type(value) is int and 0 <= value\n",
+   "test": "tests/test_w28_1_principal_range.py::PrincipalRange::test_out_of_range_or_wrongly_typed_recipient_is_bad_principal_at_issue"
+  },
+  {
+   "name": "W28.1-DK22 UDX28-03 bool/float als Principal zugelassen",
+   "datei": "udx_ref/durable_grants.py",
+   "alt": "    return type(value) is int and 0 <= value <= MAX_UID\n",
+   "neu": "    return isinstance(value, (int, float)) and 0 <= value <= MAX_UID\n",
+   "test": "tests/test_w28_1_principal_range.py::PrincipalRange::test_bool_principal_equal_to_one_is_refused"
+  },
+  {
+   "name": "W28.1-DK23 Lastwerkzeug startet Brenner wieder ausserhalb von try/finally (Codex #8)",
+   "datei": "tools/w27_fd_handoff_load.py",
+   "alt": "            burners = []\n            try:\n                for _ in range(level):\n                    burners.append(subprocess.Popen([sys.executable, '-c', 'while True: pass'],\n                                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,\n                                                    stderr=subprocess.DEVNULL))\n                time.sleep(1.0)\n",
+   "neu": "            burners = []\n            for _ in range(level):\n                burners.append(subprocess.Popen([sys.executable, '-c', 'while True: pass'],\n                                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,\n                                                stderr=subprocess.DEVNULL))\n            try:\n                time.sleep(1.0)\n",
+   "test": "tests/test_w28_1_load_tool_cleanup.py::BurnerCleanup::test_partial_start_failure_kills_and_reaps_the_started_burners"
+  }
+ ]
+}

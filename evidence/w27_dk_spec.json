@@ -1,0 +1,124 @@
+{
+ "repo": ".",
+ "test_befehl": [
+  "python",
+  "-m",
+  "pytest"
+ ],
+ "timeout_s": 180,
+ "hinweis": "W27: (a) UDX14-06 - die fd-Handoff-Demo trennt Prozessstart, Protokoll und Abbau; jede Mutation nimmt eine dieser Trennungen oder Schranken zurueck. (b) Zweiseitiger Guard-Sweep (tools/guard_sweep.py): Mutationen am Werkzeug selbst (Inventar, Mutationsbytes, Verdikte, Ratsche). Die Demo-Faelle sind Linux-only und werden unter Windows als SKIPPED_ON_PLATFORM gemeldet; die Sweep-Faelle sind portabel.",
+ "faelle": [
+  {
+   "name": "W27-DK1 Eltern senden ohne auf die Bereitschaft des Kindes zu warten (alter Zustand)",
+   "datei": "tools/demo_w8_fd_handoff.py",
+   "alt": "            wait_ready(ready_r, startup_budget)\n",
+   "neu": "            pass\n",
+   "test": "tests/test_w27_fd_handoff_startup.py::StartupIsNotChargedToTheProtocol::test_slow_child_start_is_not_charged_to_the_protocol_timeout"
+  },
+  {
+   "name": "W27-DK2 Startbudget wird ignoriert",
+   "datei": "tools/demo_w8_fd_handoff.py",
+   "alt": "    deadline = time.monotonic() + budget_s\n",
+   "neu": "    deadline = time.monotonic() + 3600.0\n",
+   "test": "tests/test_w27_fd_handoff_startup.py::StartupIsNotChargedToTheProtocol::test_child_that_never_becomes_ready_is_typed_bounded_and_reaped"
+  },
+  {
+   "name": "W27-DK3 EOF auf der Bereitschaftsleitung gilt als bereit",
+   "datei": "tools/demo_w8_fd_handoff.py",
+   "alt": "        if data == b'':\n            raise DemoFailure(EXIT_CHILD_EXITED_BEFORE_READY, 'CHILD_EXITED_BEFORE_READY', 'startup')\n",
+   "neu": "        if data == b'':\n            return\n",
+   "test": "tests/test_w27_fd_handoff_startup.py::StartupIsNotChargedToTheProtocol::test_child_that_exits_before_ready_is_not_reported_as_ready"
+  },
+  {
+   "name": "W27-DK4 nicht bereites Kind wird nicht beendet",
+   "datei": "tools/demo_w8_fd_handoff.py",
+   "alt": "    if proc.poll() is None:\n        proc.kill()\n    try:\n",
+   "neu": "    try:\n",
+   "test": "tests/test_w27_fd_handoff_startup.py::StartupIsNotChargedToTheProtocol::test_child_that_never_becomes_ready_is_typed_bounded_and_reaped"
+  },
+  {
+   "name": "W27-DK5 Kind ohne eigenes Timeout (geerbtes O_NONBLOCK)",
+   "datei": "tools/demo_w8_fd_handoff.py",
+   "alt": "        s.settimeout(PROTOCOL_TIMEOUT_S)\n",
+   "neu": "",
+   "test": "tests/test_w27_fd_handoff_startup.py::StartupIsNotChargedToTheProtocol::test_child_waits_for_a_parent_that_sends_late"
+  },
+  {
+   "name": "W27-DK6 Protokoll-Timeout der Bibliothek gelockert",
+   "datei": "udx_ref/fd_handoff.py",
+   "alt": "        s.settimeout(2.0)\n",
+   "neu": "        s.settimeout(20.0)\n",
+   "test": "tests/test_w27_fd_handoff_startup.py::StartupIsNotChargedToTheProtocol::test_private_pair_keeps_its_two_second_timeout"
+  },
+  {
+   "name": "W27-DK7 Eltern lockern das Protokoll-Timeout nach der Bereitschaft",
+   "datei": "tools/demo_w8_fd_handoff.py",
+   "alt": "            request_id = str(uuid.uuid4())\n            data_fd = os.open(",
+   "neu": "            left.settimeout(600.0)\n            request_id = str(uuid.uuid4())\n            data_fd = os.open(",
+   "test": "tests/test_w27_fd_handoff_startup.py::StartupIsNotChargedToTheProtocol::test_ready_but_silent_child_still_hits_the_two_second_protocol_timeout"
+  },
+  {
+   "name": "W27-DK8 Fehlerinjektions-Argumente ungeprueft",
+   "datei": "tools/demo_w8_fd_handoff.py",
+   "alt": "        if not math.isfinite(value) or value > high or value < low or (low_open and value == low):\n",
+   "neu": "        if False:\n",
+   "test": "tests/test_w27_fd_handoff_startup.py::StartupIsNotChargedToTheProtocol::test_fault_injection_arguments_are_bounded"
+  },
+  {
+   "name": "W27-GS1 Ratsche meldet neue Ueberlebende nicht",
+   "datei": "tools/guard_sweep.py",
+   "alt": "'new_survivors': sorted(survivors - pinned)",
+   "neu": "'new_survivors': []",
+   "test": "tests/test_w27_guard_sweep.py::Ratchet::test_new_survivor_and_stale_pin_are_both_reported"
+  },
+  {
+   "name": "W27-GS2 Ratsche meldet veraltete Pins nicht",
+   "datei": "tools/guard_sweep.py",
+   "alt": "'stale_baseline': sorted(pinned - survivors)",
+   "neu": "'stale_baseline': []",
+   "test": "tests/test_w27_guard_sweep.py::Ratchet::test_new_survivor_and_stale_pin_are_both_reported"
+  },
+  {
+   "name": "W27-GS3 Timeout zaehlt als Kill",
+   "datei": "tools/guard_sweep.py",
+   "alt": "    if base == 'TIMEOUT' or mutant == 'TIMEOUT':\n        return 'TIMEOUT'\n",
+   "neu": "",
+   "test": "tests/test_w27_guard_sweep.py::Verdicts::test_a_timeout_is_never_a_kill_and_a_red_baseline_is_not_a_result"
+  },
+  {
+   "name": "W27-GS4 Inventar uebersieht Guards mit mehr als einer Anweisung",
+   "datei": "tools/guard_sweep.py",
+   "alt": "isinstance(child, ast.If) and isinstance(child.body[-1], ast.Raise)",
+   "neu": "isinstance(child, ast.If) and len(child.body) == 1 and isinstance(child.body[0], ast.Raise)",
+   "test": "tests/test_w27_guard_sweep.py::Inventory::test_finds_every_if_and_elif_whose_body_ends_in_raise_and_nothing_else"
+  },
+  {
+   "name": "W27-GS5 Baseline-Eintrag ohne Begruendung akzeptiert",
+   "datei": "tools/guard_sweep.py",
+   "alt": "or not str(entry.get('reason', '')).strip() ",
+   "neu": "",
+   "test": "tests/test_w27_guard_sweep.py::Ratchet::test_baseline_entries_need_a_known_class_and_a_reason_and_must_be_unique"
+  },
+  {
+   "name": "W27-GS6 REFUSE-Mutant schreibt False",
+   "datei": "tools/guard_sweep.py",
+   "alt": "KINDS = {'ADMIT': b'False', 'REFUSE': b'True'}",
+   "neu": "KINDS = {'ADMIT': b'False', 'REFUSE': b'False'}",
+   "test": "tests/test_w27_guard_sweep.py::EndToEnd::test_real_sweep_on_a_synthetic_tree_reports_exactly_the_untested_direction"
+  },
+  {
+   "name": "W27-GS7 Guard-Schluessel haengt an der Zeilennummer",
+   "datei": "tools/guard_sweep.py",
+   "alt": "        base = '|'.join((g['file'], g['scope'], g['code'],\n",
+   "neu": "        base = '|'.join((g['file'], g['scope'], g['code'], str(g['line']),\n",
+   "test": "tests/test_w27_guard_sweep.py::Inventory::test_keys_are_unique_and_do_not_depend_on_line_numbers"
+  },
+  {
+   "name": "W27-GS8 Mutant wird nach dem Lauf nicht zurueckgeschrieben",
+   "datei": "tools/guard_sweep.py",
+   "alt": "            finally:\n                target.write_bytes(orig)\n            rec.update(mutant=mutant",
+   "neu": "            finally:\n                pass\n            rec.update(mutant=mutant",
+   "test": "tests/test_w27_guard_sweep.py::EndToEnd::test_real_sweep_on_a_synthetic_tree_reports_exactly_the_untested_direction"
+  }
+ ]
+}

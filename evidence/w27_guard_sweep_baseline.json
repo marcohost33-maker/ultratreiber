@@ -1,0 +1,112 @@
+{
+ "tool": "guard_sweep",
+ "wave": "W27",
+ "note": "Refusals whose removal (ADMIT mutant) no test notices, each with a class and a reason. DEFENSE_IN_DEPTH: another tested check refuses the same input. EQUIVALENT: no input reaches the refusal. OPEN_NO_TEST: reachable and untested (none at W27). The sweep fails on any survivor that is not listed here and on any entry that no longer survives. No REFUSE mutant survives: every refusal has a positive control.",
+ "modules": [
+  "udx_ref/core.py",
+  "udx_ref/credentialed_handoff.py",
+  "udx_ref/durable_grants.py",
+  "udx_ref/fd_handoff.py",
+  "udx_ref/fd_reader.py",
+  "udx_ref/frame_lease.py",
+  "udx_ref/linux_ipc.py",
+  "udx_ref/perception.py",
+  "udx_ref/portal_boundary.py",
+  "udx_ref/portal_request.py",
+  "udx_ref/preview_gate.py",
+  "udx_ref/sealed_snapshot.py"
+ ],
+ "accepted_survivors": [
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/credentialed_handoff.py|_receive|HandoffError:CLOEXEC_REQUIRED|667c1622bf29",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "transferred and os.get_inheritable(transferred[0])",
+   "reason": "The descriptor is received with MSG_CMSG_CLOEXEC, so the kernel never hands over an inheritable descriptor. The check guards against a receive call that loses that flag."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/credentialed_handoff.py|send_readonly_request|HandoffError:PARTIAL_SEND|a0823fa3daad",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "sent != len(payload)",
+   "reason": "SOCK_SEQPACKET sends a record completely or not at all; sendmsg cannot return a shorter count for this message."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/credentialed_handoff.py|send_readonly_request|HandoffError:SIZE_LIMIT|7159771efed6",
+   "class": "EQUIVALENT",
+   "condition": "len(payload) > MAX_WIRE",
+   "reason": "The envelope has a fixed shape (protocol tag, operation, canonical 36-character id) and is far below MAX_WIRE; no accepted argument can make it longer."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/fd_handoff.py|_recv_fd|HandoffError:CLOEXEC_REQUIRED|437c8398d5f9",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "os.get_inheritable(received[0])",
+   "reason": "The descriptor is received with MSG_CMSG_CLOEXEC, so the kernel never hands over an inheritable descriptor. The check guards against a receive call that loses that flag."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/fd_handoff.py|send_approved_fd|HandoffError:PARTIAL_SEND|a5152e991b71",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "sent != len(message)",
+   "reason": "SOCK_SEQPACKET sends a record completely or not at all; sendmsg cannot return a shorter count for this message."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/fd_handoff.py|send_approved_fd|HandoffError:SIZE_LIMIT|ea184ba04978",
+   "class": "EQUIVALENT",
+   "condition": "len(message) > MAX_WIRE",
+   "reason": "The envelope has a fixed shape (protocol tag, operation, canonical 36-character id) and is far below MAX_WIRE; no accepted argument can make it longer."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/fd_reader.py|ApprovedFdReader.read|ReadGuardError:RESOURCE_CHANGED|ae881f97603d",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "len(data) != before.st_size",
+   "reason": "Fires only if the number of bytes read differs from st_size while size, mtime and ctime are identical before and after the read, i.e. if the file system reports inconsistent data. A real size change is caught by the stat comparison after the read (tested)."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/fd_reader.py|ApprovedFdReader.read|ReadGuardError:RESOURCE_CHANGED|f1b670724805",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "(before.st_dev,before.st_ino) != self._identity or (before.st_size,before.st_mtime_ns,before.st_ctime_ns)!=self._stamp",
+   "reason": "A change that is visible in the stat before the read is still visible in the stat after the read (tested: RESOURCE_CHANGED after the read). The early check only avoids reading a source that is already known to have changed."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/fd_reader.py|ApprovedFdReader.read|ReadGuardError:SIZE_LIMIT|3febd9ead511",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "len(data) > self._limit",
+   "reason": "More than limit bytes can only be read if the file grew after admission; growth changes st_size and is refused as RESOURCE_CHANGED by the stat comparison after the read."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/fd_reader.py|ApprovedFdReader.read|ReadGuardError:SIZE_LIMIT|6c649be96220",
+   "class": "EQUIVALENT",
+   "condition": "before.st_size > self._limit",
+   "reason": "st_size is part of the stamp that the preceding check compares with the admitted value, and admission already refused a size above the limit; with an unchanged stamp the size cannot exceed the limit."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/linux_ipc.py|peer_identity|Refusal:UNAUTHENTICATED_PEER|b208ec750c25",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "len(raw) != UCRED.size",
+   "reason": "A credential buffer of the wrong length makes UCRED.unpack raise struct.error, which the same function turns into UNAUTHENTICATED_PEER."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/linux_ipc.py|peer_identity|Refusal:UNAUTHENTICATED_PEER|c03736f44604",
+   "class": "DEFENSE_IN_DEPTH",
+   "condition": "not supported() or conn.family != socket.AF_UNIX",
+   "reason": "Measured: SO_PEERCRED on a non-AF_UNIX socket returns pid 0, uid -1, gid -1, which the credential range check refuses with the same code (tested with impossible credentials)."
+  },
+  {
+   "kind": "ADMIT",
+   "key": "udx_ref/portal_request.py|PortalRequest.__init__|PortalFlowError:BAD_CLOCK|f4a32d770c1d",
+   "class": "EQUIVALENT",
+   "condition": "not math.isfinite(self._deadline)",
+   "reason": "The clock value is already checked to be finite and the lifetime is at most 300 s; adding 300 to the largest finite float does not overflow (measured), so the deadline is always finite."
+  }
+ ]
+}
