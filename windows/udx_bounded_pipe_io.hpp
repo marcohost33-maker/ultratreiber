@@ -18,12 +18,30 @@
 //    still write into this stack frame. The one-shot research process then
 //    terminates itself with exit 31 instead of returning (fail-closed).
 //  * GetTickCount64 is monotonic (not affected by wall-clock changes).
+//
+// W30: TEST-ONLY fault-injection hooks, compiled ONLY when the harness
+// (tools/w30_cpp_cancel_race.py) passes /DUDX_FI_SKIP_CANCEL or
+// /DUDX_FI_PRE_CANCEL_SLEEP_MS=<ms>. A production build (no /D) compiles none
+// of the #if UDX_FI blocks: its token stream equals the W24 header's (pinned by
+// tests/test_w30_cancel_race.py). A fault-injection binary announces itself on
+// stderr ("UDX_FAULT_INJECTION_BUILD") before main, so it cannot pass as a
+// production binary.
+//  * UDX_FI_SKIP_CANCEL: the deadline passes but CancelIoEx is NOT requested,
+//    so a stalled I/O stays pending through the grace -> the exit-31 path runs
+//    on a real kernel with a really pending OVERLAPPED.
+//  * UDX_FI_PRE_CANCEL_SLEEP_MS: sleep before CancelIoEx, widening the window in
+//    which the I/O can complete AFTER the deadline but BEFORE the cancel (the
+//    "completed in the race: still a timeout" branch).
 #pragma once
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
 #include <cwchar>
+#if defined(UDX_FI_SKIP_CANCEL) || defined(UDX_FI_PRE_CANCEL_SLEEP_MS)
+#define UDX_FAULT_INJECTION_BUILD 1
+#include <cstdio>
+#endif
 
 namespace udx {
 
@@ -58,7 +76,23 @@ struct IoResult {
     DWORD error;    // Win32 error of a failed I/O; 0 for ok/timeout unless the cancel settled with one
 };
 
+#if defined(UDX_FAULT_INJECTION_BUILD)
+// Test-only: one marker line per reached branch, flushed before anything else.
+inline void fi_mark(const char* marker) {
+    fputs(marker, stderr);
+    fputc('\n', stderr);
+    fflush(stderr);
+}
+struct FaultInjectionBanner {
+    FaultInjectionBanner() { fi_mark("UDX_FAULT_INJECTION_BUILD"); }
+};
+static const FaultInjectionBanner fault_injection_banner;
+#endif
+
 [[noreturn]] inline void die_cancel_uncertain() {
+#if defined(UDX_FAULT_INJECTION_BUILD)
+    fi_mark("UDX_FI_DIE_CANCEL_UNCERTAIN");
+#endif
     // Never return into a frame whose OVERLAPPED/buffer the kernel may still own.
     TerminateProcess(GetCurrentProcess(), kExitCancelUncertain);
     ExitProcess(kExitCancelUncertain);      // only if TerminateProcess itself failed
@@ -87,10 +121,24 @@ inline bool parse_budget(int argc, wchar_t** argv, DWORD& budget_ms) {
 // Deadline passed (or the wait failed) while the I/O may still be pending:
 // request cancellation, then wait a BOUNDED grace for the completion.
 inline IoResult cancel_and_settle(HANDLE handle, OVERLAPPED& ov) {
+#if defined(UDX_FI_PRE_CANCEL_SLEEP_MS)
+    Sleep(UDX_FI_PRE_CANCEL_SLEEP_MS);      // test-only: the I/O may complete before the cancel
+#endif
+#if defined(UDX_FI_SKIP_CANCEL)
+    fi_mark("UDX_FI_CANCEL_SKIPPED");       // test-only: the stalled I/O stays pending
+#else
     CancelIoEx(handle, &ov);                // request only; ERROR_NOT_FOUND = already completing
+#endif
     DWORD n = 0;
+#if defined(UDX_FAULT_INJECTION_BUILD)
+    if (GetOverlappedResultEx(handle, &ov, &n, kCancelGraceMs, FALSE)) {
+        fi_mark(n > 0 ? "UDX_FI_COMPLETED_IN_RACE bytes>0" : "UDX_FI_COMPLETED_IN_RACE bytes=0");
+        return {IoStatus::timeout, n, ERROR_SUCCESS};
+    }
+#else
     if (GetOverlappedResultEx(handle, &ov, &n, kCancelGraceMs, FALSE))
         return {IoStatus::timeout, n, ERROR_SUCCESS};   // completed in the race: still a timeout
+#endif
     const DWORD err = GetLastError();
     if (err == WAIT_TIMEOUT || err == ERROR_IO_INCOMPLETE || !HasOverlappedIoCompleted(&ov))
         die_cancel_uncertain();

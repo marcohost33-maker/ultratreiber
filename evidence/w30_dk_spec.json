@@ -1,0 +1,85 @@
+{
+ "repo": ".",
+ "test_befehl": ["python", "-m", "pytest"],
+ "timeout_s": 120,
+ "hinweis": "Portable Diskriminierung der W30-Waechter (Produktions-Tokenstrom des Headers = W24, Fault-Injection nur hinter #if) und der fail-closed Verdikte des Cancel-Race-Harness. Die nativen Laufzeitbelege stehen im CI-Artefakt udx-w30-cancel-race-<sha>.",
+ "faelle": [
+  {
+   "name": "W30-DK1 Test-Sleep vor CancelIoEx gelangt in den Produktionsbuild",
+   "datei": "windows/udx_bounded_pipe_io.hpp",
+   "alt": "#if defined(UDX_FI_PRE_CANCEL_SLEEP_MS)\n    Sleep(UDX_FI_PRE_CANCEL_SLEEP_MS);",
+   "neu": "#if 1\n    Sleep(1500);",
+   "test": "tests/test_w30_cancel_race.py::ProductionCodeUnchanged::test_production_token_stream_equals_w24"
+  },
+  {
+   "name": "W30-DK2 Produktionszweig fordert CancelIoEx nicht mehr an",
+   "datei": "windows/udx_bounded_pipe_io.hpp",
+   "alt": "#else\n    CancelIoEx(handle, &ov);                // request only; ERROR_NOT_FOUND = already completing\n#endif",
+   "neu": "#else\n#endif",
+   "test": "tests/test_w30_cancel_race.py::ProductionCodeUnchanged::test_no_fault_injection_symbol_survives_in_production"
+  },
+  {
+   "name": "W30-DK3 Produktions-CL-Flags definieren einen Fault-Injection-Hook",
+   "datei": "tools/w18_cpp_crossrun.py",
+   "alt": "CL_FLAGS = '/nologo /W4 /WX /EHsc /std:c++17'",
+   "neu": "CL_FLAGS = '/nologo /W4 /WX /EHsc /std:c++17 /DUDX_FI_SKIP_CANCEL'",
+   "test": "tests/test_w30_cancel_race.py::ProductionCodeUnchanged::test_sources_and_ci_never_define_fault_injection"
+  },
+  {
+   "name": "W30-DK4 Exit-31-Verdikt ohne Untergrenze (Gnadenfrist nicht abgewartet waere gruen)",
+   "datei": "tools/w30_cpp_cancel_race.py",
+   "alt": "            and budget_s + 0.8 * CANCEL_GRACE_S <= elapsed_s <= LIMIT_S",
+   "neu": "            and elapsed_s <= LIMIT_S",
+   "test": "tests/test_w30_cancel_race.py::Verdicts::test_exit31_verdict"
+  },
+  {
+   "name": "W30-DK5 Race-Verdikt akzeptiert PEER_OK nach der Frist",
+   "datei": "tools/w30_cpp_cancel_race.py",
+   "alt": "            and markers_ok(stderr_text, (BANNER, MARK_RACE), (MARK_DIE, MARK_SKIPPED))\n            and b'PEER_OK' not in received)",
+   "neu": "            and markers_ok(stderr_text, (BANNER, MARK_RACE), (MARK_DIE, MARK_SKIPPED)))",
+   "test": "tests/test_w30_cancel_race.py::Verdicts::test_race_verdict"
+  },
+  {
+   "name": "W30-DK6 Server-Orakel: fruehe Anfrage muss nicht bedient werden",
+   "datei": "tools/w30_cpp_cancel_race.py",
+   "alt": "    if offset_s <= budget_s - GUARD_S and exit_code != 0:\n        return False\n    if offset_s >= budget_s + GUARD_S and exit_code != EXIT_TIMEOUT:",
+   "neu": "    if offset_s >= budget_s + GUARD_S and exit_code != EXIT_TIMEOUT:",
+   "test": "tests/test_w30_cancel_race.py::Verdicts::test_server_run_oracle"
+  },
+  {
+   "name": "W30-DK7 Server-Orakel: PEER_OK-Fragment wird toleriert",
+   "datei": "tools/w30_cpp_cancel_race.py",
+   "alt": "    if received not in (b'', b'PEER_OK'):\n        return False\n",
+   "neu": "",
+   "test": "tests/test_w30_cancel_race.py::Verdicts::test_server_run_oracle"
+  },
+  {
+   "name": "W30-DK8 Client-Orakel: spaete Antwort darf Erfolg sein",
+   "datei": "tools/w30_cpp_cancel_race.py",
+   "alt": "    if offset_s >= budget_s + CLIENT_LATE_S and exit_code != EXIT_TIMEOUT:\n        return False\n    return True",
+   "neu": "    return True",
+   "test": "tests/test_w30_cancel_race.py::Verdicts::test_client_run_oracle"
+  },
+  {
+   "name": "W30-DK9 Kampagne ohne beidseitige Abdeckung (einseitige Laeufe waeren gruen)",
+   "datei": "tools/w30_cpp_cancel_race.py",
+   "alt": "    return codes.count(0) >= MIN_PER_SIDE and codes.count(EXIT_TIMEOUT) >= MIN_PER_SIDE",
+   "neu": "    return True",
+   "test": "tests/test_w30_cancel_race.py::Verdicts::test_campaign_requires_both_sides_and_exact_count"
+  },
+  {
+   "name": "W30-DK10 Marker per Teilstring statt ganzer Zeile",
+   "datei": "tools/w30_cpp_cancel_race.py",
+   "alt": "    return all(m in lines for m in required) and not any(m in lines for m in forbidden)",
+   "neu": "    return all(m in stderr_text for m in required) and not any(m in stderr_text for m in forbidden)",
+   "test": "tests/test_w30_cancel_race.py::Verdicts::test_markers_are_whole_lines"
+  },
+  {
+   "name": "W30-DK11 Fault-Injection-Binary ohne Selbstkennzeichnung",
+   "datei": "windows/udx_bounded_pipe_io.hpp",
+   "alt": "static const FaultInjectionBanner fault_injection_banner;\n",
+   "neu": "",
+   "test": "tests/test_w30_cancel_race.py::ProductionCodeUnchanged::test_fault_injection_announces_itself"
+  }
+ ]
+}
