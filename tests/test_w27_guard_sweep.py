@@ -92,14 +92,14 @@ class Mutation(unittest.TestCase):
         for source in (SRC, SRC.replace(b'\n', b'\r\n')):
             guards = gs.inventory('udx_ref/m.py', source)
             limit = guards[2]
-            for kind, literal in (('ADMIT', b'False'), ('REFUSE', b'True')):
+            # W28.1: the condition is kept and only its result forced.
+            for kind, (head, tail) in (('ADMIT', (b'((', b') and False)')), ('REFUSE', (b'((', b') or True)'))):
                 with self.subTest(kind=kind, crlf=b'\r\n' in source):
                     out = gs.mutate(source, limit, kind)
-                    self.assertEqual(out[:limit['begin']], source[:limit['begin']])
-                    self.assertEqual(out[limit['begin']:limit['begin'] + len(literal)], literal)
-                    self.assertEqual(out[limit['begin'] + len(literal):], source[limit['end']:])
+                    cond = source[limit['begin']:limit['end']]
+                    self.assertEqual(out, source[:limit['begin']] + head + cond + tail + source[limit['end']:])
                     compile(out, 'm.py', 'exec')
-                    self.assertIn(b'if (' + literal + b'):', out)
+                    self.assertIn(head + cond + tail + b'):', out)
 
     def test_non_ascii_before_the_condition_does_not_shift_the_range(self):
         source = 'def f(x):\n    s = "\u00e4\u00f6\u00fc\u20ac"; \n    if s and x:\n        raise ValueError(s)\n'.encode('utf-8')
@@ -116,13 +116,17 @@ class Verdicts(unittest.TestCase):
         self.assertEqual(gs.classify(0, 'Ran 3 tests in 0.1s\n\nOK\n'), 'PASS')
         self.assertEqual(gs.classify(1, 'Ran 3 tests\n\nFAILED (failures=1)\n'), 'FAIL_ASSERTION')
         self.assertEqual(gs.classify(1, 'Ran 3 tests\n\nFAILED (failures=1, errors=2)\n'), 'FAIL_ASSERTION')
-        self.assertEqual(gs.classify(1, 'Ran 3 tests\n\nFAILED (errors=2)\n'), 'FAIL_ERROR')
-        self.assertEqual(gs.classify(1, 'Traceback ...'), 'FAIL_ERROR')
+        # W28: an error counts only when a test method raised; see test_w28_guard_sweep_v2.
+        err = 'ERROR: test_a (tests.test_m.T.test_a)\n----\nRan 3 tests\n\nFAILED (errors=2)\n'
+        self.assertEqual(gs.classify(1, err), 'FAIL_ERROR_IN_TEST')
+        self.assertEqual(gs.classify(1, 'Ran 3 tests\n\nFAILED (errors=2)\n'), 'FAIL_STRUCTURAL')
+        self.assertEqual(gs.classify(1, 'Traceback ...'), 'FAIL_STRUCTURAL')
         self.assertEqual(gs.classify(None, ''), 'TIMEOUT')
 
     def test_a_timeout_is_never_a_kill_and_a_red_baseline_is_not_a_result(self):
         self.assertEqual(gs.decide('PASS', 'FAIL_ASSERTION'), 'KILLED')
-        self.assertEqual(gs.decide('PASS', 'FAIL_ERROR'), 'KILLED')
+        self.assertEqual(gs.decide('PASS', 'FAIL_ERROR_IN_TEST'), 'KILLED')
+        self.assertEqual(gs.decide('PASS', 'FAIL_STRUCTURAL'), 'STRUCTURAL')
         self.assertEqual(gs.decide('PASS', 'PASS'), 'SURVIVED')
         self.assertEqual(gs.decide('PASS', 'TIMEOUT'), 'TIMEOUT')
         self.assertEqual(gs.decide('TIMEOUT', 'FAIL_ASSERTION'), 'TIMEOUT')

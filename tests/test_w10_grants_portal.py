@@ -7,6 +7,7 @@ import tempfile
 import threading
 import unittest
 import uuid
+from udx_ref.sealed_snapshot import sealing_available
 from udx_ref.durable_grants import DurableGrantStore,GrantDenied
 from udx_ref.portal_request import PortalRequest,PortalFlowError
 from udx_ref.authorized_handoff import perform_trusted_handoff
@@ -122,6 +123,7 @@ class DurableGrantTests(unittest.TestCase):
         self.assertNotIn(str(self.file).encode(),data)
         self.assertNotIn(b'NO_PATH_UNTRUSTED_HOST_ONLY',data)
     @unittest.skipUnless(available(),'Linux SCM_CREDENTIALS required')
+    @unittest.skipUnless(sealing_available(), 'W28: the server side needs a sealed snapshot (fcntl seal constants)')
     def test_trusted_positive_transfer_consumes_grant(self):
         # Same-UID fixture for fast unit regression; W10 demo tests distinct UIDs.
         grant=self.store.issue(self.fd,issuer_uid=self.uid,recipient_uid=self.uid)

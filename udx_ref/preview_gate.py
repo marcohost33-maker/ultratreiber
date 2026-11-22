@@ -19,6 +19,16 @@ MAX_SEEN = 4096
 _SAFE = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,95}\Z', re.ASCII)
 CAPABILITY = 'input.pointer.preview'  # mock only; never a physical OS input capability
 
+def _finite_number(value) -> bool:
+    """A finite int or float; an int beyond the float range is not (W28 UDX28-02)."""
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
 class GateError(ValueError):
     pass
 
@@ -116,7 +126,7 @@ class PreviewGate:
 
     def _prune(self):
         now = self._clock()
-        if type(now) not in (int, float) or not math.isfinite(now):
+        if not _finite_number(now):
             self._grants.clear()
             raise GateError('CLOCK_ANOMALY')
         if self._last_now is not None and now < self._last_now:

@@ -12,6 +12,19 @@ import math
 from .portal_boundary import validate_chooser_result
 
 class PortalFlowError(RuntimeError):pass
+
+
+def _finite_number(value) -> bool:
+    """A finite int or float. W28 (UDX28-02): math.isfinite raises OverflowError
+    for an int beyond the float range (e.g. 10**400 or float max + 300 as int);
+    such a value is not finite here, so it is refused typed, never untyped."""
+    if type(value) not in (float, int):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
 _NAME = re.compile(r'^:[0-9]+(?:\.[0-9]+)+$')
 _TOKEN = re.compile(r'^[a-zA-Z0-9_]{16,80}$')
 _HANDLE = re.compile(r'^/org/freedesktop/portal/desktop/request/[a-zA-Z0-9_]+/[a-zA-Z0-9_]+$')
@@ -25,7 +38,7 @@ class PortalRequest:
         start=self._checked_clock()
         self._last_clock=start
         self._deadline=start+ttl_seconds
-        if not math.isfinite(self._deadline):
+        if not _finite_number(self._deadline):
             raise PortalFlowError('BAD_CLOCK')
         self._owner=portal_owner_unique
         self._token='udx_'+secrets.token_hex(16)
@@ -37,7 +50,7 @@ class PortalRequest:
             now=self._clock()
         except Exception as e:
             raise PortalFlowError('CLOCK_FAILED') from e
-        if type(now) not in (float,int) or not math.isfinite(now) or now < 0:
+        if not _finite_number(now) or now < 0:
             raise PortalFlowError('BAD_CLOCK')
         return now
 

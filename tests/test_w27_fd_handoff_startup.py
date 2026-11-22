@@ -7,6 +7,7 @@ start-up time of the child interpreter was charged to the 2 s protocol timeout.
 """
 import json, pathlib, subprocess, sys, time, unittest
 
+from udx_ref.sealed_snapshot import sealing_available
 from udx_ref.fd_handoff import supported
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -56,6 +57,7 @@ class StartupIsNotChargedToTheProtocol(unittest.TestCase):
         finally:
             adopted.close(); a.close(); b.close()
 
+    @unittest.skipUnless(sealing_available(), 'W28: the server side needs a sealed snapshot (fcntl seal constants)')
     def test_child_waits_for_a_parent_that_sends_late(self):
         # Without its own timeout the child dies with BlockingIOError as soon as it
         # looks at the empty queue; the parent then reports PROTOCOL_BrokenPipeError.
@@ -64,6 +66,7 @@ class StartupIsNotChargedToTheProtocol(unittest.TestCase):
         self.assertEqual((out.get('child_exit'), out.get('fixture_only')), (0, True))
         self.assertGreaterEqual(out['phases_ms']['protocol_ms'], 500.0)
 
+    @unittest.skipUnless(sealing_available(), 'W28: the server side needs a sealed snapshot (fcntl seal constants)')
     def test_slow_child_start_is_not_charged_to_the_protocol_timeout(self):
         # 2.3 s start-up > 2.0 s protocol timeout: the pre-W27 parent failed here
         # with "TimeoutError: timed out" in recv_status.

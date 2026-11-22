@@ -8,7 +8,7 @@ it to protect real data or systems.
 
 | Version | Supported |
 |---|---|
-| `main` (current wave W27, 0.27.0) | Best effort: reports are read and triaged |
+| `main` (current wave W28, 0.28.1) | Best effort: reports are read and triaged |
 | older waves / commits | No |
 
 ## Reporting a vulnerability

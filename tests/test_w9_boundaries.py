@@ -7,6 +7,7 @@ import socket
 import tempfile
 import unittest
 import uuid
+from udx_ref.sealed_snapshot import sealing_available
 from udx_ref.credentialed_handoff import (
     available, credentialed_pair, _receive, send_readonly_request, process_one,
     read_verified_reply)
@@ -27,6 +28,7 @@ class CredentialedTests(unittest.TestCase):
         fd=os.open(self.path, os.O_RDONLY)
         try:send_readonly_request(self.a, fd, self.request_id)
         finally:os.close(fd)
+    @unittest.skipUnless(sealing_available(), 'W28: the server side needs a sealed snapshot (fcntl seal constants)')
     def test_valid_message_credentials_and_reply(self):
         self.transfer()
         result=process_one(self.b,expected_sender_uid=os.getuid(),source_owner_uid=os.getuid())
@@ -36,6 +38,7 @@ class CredentialedTests(unittest.TestCase):
         self.transfer()
         with self.assertRaisesRegex(HandoffError,'CREDENTIALS_MISMATCH'):
             process_one(self.b,expected_sender_uid=os.getuid()+1,source_owner_uid=os.getuid())
+    @unittest.skipUnless(sealing_available(), 'W28: the server side needs a sealed snapshot (fcntl seal constants)')
     def test_bad_reply_uid_rejected(self):
         self.transfer();process_one(self.b,expected_sender_uid=os.getuid(),source_owner_uid=os.getuid())
         with self.assertRaisesRegex(HandoffError,'CREDENTIALS_MISMATCH'):
