@@ -37,11 +37,11 @@
    "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_sd_variants_differ_by_exactly_one_mechanism"
   },
   {
-   "name": "W26.2-DK5 falsche Token-Klasse fuer LPAC",
+   "name": "W26.2-DK5 Pruef-Beschreibung ohne ALL RESTRICTED APPLICATION PACKAGES (LPAC nicht unterscheidbar)",
    "datei": "tools/w25_principal_matrix.py",
-   "alt": "TokenIsLessPrivilegedAppContainer = 46",
-   "neu": "TokenIsLessPrivilegedAppContainer = 45",
-   "test": "tests/test_w25_principal_matrix.py::LpacW262::test_launcher_sets_the_opt_out_policy_for_lpac_only"
+   "alt": "PACKAGE_PROBE_SDDL = 'O:SYG:SYD:(A;;0x3;;;WD)(A;;0x1;;;AC)(A;;0x2;;;S-1-15-2-2)'",
+   "neu": "PACKAGE_PROBE_SDDL = 'O:SYG:SYD:(A;;0x3;;;WD)(A;;0x3;;;AC)'",
+   "test": "tests/test_w25_principal_matrix.py::LpacAccessCheckW262::test_probe_descriptor_and_expected_masks"
   },
   {
    "name": "W26.2-DK6 LPAC-Kind muss kein AppContainer sein",
@@ -56,6 +56,20 @@
    "alt": "SD_KINDS = ('production', 'control', 'label_only', 'acace_only', 'rapace_only')",
    "neu": "SD_KINDS = ('production', 'control', 'label_only', 'acace_only')",
    "test": "tests/test_w25_principal_matrix.py::LpacW262::test_every_sd_kind_is_declared_and_used"
+  },
+  {
+   "name": "W26.2-DK8 Gewaehrte Maske (AccessCheck) nicht verlangt",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if pa != PACKAGE_ACCESS.get(principal) or (pa is not None and type(pa) is not int):",
+   "neu": "    if False:",
+   "test": "tests/test_w25_principal_matrix.py::LpacAccessCheckW262::test_mask_must_match_the_principal"
+  },
+  {
+   "name": "W26.2-DK9 LPAC-Flag nicht aus der Maske abgeleitet (immer False) [Quelltext-Pin; nativ: CHILD_LPAC_WRONG]",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "            lpac = package_access == PACKAGE_ACCESS['lpac']",
+   "neu": "            lpac = False",
+   "test": "tests/test_w25_principal_matrix.py::LpacAccessCheckW262::test_launcher_opens_the_child_token_for_duplication"
   }
  ]
 }

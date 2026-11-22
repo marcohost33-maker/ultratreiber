@@ -412,6 +412,11 @@ def _principal_issues(name: str, principal: str, facts, parent: dict, ac_sid) ->
     # would attribute every sandbox case to the wrong principal.
     if facts.get('lpac') is not (principal == 'lpac'):
         issues.append('CHILD_LPAC_WRONG:' + name)
+    # W26.2: the measurement behind the flag. Ordinary AppContainer 0x3 (AC and
+    # S-1-15-2-2), LPAC 0x2 (S-1-15-2-2 only), no value for any other principal.
+    pa = facts.get('package_access')
+    if pa != PACKAGE_ACCESS.get(principal) or (pa is not None and type(pa) is not int):
+        issues.append('CHILD_PACKAGE_ACCESS_WRONG:' + name)
     if principal in APPCONTAINER_PRINCIPALS:
         if facts.get('appcontainer_sid') != ac_sid or ac_sid is None:
             issues.append('CHILD_APPCONTAINER_SID_WRONG:' + name)
@@ -676,6 +681,7 @@ def summary_lines(report) -> list[str]:
         rid = f.get('integrity_rid')
         out.append(f"CASE {name}: rid={rid:#x} " if type(rid) is int else f"CASE {name}: rid=None ")
         out[-1] += (f"appc={f.get('appcontainer')} lpac={f.get('lpac')} restricted={f.get('restricted')} "
+                    f"pkg={f.get('package_access')} c46={f.get('token_class_46')} "
                     f"policy={f.get('mandatory_policy')} uia={f.get('ui_access')} virt={f.get('virtualization')} "
                     f"client_exit={child.get('exit')} open_error={child.get('open_error')} "
                     f"t={child.get('elapsed_s')}s inherit={child.get('inherit')} server={server} "
@@ -776,6 +782,12 @@ def _win():
         'DeriveAppContainerSidFromAppContainerName': fn(u, 'DeriveAppContainerSidFromAppContainerName',
                                                         ctypes.c_long, w.LPCWSTR, ctypes.POINTER(P)),
         'DeleteAppContainerProfile': fn(u, 'DeleteAppContainerProfile', ctypes.c_long, w.LPCWSTR),
+        # W26.2: functional LPAC check (Chromium sandbox CheckLpacToken pattern)
+        'DuplicateToken': fn(a, 'DuplicateToken', B, H, ctypes.c_int, ctypes.POINTER(H)),
+        'ConvertStringSecurityDescriptorToSecurityDescriptorW': fn(
+            a, 'ConvertStringSecurityDescriptorToSecurityDescriptorW', B, w.LPCWSTR, D, ctypes.POINTER(P), P),
+        'AccessCheck': fn(a, 'AccessCheck', B, P, H, D, P, P, ctypes.POINTER(D), ctypes.POINTER(D),
+                          ctypes.POINTER(B)),
     }
     types = {'SID_AND_ATTRIBUTES': SID_AND_ATTRIBUTES, 'TOKEN_MANDATORY_LABEL': TOKEN_MANDATORY_LABEL,
              'SECURITY_CAPABILITIES': SECURITY_CAPABILITIES, 'STARTUPINFOW': STARTUPINFOW,
@@ -788,6 +800,22 @@ TOKEN_ALL_ACCESS = 0xF01FF
 TokenUser, TokenGroups, TokenIntegrityLevel = 1, 2, 25
 TokenIsAppContainer, TokenAppContainerSid = 29, 31
 TokenIsLessPrivilegedAppContainer = 46        # W26.2, winnt.h (mingw-w64 headers)
+# W26.2, measured (CI run 44966241843, Windows Server 2025 hosted runner):
+# GetTokenInformation(class 46) fails with ERROR_INVALID_PARAMETER (87) for every
+# AppContainer token, so the class is recorded for information only. The LPAC
+# property is measured FUNCTIONALLY instead, as the Chromium sandbox does
+# (sandbox/win/src/app_container_test.cc, CheckLpacToken: "We could query for a
+# security attribute but that's undocumented and has the potential to change"):
+# AccessCheck(MAXIMUM_ALLOWED, empty GENERIC_MAPPING) of the child token against
+# owner/group SYSTEM and the DACL below. The first (user/group) pass is satisfied
+# by Everyone; the lowbox pass grants 0x1 through ALL APPLICATION PACKAGES and
+# 0x2 through ALL RESTRICTED APPLICATION PACKAGES. Ordinary AppContainer -> 0x3,
+# LPAC -> 0x2: exactly the group membership ADR-UDX-007 §5 rests on.
+PACKAGE_PROBE_SDDL = 'O:SYG:SYD:(A;;0x3;;;WD)(A;;0x1;;;AC)(A;;0x2;;;S-1-15-2-2)'
+PACKAGE_ACCESS = {'appcontainer': 0x3, 'lpac': 0x2}
+MAXIMUM_ALLOWED = 0x02000000
+SecurityIdentification = 1
+SDDL_REVISION_1 = 1
 # W26: facts the W25.2 / ADR-UDX-007 conclusions rest on, now read from the
 # child token instead of assumed (TOKEN_INFORMATION_CLASS values, winnt.h).
 TokenVirtualizationEnabled, TokenUIAccess, TokenMandatoryPolicy = 24, 26, 27
@@ -845,14 +873,19 @@ class Win:
         abuf = self.token_info(tok, TokenIsAppContainer)
         appc = c.c_uint32.from_buffer(abuf, 0).value
         ac_sid = None
-        lpac = False
+        lpac, package_access, class46 = False, None, None
         if appc:
             sbuf = self.token_info(tok, TokenAppContainerSid)
             p = c.c_void_p.from_buffer(sbuf, 0).value
             ac_sid = self.sid_text(p) if p else None
-            # W26.2: only meaningful for an AppContainer token (DWORD, nonzero = LPAC)
-            pbuf = self.token_info(tok, TokenIsLessPrivilegedAppContainer)
-            lpac = bool(c.c_uint32.from_buffer(pbuf, 0).value)
+            package_access = self.package_access(tok)
+            lpac = package_access == PACKAGE_ACCESS['lpac']
+            # informative only (see TokenIsLessPrivilegedAppContainer above)
+            info46 = c.c_uint32(0)
+            need = self.w.DWORD(0)
+            ok46 = self.api['GetTokenInformation'](tok, TokenIsLessPrivilegedAppContainer, c.byref(info46),
+                                                   c.sizeof(info46), c.byref(need))
+            class46 = info46.value if ok46 else 'error %d' % self.err()
         dword = {}
         for key, klass in (('mandatory_policy', TokenMandatoryPolicy), ('ui_access', TokenUIAccess),
                            ('virtualization', TokenVirtualizationEnabled)):
@@ -860,8 +893,31 @@ class Win:
             dword[key] = c.c_uint32.from_buffer(dbuf, 0).value
         return {'user_sid': user_text, 'integrity_rid': rid, 'appcontainer': bool(appc),
                 'appcontainer_sid': ac_sid, 'restricted': bool(self.api['IsTokenRestricted'](tok)), 'lpac': lpac,
+                'package_access': package_access, 'token_class_46': class46,
                 'mandatory_policy': dword['mandatory_policy'], 'ui_access': bool(dword['ui_access']),
                 'virtualization': bool(dword['virtualization'])}
+
+    def package_access(self, tok) -> int:
+        """W26.2: granted access of ``tok`` (duplicated to an Identification-level
+        impersonation token) against PACKAGE_PROBE_SDDL; 0 if denied. Raises
+        OSError when the check itself cannot be made (fail-closed upstream)."""
+        c, api = self.ctypes, self.api
+        imp = self.w.HANDLE()
+        self.check(api['DuplicateToken'](tok, SecurityIdentification, c.byref(imp)), 'DuplicateToken')
+        sd = c.c_void_p()
+        try:
+            self.check(api['ConvertStringSecurityDescriptorToSecurityDescriptorW'](
+                PACKAGE_PROBE_SDDL, SDDL_REVISION_1, c.byref(sd), None), 'ConvertStringSecurityDescriptor')
+            mapping = (self.w.DWORD * 4)(0, 0, 0, 0)          # GENERIC_MAPPING, all zero
+            privs = c.create_string_buffer(256)
+            plen, granted, status = self.w.DWORD(256), self.w.DWORD(0), self.w.BOOL(False)
+            self.check(api['AccessCheck'](sd, imp, MAXIMUM_ALLOWED, c.byref(mapping), privs, c.byref(plen),
+                                          c.byref(granted), c.byref(status)), 'AccessCheck')
+            return int(granted.value) if status.value else 0
+        finally:
+            if sd.value:
+                api['LocalFree'](sd)
+            api['CloseHandle'](imp)
 
     def process_token(self, hproc, access=TOKEN_QUERY):
         tok = self.w.HANDLE()
@@ -1029,7 +1085,7 @@ class Win:
         reader.start()
         try:
             try:
-                ctok = self.process_token(pi.hProcess)
+                ctok = self.process_token(pi.hProcess, TOKEN_QUERY | TOKEN_DUPLICATE)   # W26.2: AccessCheck
                 try:
                     facts = self.token_facts(ctok)
                 finally:

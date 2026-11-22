@@ -34,6 +34,7 @@ def facts(principal: str) -> dict:
     # no virtualization
     f.update(mandatory_policy=3, ui_access=False, virtualization=False)
     f.setdefault('lpac', False)                  # W26.2: measured for every child
+    f.setdefault('package_access', {'appcontainer': 3, 'lpac': 2}.get(principal))
     return f
 
 
@@ -913,3 +914,42 @@ class LpacW262(unittest.TestCase):
         self.assertEqual(tool.PROCESS_CREATION_ALL_APPLICATION_PACKAGES_OPT_OUT, 1)
         self.assertEqual(tool.TokenIsLessPrivilegedAppContainer, 46)
         self.assertEqual(tool.RAP_SID, 'S-1-15-2-2')
+
+
+class LpacAccessCheckW262(unittest.TestCase):
+    """W26.2, after the first native run: TokenIsLessPrivilegedAppContainer
+    (class 46) returned 87 on the hosted runner, so the LPAC property is measured
+    by an AccessCheck (Chromium CheckLpacToken pattern). The granted mask is a
+    required fact; the class-46 result is informative only."""
+
+    def _issues(self, mutate, mode='standard_account'):
+        r = good_report(mode)
+        mutate(r)
+        return tool.evaluate(r)[1]
+
+    def test_probe_descriptor_and_expected_masks(self):
+        self.assertEqual(tool.PACKAGE_PROBE_SDDL, 'O:SYG:SYD:(A;;0x3;;;WD)(A;;0x1;;;AC)(A;;0x2;;;S-1-15-2-2)')
+        self.assertEqual(tool.PACKAGE_ACCESS, {'appcontainer': 0x3, 'lpac': 0x2})
+        self.assertEqual(tool.MAXIMUM_ALLOWED, 0x02000000)
+        self.assertEqual(tool.SecurityIdentification, 1)
+
+    def test_mask_must_match_the_principal(self):
+        for case, bad in (('ctl_lpac', 3), ('ctl_lpac', 0), ('ctl_appcontainer', 2), ('rap_lpac', None),
+                          ('py_same_token', 3), ('rap_appcontainer', True)):
+            self.assertIn('CHILD_PACKAGE_ACCESS_WRONG:' + case, self._issues(
+                lambda r, case=case, bad=bad: r['cases'][case]['child']['facts'].update(package_access=bad)),
+                (case, bad))
+
+    def test_class_46_is_informative_only(self):
+        def note(r):
+            for c in r['cases'].values():
+                if c['child']['facts'].get('appcontainer'):
+                    c['child']['facts']['token_class_46'] = 'error 87'
+        self.assertEqual(self._issues(note), [])
+
+    def test_launcher_opens_the_child_token_for_duplication(self):
+        src = (ROOT / 'tools' / 'w25_principal_matrix.py').read_text(encoding='utf-8')
+        launch = src[src.index('    def launch('):src.index('def _read_all(')]
+        self.assertIn('self.process_token(pi.hProcess, TOKEN_QUERY | TOKEN_DUPLICATE)', launch)
+        facts = src[src.index('    def token_facts('):src.index('    def package_access(')]
+        self.assertIn('lpac = package_access == PACKAGE_ACCESS[\'lpac\']', facts)
