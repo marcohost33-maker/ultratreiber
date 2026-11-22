@@ -1,4 +1,4 @@
-# UDX W28 – Guard-Sweep v2, Uhrbereich und Siegelkonstanten
+# UDX W28 / W28.1 – Guard-Sweep v2, Uhrbereich und Siegelkonstanten
 
 Datum: 2026-11-21 | Autor: Coworker Research | Status: **RESEARCH / NOT PRODUCTION READY**
 Basis: PR #8, Kopf `a0de743` (W27). Gestapelt als PR #9 (#5 → #6 → #7 → #8 → #9).
@@ -151,8 +151,55 @@ Länge, weit unter `MAX_WIRE`. Lange oder escapende IDs enden vorher in `BAD_ARG
   `False`, Aufruf mit literalem `False`), nicht semantisch.
 - Nicht erfasst: `udx_ref/windows_pipe.py`, C++, die Werkzeuge; Abweisungen über Ausnahmebehandler,
   die nur `return` (ohne Wert) ausführen.
-- Ein Kill durch einen lastabhängig flackernden Test ist vom Sweep nicht zu unterscheiden (einmal
-  beobachtet, siehe §3); Gegenmittel bleibt ein zweiter Lauf.
+- Ein Kill durch einen lastabhängig flackernden Test war in W28 nicht zu unterscheiden (einmal
+  beobachtet, siehe §3); seit W28.1 wird jeder Kill durch Wiederholung bestätigt (§8). Ein Test,
+  der zweimal hintereinander zufällig scheitert, bliebe unerkannt.
 - Die Property-Tests sind deterministisch, kein Hypothesis-Shrinking; ein Gegenbeispiel ausserhalb
   des Korpus ist nicht ausgeschlossen, die Grenzwerte sind analytisch begründet.
 - Keine unabhängige Reproduktion; Zahlen dieses Dokuments sind für Prüfer E0.
+
+## 8. W28.1 – Selbstprüfung und Korrektur (2026-11-22)
+
+**Eigener Prozessfehler:** W28 baute auf PR #8 auf, ohne dessen Review-Threads zu lesen. Dort standen seit
+dem 2026-11-19 zwei **ungelöste Codex-Befunde (P2)**. Beide waren berechtigt; einer betrifft die in §3
+berichteten Zahlen.
+
+1. **Mutanten entfernten Seiteneffekte (Codex, `tools/guard_sweep.py:112`).** Bei
+   `if len(raw) > MAX_STATUS or sock.send(raw) != len(raw): raise …` entfernte der ADMIT-Mutant `if False:`
+   auch das `send`. Positivtests scheiterten und zählten als Kill einer Abweisung, die sie nie prüfen. Jetzt:
+   ADMIT `((cond) and False)`, REFUSE `((cond) or True)`; die Bedingung läuft weiter, nur ihr Ergebnis wird
+   erzwungen. **Folge:** drei in W28 als getötet gezählte Abweisungen waren Überlebende:
+   `fd_handoff.handle_once` und `credentialed_handoff.process_one` (`REPLY_FAILED` bei kurzem `send`) und
+   `core.decode_response` (parsebare, aber nicht-kanonische Request-ID: Grossbuchstaben, `{…}`, `urn:uuid:`,
+   ohne Bindestriche – ohne die Prüfung angenommen). Alle drei haben jetzt einen Negativtest
+   (`tests/test_w28_1_side_effect_survivors.py`); jeder tötet seinen Mutanten (einzeln geprüft).
+2. **Lastwerkzeug (Codex, `tools/w27_fd_handoff_load.py:106`).** Brenner-Prozesse wurden vor dem
+   `try/finally` gestartet; ein Teilfehlschlag liess Endlosschleifen zurück. Jetzt im geschützten Bereich;
+   Test mit scheiterndem dritten Start (alt rot, neu grün).
+3. **Kill-Bestätigung (neu, nach Shi, Bell, Marinov, ISSTA 2019).** Jeder Kill wird bestätigt, indem die
+   fehlgeschlagenen Tests allein gegen denselben Mutanten erneut laufen; reproduziert er nicht, gilt er als
+   `UNRELIABLE` (Nicht-Kill, braucht einen Pin). Das schliesst die in §3 dokumentierte Grenze (Schein-Kill
+   durch einen unter Last flackernden Test). Ein synthetischer Test, der nur beim zweiten Lauf scheitert,
+   ergibt nachweislich `UNRELIABLE`.
+4. **UDX28-03 (gleiche Klasse wie UDX28-02).** `DurableGrantStore.issue` nahm jede nicht-negative int-UID an
+   (`2**63` → `OverflowError` aus SQLite statt `BAD_PRINCIPAL`); `claim` prüfte den Empfänger weder auf Typ
+   noch auf Bereich und verglich mit `==`, sodass `1000.0` und `True` (für uid 1) passten. Jetzt gilt ein
+   exakter `int` in `0 … 2**32-2` (`uid_t`, ohne den Platzhalter `(uid_t)-1`). Der Aussteller bleibt beim
+   W27-Vertrag (`BAD_OWNER` über die Besitzerprüfung des Deskriptors). Der erste Fix hatte diesen Vertrag
+   gebrochen; der Sweep meldete das korrekt als `BASELINE_RED`, statt Zahlen zu liefern.
+
+| | W28 (berichtet) | W28.1 (korrigiert) |
+|---|---|---|
+| Abweisungen | 197 | 198 (+ Empfängerprüfung in `claim`) |
+| Mutanten | 374 | 376 |
+| getötet | 363 (davon 3 Schein-Kills durch entfernte Seiteneffekte) | 365, **alle 365 durch Wiederholung bestätigt** |
+| Assertion / Fehler im Test | 279 / 84 | 282 / 83 |
+| unzuverlässig / strukturell | nicht geprüft / 0 | 0 / 0 |
+| gepinnt | 11 | 11 (unverändert, keiner veraltet) |
+
+Laufzeit lokal 9 min (4 CPUs, `--jobs 4`), inklusive Bestätigungsläufen. DK: `w28_dk_spec.json` jetzt 23/23
+(DK17–DK23 für W28.1). DK19 überlebte zunächst – kein Test prüfte, dass `UNRELIABLE` in der Ratsche als
+Nicht-Kill zählt; die Mengenbildung ist jetzt eine getestete Funktion (`not_killed`).
+
+**Lehre:** Vor dem Aufbau auf einem PR dessen offene Review-Threads lesen, auch die von Bots. Ein grüner
+CI-Lauf sagt nichts über offene Befunde.

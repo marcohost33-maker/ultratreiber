@@ -1,5 +1,5 @@
 {
- "tool": "tools/guard_sweep.py (v2, W28)",
+ "tool": "tools/guard_sweep.py (v2, W28.1)",
  "environment": "Linux 6.18, 4 CPUs, unprivileged user, CPython 3.13.18 (GCC build), Node 22; --jobs 3-4; evidence level E2 local, not independently reproduced",
  "runs": {
   "w27_tests_sweep_v1": {
@@ -223,7 +223,53 @@
    "new_survivors": [],
    "stale_baseline": [],
    "missing_witnesses": [],
-   "note": "Final W28 tree. An intermediate run (between the two) found two more untested refusals: core.decode_response handler (counted killed in the first v2 run only through a load-flaky IPC test) and the PreviewGate type check of the clock; both now tested."
+   "note": "Final W28 tree. An intermediate run (between the two) found two more untested refusals: core.decode_response handler (counted killed in the first v2 run only through a load-flaky IPC test) and the PreviewGate type check of the clock; both now tested. SUPERSEDED by w28_1_final: three of its kills came from mutants that removed a side effect of the condition."
+  },
+  "w28_1_final": {
+   "python": "3.13.18",
+   "platform": "linux",
+   "inventory": {
+    "handler": 20,
+    "raise": 165,
+    "return": 13
+   },
+   "mutants_by_form": {
+    "handler": 20,
+    "raise": 330,
+    "return": 26
+   },
+   "counts": {
+    "KILLED": 365,
+    "SURVIVED": 11
+   },
+   "kill_modes": {
+    "ADMIT ASSERTION": 143,
+    "ADMIT ERROR_IN_TEST": 24,
+    "REFUSE ASSERTION": 137,
+    "REFUSE ERROR_IN_TEST": 41,
+    "UNTYPED ASSERTION": 2,
+    "UNTYPED ERROR_IN_TEST": 18
+   },
+   "confirmed_kills": 365,
+   "unreliable": 0,
+   "not_killed": [
+    "ADMIT udx_ref/credentialed_handoff.py|_receive|HandoffError:CLOEXEC_REQUIRED|667c1622bf29",
+    "ADMIT udx_ref/credentialed_handoff.py|send_readonly_request|HandoffError:PARTIAL_SEND|a0823fa3daad",
+    "ADMIT udx_ref/credentialed_handoff.py|send_readonly_request|HandoffError:SIZE_LIMIT|7159771efed6",
+    "ADMIT udx_ref/fd_handoff.py|_recv_fd|HandoffError:CLOEXEC_REQUIRED|437c8398d5f9",
+    "ADMIT udx_ref/fd_handoff.py|send_approved_fd|HandoffError:PARTIAL_SEND|a5152e991b71",
+    "ADMIT udx_ref/fd_handoff.py|send_approved_fd|HandoffError:SIZE_LIMIT|ea184ba04978",
+    "ADMIT udx_ref/fd_reader.py|ApprovedFdReader.read|ReadGuardError:RESOURCE_CHANGED|ae881f97603d",
+    "ADMIT udx_ref/fd_reader.py|ApprovedFdReader.read|ReadGuardError:SIZE_LIMIT|3febd9ead511",
+    "ADMIT udx_ref/fd_reader.py|ApprovedFdReader.read|ReadGuardError:SIZE_LIMIT|6c649be96220",
+    "ADMIT udx_ref/linux_ipc.py|peer_identity|Refusal:UNAUTHENTICATED_PEER|b208ec750c25",
+    "ADMIT udx_ref/linux_ipc.py|peer_identity|Refusal:UNAUTHENTICATED_PEER|c03736f44604"
+   ],
+   "ok": true,
+   "new_survivors": [],
+   "stale_baseline": [],
+   "wall_s_local": 549,
+   "note": "W28.1: side-effect preserving mutants ((cond) and False / (cond) or True); every kill confirmed by re-running its failing tests alone against the same mutant."
   }
  }
 }
