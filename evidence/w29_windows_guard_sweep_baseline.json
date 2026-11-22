@@ -1,0 +1,10 @@
+{
+ "tool": "guard_sweep",
+ "wave": "W29",
+ "sweep_version": 2,
+ "modules": [
+  "udx_ref/windows_pipe.py"
+ ],
+ "note": "Discovery placeholder: filled from the first windows-latest run.",
+ "accepted_survivors": []
+}
