@@ -33,6 +33,7 @@ def facts(principal: str) -> dict:
     # W26: token policy NO_WRITE_UP|NEW_PROCESS_MIN (3, the default), no UIAccess,
     # no virtualization
     f.update(mandatory_policy=3, ui_access=False, virtualization=False)
+    f.setdefault('lpac', False)                  # W26.2: measured for every child
     return f
 
 
@@ -48,6 +49,8 @@ def _facts(principal: str) -> dict:
                        'appcontainer_sid': None, 'restricted': True},
         'medium_il': {'user_sid': USER, 'integrity_rid': 0x2000, 'appcontainer': False,
                       'appcontainer_sid': None, 'restricted': False},
+        'lpac': {'user_sid': USER, 'integrity_rid': 0x1000, 'appcontainer': True,
+                 'appcontainer_sid': AC, 'restricted': False, 'lpac': True},
     }[principal]
 
 
@@ -328,6 +331,8 @@ class HardeningW251(unittest.TestCase):
         self.assertEqual(v['label_only'], prod.replace('(ML;;NWNR;;;ME)', '(ML;;NWNX;;;ME)'))
         self.assertEqual(v['acace_only'], prod.replace(')S:', ')(A;;0x12008b;;;AC)S:'))
         self.assertEqual(v['control'], v['acace_only'].replace('(ML;;NWNR;;;ME)', '(ML;;NWNX;;;ME)'))
+        # W26.2: ALL RESTRICTED APPLICATION PACKAGES only, production label kept
+        self.assertEqual(v['rapace_only'], prod.replace(')S:', ')(A;;0x12008b;;;S-1-15-2-2)S:'))
         # W25.2: every variant keeps an explicit Medium label (the clients require it)
         for k in tool.SD_KINDS:
             self.assertTrue(v[k].endswith(';;;ME)'), k)
@@ -824,3 +829,87 @@ class TokenPremisesW26(unittest.TestCase):
         self.assertIn(' owner=user ', lines['SQUAT squat_medium_il_production'])
         self.assertIn(' owner=none ', lines['SQUAT squat_low_il_medium_label'])
         self.assertNotIn('owner_is_user', '\n'.join(lines.values()))
+
+
+class LpacW262(unittest.TestCase):
+    """W26.2 (ADR-UDX-007 §5, UT-A7-03): a less privileged AppContainer is a
+    measured principal, not an assumption. Its LPAC flag is read from the child
+    token; the S-1-15-2-2 descriptor and the AC control separate it from an
+    ordinary AppContainer by group membership alone."""
+
+    def _issues(self, mutate, mode='elevated_admin'):
+        r = good_report(mode)
+        mutate(r)
+        return tool.evaluate(r)[1]
+
+    def test_lpac_cases_exist_in_both_modes(self):
+        for mode in tool.MODES:
+            exp = tool.expected_cases(mode)
+            for name in ('py_lpac', 'cpp_lpac', 'ctl_lpac', 'rap_lpac', 'rap_appcontainer'):
+                self.assertIn(name, exp, (mode, name))
+            self.assertEqual(exp['ctl_lpac'][2:5], ('lpac', 1, 5))          # refused even with the AC ACE
+            self.assertEqual(exp['rap_lpac'][1], 'rapace_only')
+        std, adm = tool.expected_cases('standard_account'), tool.expected_cases('elevated_admin')
+        # Medium parent: the AC control admits an ordinary AppContainer but not an LPAC
+        self.assertEqual(std['ctl_appcontainer'][3:5], (7, None))
+        self.assertEqual(std['ctl_lpac'][3:5], (1, 5))
+        # S-1-15-2-2 admits both; the label decides (Medium) or the open is refused (High)
+        for name in ('rap_lpac', 'rap_appcontainer'):
+            self.assertEqual(std[name][3:5], (7, None))
+            self.assertEqual(adm[name][3:5], (1, 5))
+
+    def test_complete_reports_pass(self):
+        for mode in tool.MODES:
+            self.assertEqual(tool.evaluate(good_report(mode)), ('PRINCIPAL_MATRIX_OK', []), mode)
+
+    def test_lpac_flag_must_be_measured_and_right(self):
+        self.assertIn('CHILD_LPAC_WRONG:ctl_lpac', self._issues(
+            lambda r: r['cases']['ctl_lpac']['child']['facts'].update(lpac=False)))
+        self.assertIn('CHILD_LPAC_WRONG:ctl_appcontainer', self._issues(
+            lambda r: r['cases']['ctl_appcontainer']['child']['facts'].update(lpac=True)))
+        self.assertIn('CHILD_LPAC_WRONG:py_same_token', self._issues(
+            lambda r: r['cases']['py_same_token']['child']['facts'].pop('lpac')))
+
+    def test_lpac_must_be_an_appcontainer_of_this_profile(self):
+        self.assertIn('CHILD_APPCONTAINER_SID_WRONG:rap_lpac', self._issues(
+            lambda r: r['cases']['rap_lpac']['child']['facts'].update(appcontainer_sid='S-1-15-2-9')))
+        self.assertIn('CHILD_APPCONTAINER_WRONG:py_lpac', self._issues(
+            lambda r: r['cases']['py_lpac']['child']['facts'].update(appcontainer=False)))
+        self.assertIn('CHILD_INTEGRITY_WRONG:cpp_lpac', self._issues(
+            lambda r: r['cases']['cpp_lpac']['child']['facts'].update(integrity_rid=0x2000)))
+
+    def test_ctl_lpac_that_opens_blocks(self):
+        # An LPAC that passes the AC ACE would mean it is not an LPAC (or the
+        # kernel treats AC differently than documented): never green.
+        def opened(r):
+            r['cases']['ctl_lpac']['child'].update(exit=7, open_error=None)
+        issues = self._issues(opened, mode='standard_account')
+        self.assertIn('CLIENT_EXIT_WRONG:ctl_lpac', issues)
+        self.assertIn('CLIENT_OPEN_ERROR_WRONG:ctl_lpac', issues)
+
+    def test_rapace_sd_must_be_the_declared_one(self):
+        self.assertIn('SERVER_SD_NOT_THE_DECLARED_ONE:rap_lpac', self._issues(
+            lambda r: r['cases']['rap_lpac'].update(server_sddl=r['sddl']['control'])))
+        self.assertIn('SD_VARIANT_DRIFT:rapace_only', self._issues(
+            lambda r: r['sddl'].update(rapace_only=r['sddl']['acace_only'])))
+
+    def test_every_sd_kind_is_declared_and_used(self):
+        # A case naming an undeclared variant would only fail at run time on
+        # Windows; a declared but unused variant is a dead harness descriptor.
+        used = {c[1] for mode in tool.MODES for c in tool.expected_cases(mode).values()}
+        self.assertEqual(used, set(tool.SD_KINDS))
+        for kind in tool.SD_KINDS:
+            tool.sd_variant(tool.production_sddl(USER), kind)          # derivable for Medium
+            tool.sd_variant(tool.production_sddl(USER, HIGH), kind)    # and for High
+
+    def test_launcher_sets_the_opt_out_policy_for_lpac_only(self):
+        src = (ROOT / 'tools' / 'w25_principal_matrix.py').read_text(encoding='utf-8')
+        launch = src[src.index('    def launch('):src.index('def _read_all(')]
+        self.assertIn("if principal == 'lpac':", launch)
+        self.assertIn('PROC_THREAD_ATTRIBUTE_ALL_APPLICATION_PACKAGES_POLICY', launch)
+        self.assertIn("n_attr = {'appcontainer': 2, 'lpac': 3}.get(principal, 1)", launch)
+        # winbase.h / winnt.h values (mingw-w64 headers, checked 2026-11-22)
+        self.assertEqual(tool.PROC_THREAD_ATTRIBUTE_ALL_APPLICATION_PACKAGES_POLICY, 15 | 0x20000)
+        self.assertEqual(tool.PROCESS_CREATION_ALL_APPLICATION_PACKAGES_OPT_OUT, 1)
+        self.assertEqual(tool.TokenIsLessPrivilegedAppContainer, 46)
+        self.assertEqual(tool.RAP_SID, 'S-1-15-2-2')

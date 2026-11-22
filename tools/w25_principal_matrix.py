@@ -76,6 +76,12 @@ CHILD_LIMIT_S = 15.0            # a client child must end on its own within this
 AC_NAME_PREFIX = 'udx.w25.probe.'
 PRODUCTION_LABEL = 'S:(ML;;NWNR;;;ME)'
 AC_ACE = '(A;;0x12008b;;;AC)'   # ALL APPLICATION PACKAGES, same mask as every production ACE
+# W26.2 (ADR-UDX-007 §5, UT-A7-03): ALL RESTRICTED APPLICATION PACKAGES. A less
+# privileged AppContainer (LPAC) is NOT a member of AC (S-1-15-2-1); access must
+# be granted to S-1-15-2-2 (both ordinary AppContainers and LPAC are members) or
+# to the package SID. SDDL has no alias for it, the SID is written out.
+RAP_SID = 'S-1-15-2-2'
+RAP_ACE = '(A;;0x12008b;;;' + RAP_SID + ')'
 # W25.2: since the clients require an explicit label >= Medium, the harness can no
 # longer open the door for Low clients by LOWERING the label (the client refuses
 # a Low-labelled pipe before writing, measured in CI run 42605717757). It keeps
@@ -108,7 +114,14 @@ PRODUCTION_LABELS = {MEDIUM_RID: PRODUCTION_LABEL, HIGH_RID: 'S:(ML;;NWNR;;;HI)'
 OPEN_LABELS = {MEDIUM_RID: OPEN_LABEL, HIGH_RID: 'S:(ML;;NWNX;;;HI)'}
 # W26 (UT-A7-01): medium_il = the same duplicate lowered to Medium (S-1-16-8192).
 # Only meaningful under the elevated parent (a Medium parent's same_token is Medium).
-PRINCIPALS = ('same_token', 'low_il', 'appcontainer', 'restricted', 'medium_il')
+PRINCIPALS = ('same_token', 'low_il', 'appcontainer', 'restricted', 'medium_il', 'lpac')
+# W26.2: lpac = the same AppContainer profile, started with
+# PROC_THREAD_ATTRIBUTE_ALL_APPLICATION_PACKAGES_POLICY = OPT_OUT (winbase.h:
+# ProcThreadAttributeAllApplicationPackagesPolicy = 15, input attribute -> 0x2000F;
+# PROCESS_CREATION_ALL_APPLICATION_PACKAGES_OPT_OUT = 0x01; checked against the
+# mingw-w64 headers 2026-11-22). The token fact TokenIsLessPrivilegedAppContainer
+# (TOKEN_INFORMATION_CLASS 46, winnt.h) must confirm it before the child runs.
+APPCONTAINER_PRINCIPALS = ('appcontainer', 'lpac')
 LOWERED_LABELS = {'low_il': 'S-1-16-4096', 'medium_il': 'S-1-16-8192'}
 MODES = ('elevated_admin', 'standard_account')
 INHERIT = 'handle_list:1'       # W25.1: the child inherits exactly its stdout/stderr pipe
@@ -122,7 +135,10 @@ INHERIT = 'handle_list:1'       # W25.1: the child inherits exactly its stdout/s
 #               <= Medium and relies on the AppContainer DACL check (Forshaw,
 #               Windows Security Internals, lowbox access check). The W25.1
 #               hypothesis "each mechanism alone suffices" was falsified.
-SD_KINDS = ('production', 'control', 'label_only', 'acace_only')
+SD_KINDS = ('production', 'control', 'label_only', 'acace_only', 'rapace_only')
+# W26.2 rapace_only: + ALL RESTRICTED APPLICATION PACKAGES ACE, production label
+# kept. It separates the two sandbox kinds by group membership alone: an ordinary
+# AppContainer is a member of both AC and S-1-15-2-2, an LPAC only of S-1-15-2-2.
 
 # name: (server, sd, principal, client_exit, open_error, server expectation)
 # server expectation: python -> (verdict, reason, identified_user: bool)
@@ -161,6 +177,20 @@ EXPECTED = {
     # the restricted flag was the ONLY failing fact (identity, level, IL, session ok).
     'cpp_restricted':  ('cpp', 'production', 'restricted', EXIT_BAD_RESPONSE, None,
                         (EXIT_DENIED, {'restricted': 1, 'appc': 0, 'session_ok': 1, 'sid_ok': 1})),
+    # W26.2 (ADR-UDX-007 §5): less privileged AppContainer. PREDICTION until the
+    # first CI run measures it: the production DACL has no AC, no S-1-15-2-2 and
+    # no package ACE, so the open is refused (5) by both servers, as for an
+    # ordinary AppContainer.
+    'py_lpac':         ('python', 'production', 'lpac', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
+                        ('DENIED', 'CONNECT_TIMEOUT', False)),
+    'cpp_lpac':        ('cpp', 'production', 'lpac', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
+                        (EXIT_TIMEOUT, None)),
+    # The decisive difference to an ordinary AppContainer: the control SD grants
+    # AC (ALL APPLICATION PACKAGES). An LPAC is not a member of AC, so the open is
+    # refused in BOTH parent modes, while ctl_appcontainer opens under a Medium
+    # parent (then refused by the label, exit 7). PREDICTION.
+    'ctl_lpac':        ('python', 'control', 'lpac', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
+                        ('DENIED', 'CONNECT_TIMEOUT', False)),
 }
 
 
@@ -232,11 +262,23 @@ EXPECTED_BY_MODE = {
                              ('DENIED', LABEL_REFUSAL_SERVER_REASONS, False)),
         'ace_appcontainer': ('python', 'acace_only', 'appcontainer', EXIT_PIPE_LABEL, None,
                              ('DENIED', LABEL_REFUSAL_SERVER_REASONS, False)),
+        # W26.2, PREDICTION: S-1-15-2-2 admits both sandbox kinds; the Medium
+        # label does not stop a lowbox token (measured W25.1 for AC), so both
+        # open and the C++ client refuses the label (Low != ME), no byte.
+        'rap_appcontainer': ('python', 'rapace_only', 'appcontainer', EXIT_PIPE_LABEL, None,
+                             ('DENIED', LABEL_REFUSAL_SERVER_REASONS, False)),
+        'rap_lpac':         ('python', 'rapace_only', 'lpac', EXIT_PIPE_LABEL, None,
+                             ('DENIED', LABEL_REFUSAL_SERVER_REASONS, False)),
     },
     'elevated_admin': {
         'ctl_appcontainer': ('python', 'control', 'appcontainer', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
                              ('DENIED', 'CONNECT_TIMEOUT', False)),
         'ace_appcontainer': ('python', 'acace_only', 'appcontainer', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
+                             ('DENIED', 'CONNECT_TIMEOUT', False)),
+        # W26.2, PREDICTION: High label, refused at open as for ace_appcontainer.
+        'rap_appcontainer': ('python', 'rapace_only', 'appcontainer', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
+                             ('DENIED', 'CONNECT_TIMEOUT', False)),
+        'rap_lpac':         ('python', 'rapace_only', 'lpac', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,
                              ('DENIED', 'CONNECT_TIMEOUT', False)),
         # W26 (UT-A7-01, first half): a Medium process of the SAME user against the
         # elevated (High) production server. ADR-UDX-007 predicts the refusal at OPEN
@@ -285,7 +327,8 @@ def sd_variant(production: str, kind: str) -> str:
     return {'production': production,
             'control': body + AC_ACE + open_label,
             'label_only': body + open_label,
-            'acace_only': body + AC_ACE + label}[kind]
+            'acace_only': body + AC_ACE + label,
+            'rapace_only': body + RAP_ACE + label}[kind]
 
 
 def control_sddl(production: str) -> str:
@@ -344,6 +387,7 @@ def _principal_issues(name: str, principal: str, facts, parent: dict, ac_sid) ->
         'same_token': (parent.get('integrity_rid'), False, False),
         'low_il': (LOW_RID, False, False),
         'appcontainer': (LOW_RID, True, False),
+        'lpac': (LOW_RID, True, False),
         'restricted': (parent.get('integrity_rid'), False, True),
         'medium_il': (MEDIUM_RID, False, False),
     }[principal]
@@ -363,7 +407,12 @@ def _principal_issues(name: str, principal: str, facts, parent: dict, ac_sid) ->
             issues.append('CHILD_NO_WRITE_UP_POLICY_MISSING:' + name)
     if facts.get('ui_access') is not False or facts.get('virtualization') is not False:
         issues.append('CHILD_UIACCESS_OR_VIRTUALIZATION:' + name)
-    if principal == 'appcontainer':
+    # W26.2: the LPAC flag is a measured token fact for every principal: true for
+    # lpac only. An ordinary AppContainer that came out as LPAC (or the reverse)
+    # would attribute every sandbox case to the wrong principal.
+    if facts.get('lpac') is not (principal == 'lpac'):
+        issues.append('CHILD_LPAC_WRONG:' + name)
+    if principal in APPCONTAINER_PRINCIPALS:
         if facts.get('appcontainer_sid') != ac_sid or ac_sid is None:
             issues.append('CHILD_APPCONTAINER_SID_WRONG:' + name)
     elif facts.get('appcontainer_sid') is not None:
@@ -626,7 +675,7 @@ def summary_lines(report) -> list[str]:
         server = srv.get('exit') if 'exit' in srv else f"{srv.get('verdict')}/{srv.get('reason')}"
         rid = f.get('integrity_rid')
         out.append(f"CASE {name}: rid={rid:#x} " if type(rid) is int else f"CASE {name}: rid=None ")
-        out[-1] += (f"appc={f.get('appcontainer')} restricted={f.get('restricted')} "
+        out[-1] += (f"appc={f.get('appcontainer')} lpac={f.get('lpac')} restricted={f.get('restricted')} "
                     f"policy={f.get('mandatory_policy')} uia={f.get('ui_access')} virt={f.get('virtualization')} "
                     f"client_exit={child.get('exit')} open_error={child.get('open_error')} "
                     f"t={child.get('elapsed_s')}s inherit={child.get('inherit')} server={server} "
@@ -738,6 +787,7 @@ TOKEN_ASSIGN_PRIMARY, TOKEN_DUPLICATE, TOKEN_QUERY, TOKEN_ADJUST_DEFAULT = 0x1, 
 TOKEN_ALL_ACCESS = 0xF01FF
 TokenUser, TokenGroups, TokenIntegrityLevel = 1, 2, 25
 TokenIsAppContainer, TokenAppContainerSid = 29, 31
+TokenIsLessPrivilegedAppContainer = 46        # W26.2, winnt.h (mingw-w64 headers)
 # W26: facts the W25.2 / ADR-UDX-007 conclusions rest on, now read from the
 # child token instead of assumed (TOKEN_INFORMATION_CLASS values, winnt.h).
 TokenVirtualizationEnabled, TokenUIAccess, TokenMandatoryPolicy = 24, 26, 27
@@ -748,6 +798,8 @@ SE_GROUP_INTEGRITY, SE_GROUP_INTEGRITY_ENABLED = 0x20, 0x40
 CREATE_SUSPENDED, CREATE_NO_WINDOW, EXTENDED_STARTUPINFO_PRESENT = 0x4, 0x08000000, 0x80000
 STARTF_USESTDHANDLES = 0x100
 PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES = 0x00020009
+PROC_THREAD_ATTRIBUTE_ALL_APPLICATION_PACKAGES_POLICY = 0x0002000F
+PROCESS_CREATION_ALL_APPLICATION_PACKAGES_OPT_OUT = 0x01
 PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x00020002
 ADMINISTRATORS_SID = 'S-1-5-32-544'
 WAIT_OBJECT_0 = 0
@@ -793,17 +845,21 @@ class Win:
         abuf = self.token_info(tok, TokenIsAppContainer)
         appc = c.c_uint32.from_buffer(abuf, 0).value
         ac_sid = None
+        lpac = False
         if appc:
             sbuf = self.token_info(tok, TokenAppContainerSid)
             p = c.c_void_p.from_buffer(sbuf, 0).value
             ac_sid = self.sid_text(p) if p else None
+            # W26.2: only meaningful for an AppContainer token (DWORD, nonzero = LPAC)
+            pbuf = self.token_info(tok, TokenIsLessPrivilegedAppContainer)
+            lpac = bool(c.c_uint32.from_buffer(pbuf, 0).value)
         dword = {}
         for key, klass in (('mandatory_policy', TokenMandatoryPolicy), ('ui_access', TokenUIAccess),
                            ('virtualization', TokenVirtualizationEnabled)):
             dbuf = self.token_info(tok, klass)
             dword[key] = c.c_uint32.from_buffer(dbuf, 0).value
         return {'user_sid': user_text, 'integrity_rid': rid, 'appcontainer': bool(appc),
-                'appcontainer_sid': ac_sid, 'restricted': bool(self.api['IsTokenRestricted'](tok)),
+                'appcontainer_sid': ac_sid, 'restricted': bool(self.api['IsTokenRestricted'](tok)), 'lpac': lpac,
                 'mandatory_policy': dword['mandatory_policy'], 'ui_access': bool(dword['ui_access']),
                 'virtualization': bool(dword['virtualization'])}
 
@@ -921,7 +977,7 @@ class Win:
         # UpdateProcThreadAttribute; same pattern as CPython subprocess/Go).
         handles = (self.w.HANDLE * 1)(hw)
         try:
-            n_attr = 2 if principal == 'appcontainer' else 1
+            n_attr = {'appcontainer': 2, 'lpac': 3}.get(principal, 1)
             siex = self.t['STARTUPINFOEXW']()
             si = siex.StartupInfo
             si.cb = c.sizeof(siex)
@@ -935,18 +991,25 @@ class Win:
             self.check(api['UpdateProcThreadAttribute'](attr, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, handles,
                                                         c.sizeof(handles), None, None),
                        'UpdateProcThreadAttribute(HANDLE_LIST)')
-            if principal == 'appcontainer':
+            if principal in APPCONTAINER_PRINCIPALS:
                 caps = self.t['SECURITY_CAPABILITIES']()
                 caps.AppContainerSid, caps.Capabilities, caps.CapabilityCount = ac_psid, None, 0
                 self._caps = caps
                 self.check(api['UpdateProcThreadAttribute'](attr, 0, PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
                                                             c.byref(caps), c.sizeof(caps), None, None),
                            'UpdateProcThreadAttribute(SECURITY_CAPABILITIES)')
+            if principal == 'lpac':
+                # The value must outlive CreateProcessW (the list stores a pointer).
+                self._lpac_policy = self.w.DWORD(PROCESS_CREATION_ALL_APPLICATION_PACKAGES_OPT_OUT)
+                self.check(api['UpdateProcThreadAttribute'](
+                    attr, 0, PROC_THREAD_ATTRIBUTE_ALL_APPLICATION_PACKAGES_POLICY, c.byref(self._lpac_policy),
+                    c.sizeof(self._lpac_policy), None, None),
+                    'UpdateProcThreadAttribute(ALL_APPLICATION_PACKAGES_POLICY)')
             siex.lpAttributeList = c.addressof(attr)
-            if principal == 'appcontainer':
+            if principal in APPCONTAINER_PRINCIPALS:
                 ok = api['CreateProcessW'](argv[0], cmd, None, None, True, flags, None, cwd,
                                            c.byref(siex), c.byref(pi))
-                self.check(ok, 'CreateProcessW(AppContainer)')
+                self.check(ok, 'CreateProcessW(' + principal + ')')
             else:
                 token = self.primary_token(principal)
                 ok = api['CreateProcessAsUserW'](token, argv[0], cmd, None, None, True, flags, None, cwd,

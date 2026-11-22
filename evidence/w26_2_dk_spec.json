@@ -1,0 +1,61 @@
+{
+ "repo": ".",
+ "test_befehl": [
+  "python",
+  "-m",
+  "unittest"
+ ],
+ "timeout_s": 120,
+ "hinweis": "W26.2 LPAC-Prinzipal (ADR-UDX-007 §5, UT-A7-03): portable Diskriminierung des Verdikts; Lauf mit tools/dk_runner.py. Native Belege: CI-Job windows-principal-matrix, CASE-Zeilen mit lpac=.",
+ "faelle": [
+  {
+   "name": "W26.2-DK1 LPAC-Flag des Kindes nicht geprueft",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    if facts.get('lpac') is not (principal == 'lpac'):",
+   "neu": "    if False:",
+   "test": "tests/test_w25_principal_matrix.py::LpacW262::test_lpac_flag_must_be_measured_and_right"
+  },
+  {
+   "name": "W26.2-DK2 ctl_lpac als 'oeffnet wie AppContainer' erwartet",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "    'ctl_lpac':        ('python', 'control', 'lpac', EXIT_OPEN_FAILED, ERROR_ACCESS_DENIED,",
+   "neu": "    'ctl_lpac':        ('python', 'control', 'lpac', EXIT_PIPE_LABEL, None,",
+   "test": "tests/test_w25_principal_matrix.py::LpacW262::test_lpac_cases_exist_in_both_modes"
+  },
+  {
+   "name": "W26.2-DK3 Launcher setzt das Opt-out nicht (gewoehnlicher AppContainer statt LPAC) [Quelltext-Pin]",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "            if principal == 'lpac':\n",
+   "neu": "            if False:\n",
+   "test": "tests/test_w25_principal_matrix.py::LpacW262::test_launcher_sets_the_opt_out_policy_for_lpac_only"
+  },
+  {
+   "name": "W26.2-DK4 rapace_only gewaehrt AC statt S-1-15-2-2",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "            'rapace_only': body + RAP_ACE + label}[kind]",
+   "neu": "            'rapace_only': body + AC_ACE + label}[kind]",
+   "test": "tests/test_w25_principal_matrix.py::HardeningW251::test_sd_variants_differ_by_exactly_one_mechanism"
+  },
+  {
+   "name": "W26.2-DK5 falsche Token-Klasse fuer LPAC",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "TokenIsLessPrivilegedAppContainer = 46",
+   "neu": "TokenIsLessPrivilegedAppContainer = 45",
+   "test": "tests/test_w25_principal_matrix.py::LpacW262::test_launcher_sets_the_opt_out_policy_for_lpac_only"
+  },
+  {
+   "name": "W26.2-DK6 LPAC-Kind muss kein AppContainer sein",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "        'lpac': (LOW_RID, True, False),",
+   "neu": "        'lpac': (LOW_RID, False, False),",
+   "test": "tests/test_w25_principal_matrix.py::LpacW262::test_complete_reports_pass"
+  },
+  {
+   "name": "W26.2-DK7 SD-Satz ohne rapace_only (Variante faellt still weg)",
+   "datei": "tools/w25_principal_matrix.py",
+   "alt": "SD_KINDS = ('production', 'control', 'label_only', 'acace_only', 'rapace_only')",
+   "neu": "SD_KINDS = ('production', 'control', 'label_only', 'acace_only')",
+   "test": "tests/test_w25_principal_matrix.py::LpacW262::test_every_sd_kind_is_declared_and_used"
+  }
+ ]
+}
