@@ -98,6 +98,43 @@ vor dem Abbruch (2,5 s); ein Test pinnt diese Abstände an die Konstanten.
 - GetOverlappedResultEx: https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-getoverlappedresultex
 - TerminateProcess: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess
 
-## CI-Lauf
+## CI-Lauf (nativ, 2026-11-22)
 
-Ausstehend.
+GitHub Actions Lauf [44966956558](https://github.com/marcohost33-maker/ultratreiber/actions/runs/44966956558),
+PR #12, Kopf `885ffa1`, gemessen auf dem Merge-Commit `2f159a4` mit `main` `92282c3`: **9/9 Jobs grün**
+(Suiten Ubuntu/Windows × Python 3.13/3.14 inkl. DK-Specs mit W30, nativer Collector,
+Konto-Matrix, Principal-Matrix, Guard-Sweep, `cpp-candidate`).
+
+`cpp-candidate`, Schritt W30 (Windows Server 2025 10.0.26100, erhöhter Administrator,
+Python 3.13.17): Compiler `Microsoft (R) C/C++ Optimizing Compiler Version 19.52.37029 for x64`,
+`/nologo /W4 /WX /EHsc /std:c++17`, Verdikt **`CANCEL_RACE_OK`**, 8/8 Fälle `ok`.
+Header-SHA-256 `153f8178eb6a741b8e0129b100d6cf696b676e482f187a55cdeb9641808bc266`.
+
+| Fall | Exit | Zeit | Beobachtung |
+|---|---|---|---|
+| `fi_banner` | 6 × 24 | – | Banner bei den 4 FI-Binaries, keiner bei den 2 Produktionsbinaries |
+| `fi_skip_server_exit31` | 31 | 1,792 s | stderr: `UDX_FAULT_INJECTION_BUILD`, `UDX_FI_CANCEL_SKIPPED`, `UDX_FI_DIE_CANCEL_UNCERTAIN`; Pipe-Name danach frei |
+| `fi_skip_client_exit31` | 31 | 1,823 s | dieselben drei Marker; der Server sah den Connect |
+| `fi_sleep_server_race` | 22 | 2,488 s | `UDX_FI_COMPLETED_IN_RACE bytes>0`; Client hat gesendet und **0 Bytes** empfangen |
+| `fi_sleep_client_race` | 22 | 2,519 s | `UDX_FI_COMPLETED_IN_RACE bytes>0`; der Fake-Server hat `PEER_OK` geschrieben (Fehler 0) |
+| `fi_controls` | 0 / 0 (beide Varianten) | – | nur der Banner, kein Zweigmarker |
+| `race_server_campaign` (Seed 20261122) | 53 × 0, 47 × 22 | – | 0 Fehlläufe; kein 23, kein 31, kein Fragment |
+| `race_client_campaign` (Seed 20261123) | 38 × 0, 62 × 22 | – | 0 Fehlläufe |
+
+Einordnung der Zeiten: Exit 31 liegt bei Budget (0,8 s) + Gnadenfrist (1,0 s) ≈ 1,8 s. Die
+Gnadenfrist wurde also abgewartet und nicht übersprungen, und das Ende kam lange bevor der
+Halter (8 s) losließ. Die Rennfälle enden bei Budget (1,0 s) + FI-Schlaf (1,5 s) ≈ 2,5 s. Die
+Operation war zum Abbruchzeitpunkt bereits mit Daten abgeschlossen (`bytes>0`), und das
+Ergebnis blieb trotzdem der Timeout. Die W18/W24-Fälle im selben Job sind unverändert grün
+(`CROSSRUN_OK`, 11/11).
+
+Binär-SHA-256 (Variante: Probe / Client):
+
+| Variante | `udx_sid_probe.exe` | `udx_sid_client.exe` |
+|---|---|---|
+| production | `fbbd77e7a3dd33065ecab480f50af855bd0ddbf84be67372e6fb5f5c824ac479` | `e34bbea62362cc70761eb0ce9a2aecdf84ab37901c5919f96c31fe7a104739c8` |
+| fi_skip | `4f9c1fe9937a549f5d4e577afeb7349a854b14f352aa02b7b047a4b6e7127194` | `7cadcabb7e11f257428723d23cfc5b1c8d0229e3b6c68c5a43b95320b3b68c1a` |
+| fi_sleep | `424e4706733acf1fdd23e104bc8f761a15e18fee8f46f59825e62f3d097a0eb6` | `6b7d308e22df5ca15c3513268a5ebda5311f40db393cea25d19cfeb5aae02cb7` |
+
+Bericht: Artefakt `udx-w30-cancel-race-2f159a4bf9b59cd98bc2740e193cc3b1d4bdad20` (ID 14731889000,
+30 Tage). Weiterhin gilt: erhöhter Admin auf Windows Server, keine Freigabe.
