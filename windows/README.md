@@ -1,5 +1,11 @@
 # Windows W4 security handshake candidate
 
+> **W30 (2026-11-22): fault injection is test-only.** `udx_bounded_pipe_io.hpp` has
+> hooks behind `#if UDX_FI_SKIP_CANCEL` / `#if UDX_FI_PRE_CANCEL_SLEEP_MS`, used only by
+> `tools/w30_cpp_cancel_race.py`. Never build a deployed binary with `/DUDX_FI_*`; such a
+> binary prints `UDX_FAULT_INJECTION_BUILD` on stderr before `main`. The build lines below
+> define nothing and compile the W24 code unchanged.
+
 > **W24 (2026-11-04): bounded I/O.** Both sources include `udx_bounded_pipe_io.hpp`:
 > every pipe operation is `OVERLAPPED` under ONE absolute deadline for the whole
 > exchange (`--budget-ms N`, 100..300000, default 10000); on expiry `CancelIoEx`, then

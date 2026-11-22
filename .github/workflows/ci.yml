@@ -85,6 +85,7 @@ jobs:
           evidence/w25_dk_spec.json evidence/w26_dk_spec.json evidence/w26_carryover_dk_spec.json
           evidence/w27_dk_spec.json evidence/w28_dk_spec.json
           evidence/w13_dk_spec.json evidence/w18_dk_spec.json evidence/w24_dk_spec.json
+          evidence/w30_dk_spec.json
           --expect-stale evidence/w13_dk_spec.json=2 --expect-stale evidence/w18_dk_spec.json=1
           --expect-stale evidence/w24_dk_spec.json=1 --expect-stale evidence/w27_dk_spec.json=2
           --json "$RUNNER_TEMP/udx_dk_portable.json"
@@ -224,9 +225,11 @@ jobs:
     # C++<->Python in both directions, plus the W18 legacy-open refusal.
     # W24: bounded overlapped I/O; six negative-first native cases (connect /
     # read / drain stall, silent server vs C++ client, bad arguments, small-budget
-    # positive control). Elevated hosted runner; the cancel-race path (exit 31)
-    # is not provoked. Never a release approval.
-    timeout-minutes: 20
+    # positive control). Elevated hosted runner; never a release approval.
+    # W30: separate step builds two test-only fault-injection variants and drives
+    # the cancel path natively (exit 31, completion in the race) plus two seeded
+    # 100-run boundary race campaigns against the production binaries.
+    timeout-minutes: 30
     defaults:
       run:
         shell: pwsh
@@ -250,6 +253,22 @@ jobs:
         with:
           name: udx-w18-cpp-crossrun-${{ github.sha }}
           path: ${{ runner.temp }}/udx_w18_cpp.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Cancel path + race campaigns (W30)
+        if: always()
+        run: |
+          python tools/w30_cpp_cancel_race.py --output "$env:RUNNER_TEMP\udx_w30_cancel_race.json"
+          $code = $LASTEXITCODE
+          if ($code -ne 0 -and (Test-Path "$env:RUNNER_TEMP\udx_w30_cancel_race.json")) { Get-Content "$env:RUNNER_TEMP\udx_w30_cancel_race.json" | Select-Object -First 300 }
+          exit $code
+      # actions/upload-artifact v7.0.1
+      - name: Upload cancel-race report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: udx-w30-cancel-race-${{ github.sha }}
+          path: ${{ runner.temp }}/udx_w30_cancel_race.json
           if-no-files-found: warn
           retention-days: 30
 
