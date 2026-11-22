@@ -108,7 +108,9 @@ class W8FdTests(unittest.TestCase):
         self.assertEqual(before,len(os.listdir('/proc/self/fd')))
     def test_separate_process(self):
         path=pathlib.Path(__file__).resolve().parent.parent/'tools'/'demo_w8_fd_handoff.py'
-        r=subprocess.run([sys.executable,str(path)],cwd=str(path.parent.parent),capture_output=True,text=True,timeout=5)
+        # W27 (UDX14-06): 60 s is a hang guard only. The demo bounds start-up, protocol and
+        # teardown separately and types each failure (tests/test_w27_fd_handoff_startup.py).
+        r=subprocess.run([sys.executable,str(path)],cwd=str(path.parent.parent),capture_output=True,text=True,timeout=60)
         self.assertEqual(r.returncode,0,r.stderr)
         o=json.loads(r.stdout)
         self.assertEqual(o['child_exit'],0)

@@ -1,0 +1,157 @@
+{
+ "baseline_rev": "40f1aa95ed8bfe23ce23cf454fde61f151f84b04",
+ "cpus": 4,
+ "kernel": "6.18.44",
+ "levels": [
+  {
+   "baseline": {
+    "classes": {
+     "OK": 15
+    },
+    "failed": 0,
+    "over_old_test_timeout": 0,
+    "runs": 15,
+    "wall_s_max": 0.082,
+    "wall_s_median": 0.058
+   },
+   "burners": 0,
+   "burners_per_cpu": 0.0,
+   "current": {
+    "classes": {
+     "OK": 15
+    },
+    "failed": 0,
+    "over_old_test_timeout": 0,
+    "protocol_ms": {
+     "max": 0.6,
+     "median": 0.5
+    },
+    "runs": 15,
+    "startup_ms": {
+     "max": 37.0,
+     "median": 26.0
+    },
+    "teardown_ms": {
+     "max": 6.3,
+     "median": 4.7
+    },
+    "wall_s_max": 0.076,
+    "wall_s_median": 0.064
+   }
+  },
+  {
+   "baseline": {
+    "classes": {
+     "OK": 15
+    },
+    "failed": 0,
+    "over_old_test_timeout": 0,
+    "runs": 15,
+    "wall_s_max": 1.19,
+    "wall_s_median": 1.024
+   },
+   "burners": 64,
+   "burners_per_cpu": 16.0,
+   "current": {
+    "classes": {
+     "OK": 15
+    },
+    "failed": 0,
+    "over_old_test_timeout": 0,
+    "protocol_ms": {
+     "max": 16.1,
+     "median": 8.1
+    },
+    "runs": 15,
+    "startup_ms": {
+     "max": 570.0,
+     "median": 480.1
+    },
+    "teardown_ms": {
+     "max": 98.2,
+     "median": 61.4
+    },
+    "wall_s_max": 1.316,
+    "wall_s_median": 1.102
+   }
+  },
+  {
+   "baseline": {
+    "classes": {
+     "OK": 3,
+     "TimeoutError": 12
+    },
+    "failed": 12,
+    "over_old_test_timeout": 14,
+    "runs": 15,
+    "wall_s_max": 6.011,
+    "wall_s_median": 5.7
+   },
+   "burners": 320,
+   "burners_per_cpu": 80.0,
+   "current": {
+    "classes": {
+     "OK": 15
+    },
+    "failed": 0,
+    "over_old_test_timeout": 15,
+    "protocol_ms": {
+     "max": 184.1,
+     "median": 20.1
+    },
+    "runs": 15,
+    "startup_ms": {
+     "max": 3154.8,
+     "median": 2670.1
+    },
+    "teardown_ms": {
+     "max": 696.0,
+     "median": 607.9
+    },
+    "wall_s_max": 7.367,
+    "wall_s_median": 6.519
+   }
+  },
+  {
+   "baseline": {
+    "classes": {
+     "TimeoutError": 15
+    },
+    "failed": 15,
+    "over_old_test_timeout": 15,
+    "runs": 15,
+    "wall_s_max": 8.624,
+    "wall_s_median": 8.024
+   },
+   "burners": 480,
+   "burners_per_cpu": 120.0,
+   "current": {
+    "classes": {
+     "OK": 15
+    },
+    "failed": 0,
+    "over_old_test_timeout": 15,
+    "protocol_ms": {
+     "max": 372.1,
+     "median": 12.2
+    },
+    "runs": 15,
+    "startup_ms": {
+     "max": 5078.1,
+     "median": 4501.4
+    },
+    "teardown_ms": {
+     "max": 1045.9,
+     "median": 951.9
+    },
+    "wall_s_max": 11.444,
+    "wall_s_median": 10.874
+   }
+  }
+ ],
+ "old_test_timeout_s": 5.0,
+ "platform": "linux",
+ "python": "3.13.18",
+ "runs_per_level": 15,
+ "tool": "w27_fd_handoff_load"
+}
