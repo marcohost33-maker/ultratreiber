@@ -227,7 +227,7 @@ class WitnessedBaseline(unittest.TestCase):
                              ['ADMIT b -> tests.t.C.test_y', 'ADMIT c -> tests.nope.C.test_x', 'ADMIT d -> x'])
 
     def test_repository_baseline_is_valid_and_fully_witnessed(self):
-        path = ROOT / 'evidence' / 'w28_guard_sweep_baseline.json'
+        path = ROOT / 'evidence' / 'w31_guard_sweep_baseline.json'   # W31: current baseline (W28 kept as record)
         baseline = gs.load_baseline(path)
         self.assertEqual(gs.missing_witnesses(baseline, ROOT), [])
         data = json.loads(path.read_text(encoding='utf-8'))

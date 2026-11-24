@@ -1,0 +1,20 @@
+{
+ "acked_ms": {
+  "median": 1.109,
+  "p95": 1.811
+ },
+ "block": 20,
+ "legacy_ms": {
+  "median": 0.192,
+  "p95": 0.33
+ },
+ "limits": "one client, sequential, local disk, no power-loss test; not a throughput or DoS figure",
+ "paired_median_ratio_acked_over_legacy": 5.343,
+ "platform": "Linux-6.18.44-fc-v819-x86_64-with-glibc2.39",
+ "python": "3.13.18",
+ "receipts": {
+  "DELIVERED": 400
+ },
+ "requests_per_lane": 400,
+ "tool": "bench_w31_ack"
+}

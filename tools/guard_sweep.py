@@ -68,7 +68,8 @@ try:
 finally:
     sys.path.pop(0)
 
-DEFAULT_MODULES = ('udx_ref/core.py', 'udx_ref/credentialed_handoff.py', 'udx_ref/durable_grants.py',
+DEFAULT_MODULES = ('udx_ref/core.py', 'udx_ref/credentialed_handoff.py', 'udx_ref/delivery_receipts.py',
+                   'udx_ref/durable_grants.py',
                    'udx_ref/fd_handoff.py', 'udx_ref/fd_reader.py', 'udx_ref/frame_lease.py',
                    'udx_ref/linux_ipc.py', 'udx_ref/perception.py', 'udx_ref/portal_boundary.py',
                    'udx_ref/portal_request.py', 'udx_ref/preview_gate.py', 'udx_ref/sealed_snapshot.py')

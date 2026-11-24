@@ -1,0 +1,267 @@
+{
+ "baseline": "evidence/w31_guard_sweep_baseline.json",
+ "environment": "Linux 6.18, unprivileged UID 65534 (setpriv), /usr/bin/python3.13 = CPython 3.13.18 (GCC build, fcntl.F_SEAL_* present), jsonschema 4.26.0; --jobs 6; kills confirmed by re-run; evidence level E2 local, not independently reproduced; CI run pending (Actions blocked by billing on 2026-11-24)",
+ "environment_artefact": "A first full run under /usr/local/bin/python3 (CPython 3.13.18, Clang build without fcntl.F_SEAL_*, the UDX28-01 interpreter) reported 21 new survivors in sealed_snapshot.py and fd_handoff.py: their sealing tests skip there. Not a finding of W31; the run above uses an interpreter with the constants, like CI (setup-python).",
+ "not_killed": [
+  "ADMIT udx_ref/credentialed_handoff.py|_receive|HandoffError:CLOEXEC_REQUIRED|667c1622bf29",
+  "ADMIT udx_ref/credentialed_handoff.py|send_readonly_request|HandoffError:PARTIAL_SEND|a0823fa3daad",
+  "ADMIT udx_ref/credentialed_handoff.py|send_readonly_request|HandoffError:SIZE_LIMIT|7159771efed6",
+  "ADMIT udx_ref/fd_handoff.py|_recv_fd|HandoffError:CLOEXEC_REQUIRED|437c8398d5f9",
+  "ADMIT udx_ref/fd_handoff.py|send_approved_fd|HandoffError:PARTIAL_SEND|a5152e991b71",
+  "ADMIT udx_ref/fd_handoff.py|send_approved_fd|HandoffError:SIZE_LIMIT|ea184ba04978",
+  "ADMIT udx_ref/fd_reader.py|ApprovedFdReader.read|ReadGuardError:RESOURCE_CHANGED|ae881f97603d",
+  "ADMIT udx_ref/fd_reader.py|ApprovedFdReader.read|ReadGuardError:SIZE_LIMIT|3febd9ead511",
+  "ADMIT udx_ref/fd_reader.py|ApprovedFdReader.read|ReadGuardError:SIZE_LIMIT|6c649be96220",
+  "ADMIT udx_ref/linux_ipc.py|peer_identity|Refusal:UNAUTHENTICATED_PEER|b208ec750c25",
+  "ADMIT udx_ref/linux_ipc.py|peer_identity|Refusal:UNAUTHENTICATED_PEER|c03736f44604"
+ ],
+ "per_module": {
+  "udx_ref/core.py": {
+   "KILLED": 74
+  },
+  "udx_ref/credentialed_handoff.py": {
+   "KILLED": 31,
+   "SURVIVED": 3
+  },
+  "udx_ref/delivery_receipts.py": {
+   "KILLED": 75
+  },
+  "udx_ref/durable_grants.py": {
+   "KILLED": 43
+  },
+  "udx_ref/fd_handoff.py": {
+   "KILLED": 42,
+   "SURVIVED": 3
+  },
+  "udx_ref/fd_reader.py": {
+   "KILLED": 26,
+   "SURVIVED": 3
+  },
+  "udx_ref/frame_lease.py": {
+   "KILLED": 2
+  },
+  "udx_ref/linux_ipc.py": {
+   "KILLED": 51,
+   "SURVIVED": 2
+  },
+  "udx_ref/perception.py": {
+   "KILLED": 16
+  },
+  "udx_ref/portal_boundary.py": {
+   "KILLED": 13
+  },
+  "udx_ref/portal_request.py": {
+   "KILLED": 29
+  },
+  "udx_ref/preview_gate.py": {
+   "KILLED": 41
+  },
+  "udx_ref/sealed_snapshot.py": {
+   "KILLED": 19
+  }
+ },
+ "run": {
+  "confirm_kills": true,
+  "counts": {
+   "KILLED": 462,
+   "SURVIVED": 11
+  },
+  "kill_modes": {
+   "ADMIT ASSERTION": 178,
+   "ADMIT ERROR_IN_TEST": 33,
+   "REFUSE ASSERTION": 177,
+   "REFUSE ERROR_IN_TEST": 45,
+   "UNTYPED ASSERTION": 6,
+   "UNTYPED ERROR_IN_TEST": 23
+  },
+  "missing_witnesses": [],
+  "modules": {
+   "udx_ref/core.py": {
+    "baseline": "PASS",
+    "guards": 39,
+    "tests": [
+     "tests.test_contracts",
+     "tests.test_core",
+     "tests.test_linux_ipc",
+     "tests.test_node_interop",
+     "tests.test_w27_negative_controls",
+     "tests.test_w28_1_side_effect_survivors",
+     "tests.test_w28_negative_controls",
+     "tests.test_w28_static_gates",
+     "tests.test_w31_delivery_receipts",
+     "tests.test_w5_hardening"
+    ]
+   },
+   "udx_ref/credentialed_handoff.py": {
+    "baseline": "PASS",
+    "guards": 17,
+    "tests": [
+     "tests.test_w10_grants_portal",
+     "tests.test_w27_negative_controls",
+     "tests.test_w28_1_side_effect_survivors",
+     "tests.test_w9_boundaries"
+    ]
+   },
+   "udx_ref/delivery_receipts.py": {
+    "baseline": "PASS",
+    "guards": 39,
+    "tests": [
+     "tests.test_linux_ipc",
+     "tests.test_w27_negative_controls",
+     "tests.test_w28_negative_controls",
+     "tests.test_w28_static_gates",
+     "tests.test_w31_delivery_receipts",
+     "tests.test_w5_hardening"
+    ]
+   },
+   "udx_ref/durable_grants.py": {
+    "baseline": "PASS",
+    "guards": 23,
+    "tests": [
+     "tests.test_linux_ipc",
+     "tests.test_w10_grants_portal",
+     "tests.test_w11_audit_hardening",
+     "tests.test_w12_platform_guards",
+     "tests.test_w27_negative_controls",
+     "tests.test_w28_1_principal_range",
+     "tests.test_w28_equivalence_witnesses",
+     "tests.test_w28_negative_controls",
+     "tests.test_w28_static_gates",
+     "tests.test_w31_delivery_receipts",
+     "tests.test_w5_hardening"
+    ]
+   },
+   "udx_ref/fd_handoff.py": {
+    "baseline": "PASS",
+    "guards": 24,
+    "tests": [
+     "tests.test_w10_grants_portal",
+     "tests.test_w27_fd_handoff_startup",
+     "tests.test_w27_negative_controls",
+     "tests.test_w28_1_side_effect_survivors",
+     "tests.test_w28_equivalence_witnesses",
+     "tests.test_w28_negative_controls",
+     "tests.test_w28_sealing_constants",
+     "tests.test_w28_startup_matrix",
+     "tests.test_w8_fd_handoff",
+     "tests.test_w9_boundaries"
+    ]
+   },
+   "udx_ref/fd_reader.py": {
+    "baseline": "PASS",
+    "guards": 15,
+    "tests": [
+     "tests.test_linux_ipc",
+     "tests.test_w10_grants_portal",
+     "tests.test_w11_audit_hardening",
+     "tests.test_w12_platform_guards",
+     "tests.test_w27_fd_handoff_startup",
+     "tests.test_w27_negative_controls",
+     "tests.test_w28_1_principal_range",
+     "tests.test_w28_1_side_effect_survivors",
+     "tests.test_w28_equivalence_witnesses",
+     "tests.test_w28_negative_controls",
+     "tests.test_w28_sealing_constants",
+     "tests.test_w28_startup_matrix",
+     "tests.test_w28_static_gates",
+     "tests.test_w31_delivery_receipts",
+     "tests.test_w5_hardening",
+     "tests.test_w6_source_hardening",
+     "tests.test_w7_falsification",
+     "tests.test_w8_fd_handoff",
+     "tests.test_w9_boundaries"
+    ]
+   },
+   "udx_ref/frame_lease.py": {
+    "baseline": "PASS",
+    "guards": 1,
+    "tests": [
+     "tests.test_w6_source_hardening"
+    ]
+   },
+   "udx_ref/linux_ipc.py": {
+    "baseline": "PASS",
+    "guards": 30,
+    "tests": [
+     "tests.test_linux_ipc",
+     "tests.test_w27_negative_controls",
+     "tests.test_w28_negative_controls",
+     "tests.test_w28_static_gates",
+     "tests.test_w31_delivery_receipts",
+     "tests.test_w5_hardening"
+    ]
+   },
+   "udx_ref/perception.py": {
+    "baseline": "PASS",
+    "guards": 8,
+    "tests": [
+     "tests.test_w27_negative_controls",
+     "tests.test_w6_source_hardening",
+     "tests.test_w7_falsification"
+    ]
+   },
+   "udx_ref/portal_boundary.py": {
+    "baseline": "PASS",
+    "guards": 7,
+    "tests": [
+     "tests.test_w10_grants_portal",
+     "tests.test_w11_audit_hardening",
+     "tests.test_w27_negative_controls",
+     "tests.test_w28_equivalence_witnesses",
+     "tests.test_w28_negative_controls",
+     "tests.test_w9_boundaries"
+    ]
+   },
+   "udx_ref/portal_request.py": {
+    "baseline": "PASS",
+    "guards": 16,
+    "tests": [
+     "tests.test_w10_grants_portal",
+     "tests.test_w11_audit_hardening",
+     "tests.test_w27_negative_controls",
+     "tests.test_w28_equivalence_witnesses"
+    ]
+   },
+   "udx_ref/preview_gate.py": {
+    "baseline": "PASS",
+    "guards": 22,
+    "tests": [
+     "tests.test_w27_negative_controls",
+     "tests.test_w28_equivalence_witnesses",
+     "tests.test_w28_negative_controls",
+     "tests.test_w6_source_hardening",
+     "tests.test_w7_falsification"
+    ]
+   },
+   "udx_ref/sealed_snapshot.py": {
+    "baseline": "PASS",
+    "guards": 10,
+    "tests": [
+     "tests.test_w10_grants_portal",
+     "tests.test_w27_fd_handoff_startup",
+     "tests.test_w27_negative_controls",
+     "tests.test_w28_1_side_effect_survivors",
+     "tests.test_w28_equivalence_witnesses",
+     "tests.test_w28_negative_controls",
+     "tests.test_w28_sealing_constants",
+     "tests.test_w28_startup_matrix",
+     "tests.test_w7_falsification",
+     "tests.test_w8_fd_handoff",
+     "tests.test_w9_boundaries"
+    ]
+   }
+  },
+  "mutants_by_form": {
+   "handler": 29,
+   "raise": 414,
+   "return": 30
+  },
+  "new_survivors": [],
+  "ok": true,
+  "platform": "linux",
+  "python": "3.13.18",
+  "stale_baseline": []
+ },
+ "tool": "guard_sweep",
+ "wave": "W31"
+}

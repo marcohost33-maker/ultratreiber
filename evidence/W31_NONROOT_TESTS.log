@@ -1,0 +1,707 @@
+test_no_schema_is_security_boundary (test_contracts.ContractVectors.test_no_schema_is_security_boundary) ... ok
+test_schema_known_action_guards (test_contracts.ContractVectors.test_schema_known_action_guards) ... ok
+test_vectors (test_contracts.ContractVectors.test_vectors) ... ok
+test_additional_parameter_rejected (test_core.TestUDX.test_additional_parameter_rejected) ... ok
+test_audit_contains_no_payload_or_actor (test_core.TestUDX.test_audit_contains_no_payload_or_actor) ... ok
+test_bad_version (test_core.TestUDX.test_bad_version) ... ok
+test_boolean_id_rejected (test_core.TestUDX.test_boolean_id_rejected) ... ok
+test_case_sensitive_capability (test_core.TestUDX.test_case_sensitive_capability) ... ok
+test_consent_spoofing_payload (test_core.TestUDX.test_consent_spoofing_payload) ... ok
+test_cross_owner_denied (test_core.TestUDX.test_cross_owner_denied) ... ok
+test_discovery_does_not_authorize (test_core.TestUDX.test_discovery_does_not_authorize) ... ok
+test_discovery_extra_args (test_core.TestUDX.test_discovery_extra_args) ... ok
+test_duplicate_json_key (test_core.TestUDX.test_duplicate_json_key) ... ok
+test_float_rejected (test_core.TestUDX.test_float_rejected) ... ok
+test_frame_size_boundary (test_core.TestUDX.test_frame_size_boundary) ... ok
+test_identity_spoofing_payload (test_core.TestUDX.test_identity_spoofing_payload) ... ok
+test_invalid_utf8 (test_core.TestUDX.test_invalid_utf8) ... ok
+test_invalids_no_reads (test_core.TestUDX.test_invalids_no_reads) ... ok
+test_large_frame (test_core.TestUDX.test_large_frame) ... ok
+test_missing_object_denied (test_core.TestUDX.test_missing_object_denied) ... ok
+test_nan_rejected (test_core.TestUDX.test_nan_rejected) ... ok
+test_noncanonical_uuid (test_core.TestUDX.test_noncanonical_uuid) ... ok
+test_none_peer_denied (test_core.TestUDX.test_none_peer_denied) ... ok
+test_nonstring_principal_not_authenticated (test_core.TestUDX.test_nonstring_principal_not_authenticated) ... ok
+test_params_string_rejected (test_core.TestUDX.test_params_string_rejected) ... ok
+test_path_traversal_rejected (test_core.TestUDX.test_path_traversal_rejected) ... ok
+test_random_input_negative_controls (test_core.TestUDX.test_random_input_negative_controls) ... ok
+test_replay_denied (test_core.TestUDX.test_replay_denied) ... ok
+test_replay_not_persistent (test_core.TestUDX.test_replay_not_persistent) ... ok
+test_revoke_rechecked (test_core.TestUDX.test_revoke_rechecked) ... ok
+test_shell_token_rejected (test_core.TestUDX.test_shell_token_rejected) ... ok
+test_truthy_string_not_authenticated (test_core.TestUDX.test_truthy_string_not_authenticated) ... ok
+test_unauthenticated_denied (test_core.TestUDX.test_unauthenticated_denied) ... ok
+test_ungranted_denied (test_core.TestUDX.test_ungranted_denied) ... ok
+test_unknown_action (test_core.TestUDX.test_unknown_action) ... ok
+test_valid_read (test_core.TestUDX.test_valid_read) ... ok
+test_fake_identity_in_payload_rejected (test_linux_ipc.LinuxIPC.test_fake_identity_in_payload_rejected) ... ok
+test_fragmented_header_and_body (test_linux_ipc.LinuxIPC.test_fragmented_header_and_body) ... ok
+test_frame_too_large_without_reading_body (test_linux_ipc.LinuxIPC.test_frame_too_large_without_reading_body) ... ok
+test_invalid_utf8 (test_linux_ipc.LinuxIPC.test_invalid_utf8) ... ok
+test_no_process_capability (test_linux_ipc.LinuxIPC.test_no_process_capability) ... ok
+test_no_read_without_capability_grant_in_payload (test_linux_ipc.LinuxIPC.test_no_read_without_capability_grant_in_payload) ... ok
+test_real_kernel_uid_and_fixture (test_linux_ipc.LinuxIPC.test_real_kernel_uid_and_fixture) ... ok
+test_replay_rejected_on_separate_connections (test_linux_ipc.LinuxIPC.test_replay_rejected_on_separate_connections) ... ok
+test_slowloris_deadline_releases_serial_server (test_linux_ipc.LinuxIPC.test_slowloris_deadline_releases_serial_server) ... ok
+test_socket_inaccessible_by_directory_mode (test_linux_ipc.LinuxIPC.test_socket_inaccessible_by_directory_mode) ... ok
+test_truncated_frame_does_not_poison_server (test_linux_ipc.LinuxIPC.test_truncated_frame_does_not_poison_server) ... ok
+test_refuses_existing_socket_path (test_linux_ipc.StartupSecurity.test_refuses_existing_socket_path) ... ok
+test_refuses_runtime_symlink (test_linux_ipc.StartupSecurity.test_refuses_runtime_symlink) ... ok
+test_refuses_world_readable_runtime (test_linux_ipc.StartupSecurity.test_refuses_world_readable_runtime) ... ok
+test_socket_cleanup_after_bounded_shutdown (test_linux_ipc.StartupSecurity.test_socket_cleanup_after_bounded_shutdown) ... ok
+test_1200_mutated_utf8_and_frame_bytes (test_node_interop.CrossRuntimeByteFuzz.test_1200_mutated_utf8_and_frame_bytes)
+Deterministic differential test of *bytes*, not just JS strings. ... ok
+test_19_golden_parser_vectors (test_node_interop.NodeInterop.test_19_golden_parser_vectors) ... ok
+test_200_deterministic_contract_mutations (test_node_interop.NodeInterop.test_200_deterministic_contract_mutations) ... ok
+test_cpp_client_reads_its_own_level_before_opening (test_ut6_02_label_parity.CppSourceParity.test_cpp_client_reads_its_own_level_before_opening) ... ok
+test_cpp_client_requires_label_equal_to_own_level (test_ut6_02_label_parity.CppSourceParity.test_cpp_client_requires_label_equal_to_own_level) ... ok
+test_cpp_probe_labels_with_its_own_level (test_ut6_02_label_parity.CppSourceParity.test_cpp_probe_labels_with_its_own_level) ... ok
+test_build_sddl_label_follows_the_level_and_nothing_else (test_ut6_02_label_parity.PortableLabelParity.test_build_sddl_label_follows_the_level_and_nothing_else) ... ok
+test_label_sddl_maps_exactly_the_supported_levels (test_ut6_02_label_parity.PortableLabelParity.test_label_sddl_maps_exactly_the_supported_levels) ... ok
+test_label_sddl_refuses_every_other_value (test_ut6_02_label_parity.PortableLabelParity.test_label_sddl_refuses_every_other_value) ... ok
+test_source_wiring (test_ut6_02_label_parity.PortableLabelParity.test_source_wiring) ... ok
+test_client_refuses_a_label_above_its_real_level (test_ut6_02_label_parity.WindowsLabelParity.test_client_refuses_a_label_above_its_real_level) ... skipped 'Windows Win32 named pipes required'
+test_client_refuses_a_real_label_below_or_above_its_level (test_ut6_02_label_parity.WindowsLabelParity.test_client_refuses_a_real_label_below_or_above_its_level) ... skipped 'Windows Win32 named pipes required'
+test_effective_level_is_the_thread_token_when_impersonating (test_ut6_02_label_parity.WindowsLabelParity.test_effective_level_is_the_thread_token_when_impersonating) ... skipped 'Windows Win32 named pipes required'
+test_equal_level_through_the_patched_seam_passes (test_ut6_02_label_parity.WindowsLabelParity.test_equal_level_through_the_patched_seam_passes) ... skipped 'Windows Win32 named pipes required'
+test_equal_real_levels_pass (test_ut6_02_label_parity.WindowsLabelParity.test_equal_real_levels_pass) ... skipped 'Windows Win32 named pipes required'
+test_low_and_untrusted_clients_refuse_a_medium_or_higher_label (test_ut6_02_label_parity.WindowsLabelParity.test_low_and_untrusted_clients_refuse_a_medium_or_higher_label) ... skipped 'Windows Win32 named pipes required'
+test_missing_and_low_labels_stay_too_low (test_ut6_02_label_parity.WindowsLabelParity.test_missing_and_low_labels_stay_too_low) ... skipped 'Windows Win32 named pipes required'
+test_real_server_and_real_client_complete_the_handshake (test_ut6_02_label_parity.WindowsLabelParity.test_real_server_and_real_client_complete_the_handshake) ... skipped 'Windows Win32 named pipes required'
+test_server_label_is_its_real_own_level (test_ut6_02_label_parity.WindowsLabelParity.test_server_label_is_its_real_own_level) ... skipped 'Windows Win32 named pipes required'
+test_server_with_an_unsupported_own_level_refuses_to_start (test_ut6_02_label_parity.WindowsLabelParity.test_server_with_an_unsupported_own_level_refuses_to_start) ... skipped 'Windows Win32 named pipes required'
+test_thread_token_query_failure_is_not_a_fallback (test_ut6_02_label_parity.WindowsLabelParity.test_thread_token_query_failure_is_not_a_fallback) ... skipped 'Windows Win32 named pipes required'
+test_unreadable_own_level_refuses_before_opening (test_ut6_02_label_parity.WindowsLabelParity.test_unreadable_own_level_refuses_before_opening) ... skipped 'Windows Win32 named pipes required'
+test_backward_wall_clock_denied (test_w10_grants_portal.DurableGrantTests.test_backward_wall_clock_denied) ... ok
+test_boolean_uid_rejected (test_w10_grants_portal.DurableGrantTests.test_boolean_uid_rejected) ... ok
+test_claim_before_real_ipc_transfer (test_w10_grants_portal.DurableGrantTests.test_claim_before_real_ipc_transfer) ... ok
+test_cross_grant_same_request_id_rejected (test_w10_grants_portal.DurableGrantTests.test_cross_grant_same_request_id_rejected) ... ok
+test_expired (test_w10_grants_portal.DurableGrantTests.test_expired) ... ok
+test_fd_scope (test_w10_grants_portal.DurableGrantTests.test_fd_scope) ... ok
+test_issued_survives_restart (test_w10_grants_portal.DurableGrantTests.test_issued_survives_restart) ... ok
+test_modified_file_scope (test_w10_grants_portal.DurableGrantTests.test_modified_file_scope) ... ok
+test_no_path_or_content_stored (test_w10_grants_portal.DurableGrantTests.test_no_path_or_content_stored) ... ok
+test_one_use (test_w10_grants_portal.DurableGrantTests.test_one_use) ... ok
+test_principal_scope (test_w10_grants_portal.DurableGrantTests.test_principal_scope) ... ok
+test_recovery_idempotent (test_w10_grants_portal.DurableGrantTests.test_recovery_idempotent) ... ok
+test_restart_does_not_reissue_inflight (test_w10_grants_portal.DurableGrantTests.test_restart_does_not_reissue_inflight) ... ok
+test_revoke_before_claim (test_w10_grants_portal.DurableGrantTests.test_revoke_before_claim) ... ok
+test_revoke_during_transfer_fails_finish (test_w10_grants_portal.DurableGrantTests.test_revoke_during_transfer_fails_finish) ... ok
+test_secure_db_permissions (test_w10_grants_portal.DurableGrantTests.test_secure_db_permissions) ... ok
+test_symlink_store_rejected (test_w10_grants_portal.DurableGrantTests.test_symlink_store_rejected) ... ok
+test_trusted_positive_transfer_consumes_grant (test_w10_grants_portal.DurableGrantTests.test_trusted_positive_transfer_consumes_grant) ... ok
+test_ttl_validation (test_w10_grants_portal.DurableGrantTests.test_ttl_validation) ... ok
+test_two_connections_race_one_claim (test_w10_grants_portal.DurableGrantTests.test_two_connections_race_one_claim) ... ok
+test_world_readable_directory_denied (test_w10_grants_portal.DurableGrantTests.test_world_readable_directory_denied) ... ok
+test_bad_bus_owner (test_w10_grants_portal.PortalFlowTests.test_bad_bus_owner) ... ok
+test_deny_portal_cancel (test_w10_grants_portal.PortalFlowTests.test_deny_portal_cancel) ... ok
+test_duplicate_response (test_w10_grants_portal.PortalFlowTests.test_duplicate_response) ... ok
+test_late_response_after_cancel (test_w10_grants_portal.PortalFlowTests.test_late_response_after_cancel) ... ok
+test_timeout (test_w10_grants_portal.PortalFlowTests.test_timeout) ... ok
+test_untrusted_json_not_admissible_proof (test_w10_grants_portal.PortalFlowTests.test_untrusted_json_not_admissible_proof) ... ok
+test_valid_correlated_result_not_grant (test_w10_grants_portal.PortalFlowTests.test_valid_correlated_result_not_grant) ... ok
+test_wrong_handle_rejected (test_w10_grants_portal.PortalFlowTests.test_wrong_handle_rejected) ... ok
+test_wrong_sender_rejected (test_w10_grants_portal.PortalFlowTests.test_wrong_sender_rejected) ... ok
+test_wrong_signal_path_rejected (test_w10_grants_portal.PortalFlowTests.test_wrong_signal_path_rejected) ... ok
+test_backwards_clock_denied (test_w11_audit_hardening.PortalClockFalsification.test_backwards_clock_denied) ... ok
+test_bool_clock_denied (test_w11_audit_hardening.PortalClockFalsification.test_bool_clock_denied) ... ok
+test_clock_exception_denied (test_w11_audit_hardening.PortalClockFalsification.test_clock_exception_denied) ... ok
+test_exact_deadline_denied (test_w11_audit_hardening.PortalClockFalsification.test_exact_deadline_denied) ... ok
+test_inf_at_start_denied (test_w11_audit_hardening.PortalClockFalsification.test_inf_at_start_denied) ... ok
+test_inf_before_response_denied (test_w11_audit_hardening.PortalClockFalsification.test_inf_before_response_denied) ... ok
+test_nan_at_start_denied (test_w11_audit_hardening.PortalClockFalsification.test_nan_at_start_denied) ... ok
+test_nan_before_response_denied (test_w11_audit_hardening.PortalClockFalsification.test_nan_before_response_denied) ... ok
+test_valid_clock_allows_structural_result (test_w11_audit_hardening.PortalClockFalsification.test_valid_clock_allows_structural_result) ... ok
+test_single_connection_concurrent_grant_claim (test_w11_audit_hardening.ThreadSafety.test_single_connection_concurrent_grant_claim) ... ok
+test_relative_path_also_denied_before_any_io (test_w12_platform_guards.DurableStoreNonPosixDenied.test_relative_path_also_denied_before_any_io) ... skipped 'non-POSIX host required (checks the Windows denial path)'
+test_store_denied_with_typed_reason_and_no_file_created (test_w12_platform_guards.DurableStoreNonPosixDenied.test_store_denied_with_typed_reason_and_no_file_created) ... skipped 'non-POSIX host required (checks the Windows denial path)'
+test_constants_identical_to_cpp (test_w12_windows_pipe.PortableParityAndValidation.test_constants_identical_to_cpp) ... ok
+test_deadline_overflow_is_value_error (test_w12_windows_pipe.PortableParityAndValidation.test_deadline_overflow_is_value_error) ... ok
+test_deadline_validation (test_w12_windows_pipe.PortableParityAndValidation.test_deadline_validation) ... ok
+test_pipe_name_validation (test_w12_windows_pipe.PortableParityAndValidation.test_pipe_name_validation) ... ok
+test_sddl_injection_rejected (test_w12_windows_pipe.PortableParityAndValidation.test_sddl_injection_rejected) ... ok
+test_sddl_prefix_identical_to_cpp (test_w12_windows_pipe.PortableParityAndValidation.test_sddl_prefix_identical_to_cpp) ... ok
+test_anonymous_level_value_denied (test_w12_windows_pipe.WindowsPipeFaultInjection.test_anonymous_level_value_denied) ... skipped 'Windows Win32 named pipes required'
+test_appcontainer_token_denied (test_w12_windows_pipe.WindowsPipeFaultInjection.test_appcontainer_token_denied) ... skipped 'Windows Win32 named pipes required'
+test_async_exception_after_impersonation_still_reverts (test_w12_windows_pipe.WindowsPipeFaultInjection.test_async_exception_after_impersonation_still_reverts) ... skipped 'Windows Win32 named pipes required'
+test_client_pid_failure_injected (test_w12_windows_pipe.WindowsPipeFaultInjection.test_client_pid_failure_injected) ... skipped 'Windows Win32 named pipes required'
+test_close_before_write_gives_no_peer_ok (test_w12_windows_pipe.WindowsPipeFaultInjection.test_close_before_write_gives_no_peer_ok) ... skipped 'Windows Win32 named pipes required'
+test_close_during_serve_defers_release_to_serving_thread (test_w12_windows_pipe.WindowsPipeFaultInjection.test_close_during_serve_defers_release_to_serving_thread) ... skipped 'Windows Win32 named pipes required'
+test_close_releases_handle_even_if_disconnect_raises (test_w12_windows_pipe.WindowsPipeFaultInjection.test_close_releases_handle_even_if_disconnect_raises) ... skipped 'Windows Win32 named pipes required'
+test_dropped_server_releases_pipe_name (test_w12_windows_pipe.WindowsPipeFaultInjection.test_dropped_server_releases_pipe_name) ... skipped 'Windows Win32 named pipes required'
+test_exception_during_pending_io_cancels_before_release (test_w12_windows_pipe.WindowsPipeFaultInjection.test_exception_during_pending_io_cancels_before_release) ... skipped 'Windows Win32 named pipes required'
+test_failed_cancel_does_not_extend_deadline_unbounded (test_w12_windows_pipe.WindowsPipeFaultInjection.test_failed_cancel_does_not_extend_deadline_unbounded) ... skipped 'Windows Win32 named pipes required'
+test_foreign_expected_sid_requires_flag (test_w12_windows_pipe.WindowsPipeFaultInjection.test_foreign_expected_sid_requires_flag) ... skipped 'Windows Win32 named pipes required'
+test_impersonate_failure_injected (test_w12_windows_pipe.WindowsPipeFaultInjection.test_impersonate_failure_injected) ... skipped 'Windows Win32 named pipes required'
+test_late_complete_write_counts_as_sent (test_w12_windows_pipe.WindowsPipeFaultInjection.test_late_complete_write_counts_as_sent) ... skipped 'Windows Win32 named pipes required'
+test_low_integrity_token_denied (test_w12_windows_pipe.WindowsPipeFaultInjection.test_low_integrity_token_denied) ... skipped 'Windows Win32 named pipes required'
+test_no_allocation_leak_when_server_sid_text_invalid (test_w12_windows_pipe.WindowsPipeFaultInjection.test_no_allocation_leak_when_server_sid_text_invalid) ... skipped 'Windows Win32 named pipes required'
+test_open_thread_token_failure_after_impersonation_still_reverts (test_w12_windows_pipe.WindowsPipeFaultInjection.test_open_thread_token_failure_after_impersonation_still_reverts) ... skipped 'Windows Win32 named pipes required'
+test_other_session_denied (test_w12_windows_pipe.WindowsPipeFaultInjection.test_other_session_denied) ... skipped 'Windows Win32 named pipes required'
+test_read_happens_before_impersonation (test_w12_windows_pipe.WindowsPipeFaultInjection.test_read_happens_before_impersonation) ... skipped 'Windows Win32 named pipes required'
+test_real_restricted_token_client_denied (test_w12_windows_pipe.WindowsPipeFaultInjection.test_real_restricted_token_client_denied) ... skipped 'Windows Win32 named pipes required'
+test_restricted_flag_denied (test_w12_windows_pipe.WindowsPipeFaultInjection.test_restricted_flag_denied) ... skipped 'Windows Win32 named pipes required'
+test_revert_failure_terminates_process (test_w12_windows_pipe.WindowsPipeFaultInjection.test_revert_failure_terminates_process) ... skipped 'Windows Win32 named pipes required'
+test_sid_text_failure_is_typed_denial (test_w12_windows_pipe.WindowsPipeFaultInjection.test_sid_text_failure_is_typed_denial) ... skipped 'Windows Win32 named pipes required'
+test_single_use_and_invalid_override (test_w12_windows_pipe.WindowsPipeFaultInjection.test_single_use_and_invalid_override) ... skipped 'Windows Win32 named pipes required'
+test_token_query_failure_injected (test_w12_windows_pipe.WindowsPipeFaultInjection.test_token_query_failure_injected) ... skipped 'Windows Win32 named pipes required'
+test_anonymous_level_denied (test_w12_windows_pipe.WindowsPipeRuntime.test_anonymous_level_denied) ... skipped 'Windows Win32 named pipes required'
+test_cli_server_exit_codes_match_cpp (test_w12_windows_pipe.WindowsPipeRuntime.test_cli_server_exit_codes_match_cpp) ... skipped 'Windows Win32 named pipes required'
+test_client_cannot_request_impersonation (test_w12_windows_pipe.WindowsPipeRuntime.test_client_cannot_request_impersonation) ... skipped 'Windows Win32 named pipes required'
+test_client_never_reads_response_is_bounded (test_w12_windows_pipe.WindowsPipeRuntime.test_client_never_reads_response_is_bounded) ... skipped 'Windows Win32 named pipes required'
+test_client_owner_query_failure_is_typed (test_w12_windows_pipe.WindowsPipeRuntime.test_client_owner_query_failure_is_typed) ... skipped 'Windows Win32 named pipes required'
+test_client_refuses_foreign_owner_without_writing (test_w12_windows_pipe.WindowsPipeRuntime.test_client_refuses_foreign_owner_without_writing) ... skipped 'Windows Win32 named pipes required'
+test_client_refuses_injected_foreign_owner (test_w12_windows_pipe.WindowsPipeRuntime.test_client_refuses_injected_foreign_owner) ... skipped 'Windows Win32 named pipes required'
+test_dacl_exactly_system_and_current_user (test_w12_windows_pipe.WindowsPipeRuntime.test_dacl_exactly_system_and_current_user) ... skipped 'Windows Win32 named pipes required'
+test_identification_level_peer_ok (test_w12_windows_pipe.WindowsPipeRuntime.test_identification_level_peer_ok) ... skipped 'Windows Win32 named pipes required'
+test_legacy_impersonation_level_client_still_accepted_by_server (test_w12_windows_pipe.WindowsPipeRuntime.test_legacy_impersonation_level_client_still_accepted_by_server) ... skipped 'Windows Win32 named pipes required'
+test_low_integrity_client_cannot_open_pipe (test_w12_windows_pipe.WindowsPipeRuntime.test_low_integrity_client_cannot_open_pipe) ... skipped 'Windows Win32 named pipes required'
+test_low_integrity_read_only_open_denied (test_w12_windows_pipe.WindowsPipeRuntime.test_low_integrity_read_only_open_denied) ... skipped 'Windows Win32 named pipes required'
+test_no_client_connect_deadline (test_w12_windows_pipe.WindowsPipeRuntime.test_no_client_connect_deadline) ... skipped 'Windows Win32 named pipes required'
+test_reject_remote_flag_reaches_create_named_pipe (test_w12_windows_pipe.WindowsPipeRuntime.test_reject_remote_flag_reaches_create_named_pipe) ... skipped 'Windows Win32 named pipes required'
+test_same_user_cross_process_peer_ok (test_w12_windows_pipe.WindowsPipeRuntime.test_same_user_cross_process_peer_ok) ... skipped 'Windows Win32 named pipes required'
+test_second_own_instance_refused (test_w12_windows_pipe.WindowsPipeRuntime.test_second_own_instance_refused) ... skipped 'Windows Win32 named pipes required'
+test_server_pid_is_logged_not_decisive (test_w12_windows_pipe.WindowsPipeRuntime.test_server_pid_is_logged_not_decisive) ... skipped 'Windows Win32 named pipes required'
+test_server_thread_already_impersonating_refuses (test_w12_windows_pipe.WindowsPipeRuntime.test_server_thread_already_impersonating_refuses) ... skipped 'Windows Win32 named pipes required'
+test_sid_mismatch_denied (test_w12_windows_pipe.WindowsPipeRuntime.test_sid_mismatch_denied) ... skipped 'Windows Win32 named pipes required'
+test_silent_client_hits_deadline_without_hang (test_w12_windows_pipe.WindowsPipeRuntime.test_silent_client_hits_deadline_without_hang) ... skipped 'Windows Win32 named pipes required'
+test_smb_loopback_client_rejected (test_w12_windows_pipe.WindowsPipeRuntime.test_smb_loopback_client_rejected) ... skipped 'Windows Win32 named pipes required'
+test_squatted_name_refused_by_first_pipe_instance (test_w12_windows_pipe.WindowsPipeRuntime.test_squatted_name_refused_by_first_pipe_instance) ... skipped 'Windows Win32 named pipes required'
+test_squatter_sees_only_identification (test_w12_windows_pipe.WindowsPipeRuntime.test_squatter_sees_only_identification) ... skipped 'Windows Win32 named pipes required'
+test_audit_blocks_foreign_lineage (test_w14_acl_static_gate.W14AncestryAndPinTests.test_audit_blocks_foreign_lineage) ... ok
+test_baseline_must_be_ancestor_of_head (test_w14_acl_static_gate.W14AncestryAndPinTests.test_baseline_must_be_ancestor_of_head) ... ok
+test_foreign_head_without_real_baseline_rejected (test_w14_acl_static_gate.W14AncestryAndPinTests.test_foreign_head_without_real_baseline_rejected) ... ok
+test_malformed_heads_and_missing_git_fail_closed (test_w14_acl_static_gate.W14AncestryAndPinTests.test_malformed_heads_and_missing_git_fail_closed) ... ok
+test_pinned_sources_match_current_tree (test_w14_acl_static_gate.W14AncestryAndPinTests.test_pinned_sources_match_current_tree) ... ok
+test_replace_graft_cannot_fake_ancestry (test_w14_acl_static_gate.W14AncestryAndPinTests.test_replace_graft_cannot_fake_ancestry) ... ok
+test_source_hash_drift_blocks (test_w14_acl_static_gate.W14AncestryAndPinTests.test_source_hash_drift_blocks) ... ok
+test_symbolic_and_abbreviated_refs_rejected (test_w14_acl_static_gate.W14AncestryAndPinTests.test_symbolic_and_abbreviated_refs_rejected) ... ok
+test_auditor_blocks_when_baseline_head_is_wrong (test_w14_acl_static_gate.W14PortableGateTests.test_auditor_blocks_when_baseline_head_is_wrong) ... ok
+test_client_open_argument_is_read_from_source (test_w14_acl_static_gate.W14PortableGateTests.test_client_open_argument_is_read_from_source) ... ok
+test_current_structural_contract_never_approves_release (test_w14_acl_static_gate.W14PortableGateTests.test_current_structural_contract_never_approves_release) ... ok
+test_generic_write_client_rollback_is_rejected (test_w14_acl_static_gate.W14PortableGateTests.test_generic_write_client_rollback_is_rejected) ... ok
+test_grgw_is_not_equivalent_to_explicit_client_least_privilege (test_w14_acl_static_gate.W14PortableGateTests.test_grgw_is_not_equivalent_to_explicit_client_least_privilege) ... ok
+test_grgw_rollback_is_rejected (test_w14_acl_static_gate.W14PortableGateTests.test_grgw_rollback_is_rejected) ... ok
+test_instance_right_no_longer_granted_since_w18 (test_w14_acl_static_gate.W14PortableGateTests.test_instance_right_no_longer_granted_since_w18) ... ok
+test_pipe_flag_regressions_are_rejected (test_w14_acl_static_gate.W14PortableGateTests.test_pipe_flag_regressions_are_rejected) ... ok
+test_system_ga_regression_is_rejected (test_w14_acl_static_gate.W14PortableGateTests.test_system_ga_regression_is_rejected) ... ok
+test_w18_mask_drops_instance_bit_and_write_attributes (test_w14_acl_static_gate.W14PortableGateTests.test_w18_mask_drops_instance_bit_and_write_attributes) ... ok
+test_baseline_must_be_ancestor (test_w15_windows_evidence.PublicPrepAncestryAndPinTests.test_baseline_must_be_ancestor) ... ok
+test_collect_rejects_foreign_lineage (test_w15_windows_evidence.PublicPrepAncestryAndPinTests.test_collect_rejects_foreign_lineage) ... ok
+test_collect_rejects_pinned_source_drift (test_w15_windows_evidence.PublicPrepAncestryAndPinTests.test_collect_rejects_pinned_source_drift) ... ok
+test_malformed_heads_and_missing_git_fail_closed (test_w15_windows_evidence.PublicPrepAncestryAndPinTests.test_malformed_heads_and_missing_git_fail_closed) ... ok
+test_pinned_sources_match_current_tree (test_w15_windows_evidence.PublicPrepAncestryAndPinTests.test_pinned_sources_match_current_tree) ... ok
+test_pins_agree_with_w14_gate (test_w15_windows_evidence.PublicPrepAncestryAndPinTests.test_pins_agree_with_w14_gate) ... ok
+test_replace_graft_cannot_fake_ancestry (test_w15_windows_evidence.PublicPrepAncestryAndPinTests.test_replace_graft_cannot_fake_ancestry) ... ok
+test_report_pinned_source_drift_rejected (test_w15_windows_evidence.PublicPrepAncestryAndPinTests.test_report_pinned_source_drift_rejected) ... ok
+test_report_with_repo_checks_ancestry (test_w15_windows_evidence.PublicPrepAncestryAndPinTests.test_report_with_repo_checks_ancestry) ... ok
+test_symbolic_and_abbreviated_refs_rejected (test_w15_windows_evidence.PublicPrepAncestryAndPinTests.test_symbolic_and_abbreviated_refs_rejected) ... ok
+test_failed_subprocess_rejected (test_w15_windows_evidence.W15EvidenceTests.test_failed_subprocess_rejected) ... ok
+test_incomplete_class_coverage_rejected (test_w15_windows_evidence.W15EvidenceTests.test_incomplete_class_coverage_rejected) ... ok
+test_invalid_hash_encoding_rejected (test_w15_windows_evidence.W15EvidenceTests.test_invalid_hash_encoding_rejected) ... ok
+test_invalid_schema_rejected (test_w15_windows_evidence.W15EvidenceTests.test_invalid_schema_rejected) ... ok
+test_linux_claim_rejected (test_w15_windows_evidence.W15EvidenceTests.test_linux_claim_rejected) ... ok
+test_missing_case_and_duplicate_case_rejected (test_w15_windows_evidence.W15EvidenceTests.test_missing_case_and_duplicate_case_rejected) ... ok
+test_no_windows_collect_or_worker (test_w15_windows_evidence.W15EvidenceTests.test_no_windows_collect_or_worker) ... ok
+test_release_forgery_rejected (test_w15_windows_evidence.W15EvidenceTests.test_release_forgery_rejected) ... ok
+test_self_claim_second_account_not_accepted (test_w15_windows_evidence.W15EvidenceTests.test_self_claim_second_account_not_accepted) ... ok
+test_skipped_native_case_rejected (test_w15_windows_evidence.W15EvidenceTests.test_skipped_native_case_rejected) ... ok
+test_synthetic_report_never_can_authorize_release (test_w15_windows_evidence.W15EvidenceTests.test_synthetic_report_never_can_authorize_release) ... ok
+test_wrong_hash_and_traversal_never_deref_unlisted (test_w15_windows_evidence.W15EvidenceTests.test_wrong_hash_and_traversal_never_deref_unlisted) ... ok
+test_wrong_head_rejected (test_w15_windows_evidence.W15EvidenceTests.test_wrong_head_rejected) ... ok
+test_bad_run_count_bool_not_accepted (test_w15_windows_evidence.W16AdversarialTests.test_bad_run_count_bool_not_accepted) ... ok
+test_cli_input_limit_and_nonfinite_denied (test_w15_windows_evidence.W16AdversarialTests.test_cli_input_limit_and_nonfinite_denied) ... {
+  "issues": [
+    "ValueError"
+  ],
+  "release_authorized": false,
+  "schema_ok": false,
+  "verdict": "BLOCKED"
+}
+{
+  "issues": [
+    "ValueError"
+  ],
+  "release_authorized": false,
+  "schema_ok": false,
+  "verdict": "BLOCKED"
+}
+ok
+test_collector_does_not_embed_unredacted_stderr (test_w15_windows_evidence.W16AdversarialTests.test_collector_does_not_embed_unredacted_stderr) ... ok
+test_exact_test_ids_not_just_count_and_class_names (test_w15_windows_evidence.W16AdversarialTests.test_exact_test_ids_not_just_count_and_class_names) ... ok
+test_invalid_signed_like_source_claims_fail (test_w15_windows_evidence.W16AdversarialTests.test_invalid_signed_like_source_claims_fail) ... ok
+test_linux_collect_remains_denied (test_w15_windows_evidence.W16AdversarialTests.test_linux_collect_remains_denied) ... ok
+test_missing_or_bad_durations_fail (test_w15_windows_evidence.W16AdversarialTests.test_missing_or_bad_durations_fail) ... ok
+test_source_hash_real_symlink_blocked (test_w15_windows_evidence.W16AdversarialTests.test_source_hash_real_symlink_blocked) ... ok
+test_source_hash_symlink_blocked (test_w15_windows_evidence.W16AdversarialTests.test_source_hash_symlink_blocked) ... ok
+test_type_confusion_malformed_cases_never_raise (test_w15_windows_evidence.W16AdversarialTests.test_type_confusion_malformed_cases_never_raise) ... ok
+test_untrusted_report_schema_never_release (test_w15_windows_evidence.W16AdversarialTests.test_untrusted_report_schema_never_release) ... ok
+test_worker_discovery_checks_pin_before_import (test_w15_windows_evidence.W16AdversarialTests.test_worker_discovery_checks_pin_before_import) ... ok
+test_worker_discovery_yields_exact_pinned_ids (test_w15_windows_evidence.W16AdversarialTests.test_worker_discovery_yields_exact_pinned_ids) ... ok
+test_worker_output_privacy (test_w15_windows_evidence.W16AdversarialTests.test_worker_output_privacy) ... ok
+test_cpp_candidate_sets_the_same_owner (test_w17_pipe_owner.PortableOwnerSddl.test_cpp_candidate_sets_the_same_owner) ... ok
+test_owner_is_explicit_server_user (test_w17_pipe_owner.PortableOwnerSddl.test_owner_is_explicit_server_user) ... ok
+test_owner_rights_ace_present_once_with_ace_mask (test_w17_pipe_owner.PortableOwnerSddl.test_owner_rights_ace_present_once_with_ace_mask) ... ok
+test_live_pipe_owner_equals_server_user (test_w17_pipe_owner.WindowsPipeOwner.test_live_pipe_owner_equals_server_user) ... skipped 'Windows runtime required'
+test_moved_default_owner_reproduces_issue_2_and_w17_fixes_it (test_w17_pipe_owner.WindowsPipeOwner.test_moved_default_owner_reproduces_issue_2_and_w17_fixes_it) ... skipped 'Windows runtime required'
+test_owner_has_no_implicit_write_dac (test_w17_pipe_owner.WindowsPipeOwner.test_owner_has_no_implicit_write_dac) ... skipped 'Windows runtime required'
+test_non_windows_refuses_without_claim (test_w18_least_privilege.PortableCppCrossrunTool.test_non_windows_refuses_without_claim) ... ok
+test_every_ace_carries_the_mask (test_w18_least_privilege.PortableLeastPrivilegeMask.test_every_ace_carries_the_mask) ... ok
+test_mask_is_generic_read_plus_write_data_only (test_w18_least_privilege.PortableLeastPrivilegeMask.test_mask_is_generic_read_plus_write_data_only) ... ok
+test_mask_is_grgw_minus_instance_and_attribute_writes (test_w18_least_privilege.PortableLeastPrivilegeMask.test_mask_is_grgw_minus_instance_and_attribute_writes) ... ok
+test_client_ping_opens_with_client_access (test_w18_least_privilege.WindowsInstanceRight.test_client_ping_opens_with_client_access) ... skipped 'Windows runtime required'
+test_further_instance_needs_the_dropped_bit (test_w18_least_privilege.WindowsInstanceRight.test_further_instance_needs_the_dropped_bit) ... skipped 'Windows runtime required'
+test_generic_write_client_refused_client_access_admitted (test_w18_least_privilege.WindowsInstanceRight.test_generic_write_client_refused_client_access_admitted) ... skipped 'Windows runtime required'
+test_access_denied_on_absent_name_stays_generic (test_w19_same_sid_trust_domain.PipeNameOccupied.test_access_denied_on_absent_name_stays_generic) ... skipped 'Windows only'
+test_cli_exits_21_with_typed_json_and_never_listens (test_w19_same_sid_trust_domain.PipeNameOccupied.test_cli_exits_21_with_typed_json_and_never_listens) ... skipped 'Windows only'
+test_cli_generic_failure_is_not_exit_21 (test_w19_same_sid_trust_domain.PipeNameOccupied.test_cli_generic_failure_is_not_exit_21) ... skipped 'Windows only'
+test_control_free_unique_name_starts_and_serves (test_w19_same_sid_trust_domain.PipeNameOccupied.test_control_free_unique_name_starts_and_serves) ... skipped 'Windows only'
+test_live_own_server_is_reported_occupied_too (test_w19_same_sid_trust_domain.PipeNameOccupied.test_live_own_server_is_reported_occupied_too) ... skipped 'Windows only'
+test_other_error_on_present_name_stays_generic (test_w19_same_sid_trust_domain.PipeNameOccupied.test_other_error_on_present_name_stays_generic) ... skipped 'Windows only'
+test_probe_does_not_consume_the_single_instance (test_w19_same_sid_trust_domain.PipeNameOccupied.test_probe_does_not_consume_the_single_instance) ... skipped 'Windows only'
+test_probe_matches_exactly_not_by_wildcard (test_w19_same_sid_trust_domain.PipeNameOccupied.test_probe_matches_exactly_not_by_wildcard) ... skipped 'Windows only'
+test_probe_rejects_invalid_names (test_w19_same_sid_trust_domain.PipeNameOccupied.test_probe_rejects_invalid_names) ... skipped 'Windows only'
+test_squatter_with_free_instances_gives_occupied_access_denied (test_w19_same_sid_trust_domain.PipeNameOccupied.test_squatter_with_free_instances_gives_occupied_access_denied) ... skipped 'Windows only'
+test_squatter_with_one_instance_gives_occupied_pipe_busy (test_w19_same_sid_trust_domain.PipeNameOccupied.test_squatter_with_one_instance_gives_occupied_pipe_busy) ... skipped 'Windows only'
+test_control_synchronize_only_dacl_refuses_the_same_open (test_w19_same_sid_trust_domain.SameSidTrustDomainPremise.test_control_synchronize_only_dacl_refuses_the_same_open) ... skipped 'Windows only'
+test_default_dacl_grants_same_user_inject_rights (test_w19_same_sid_trust_domain.SameSidTrustDomainPremise.test_default_dacl_grants_same_user_inject_rights) ... skipped 'Windows only'
+test_admin_open_and_controls (test_w20_account_matrix.EvaluateAccountMatrix.test_admin_open_and_controls) ... ok
+test_collector_must_be_47_of_47_as_a (test_w20_account_matrix.EvaluateAccountMatrix.test_collector_must_be_47_of_47_as_a) ... ok
+test_complete_report_passes (test_w20_account_matrix.EvaluateAccountMatrix.test_complete_report_passes) ... ok
+test_elevation_and_integrity_must_be_observed (test_w20_account_matrix.EvaluateAccountMatrix.test_elevation_and_integrity_must_be_observed) ... ok
+test_error_and_release_claim_block (test_w20_account_matrix.EvaluateAccountMatrix.test_error_and_release_claim_block) ... ok
+test_filtered_admin_is_not_a_standard_account (test_w20_account_matrix.EvaluateAccountMatrix.test_filtered_admin_is_not_a_standard_account) ... ok
+test_good_report_is_not_mutated (test_w20_account_matrix.EvaluateAccountMatrix.test_good_report_is_not_mutated) ... ok
+test_principals_must_be_distinct (test_w20_account_matrix.EvaluateAccountMatrix.test_principals_must_be_distinct) ... ok
+test_review_findings_block (test_w20_account_matrix.EvaluateAccountMatrix.test_review_findings_block) ... ok
+test_second_account_must_be_denied_at_open (test_w20_account_matrix.EvaluateAccountMatrix.test_second_account_must_be_denied_at_open) ... ok
+test_non_windows_refuses_without_claim (test_w20_account_matrix.PortableEntryPoint.test_non_windows_refuses_without_claim) ... ok
+test_both_sources_use_the_shared_header (test_w24_bounded_cpp_io.BoundedSourceGuards.test_both_sources_use_the_shared_header) ... ok
+test_cancel_path_never_reports_success_and_dies_when_unsettled (test_w24_bounded_cpp_io.BoundedSourceGuards.test_cancel_path_never_reports_success_and_dies_when_unsettled) ... ok
+test_cancel_waits_for_completion_and_never_blocks_unbounded (test_w24_bounded_cpp_io.BoundedSourceGuards.test_cancel_waits_for_completion_and_never_blocks_unbounded) ... ok
+test_client_open_retry_is_bounded (test_w24_bounded_cpp_io.BoundedSourceGuards.test_client_open_retry_is_bounded) ... ok
+test_constants_match_python_lane_and_harness (test_w24_bounded_cpp_io.BoundedSourceGuards.test_constants_match_python_lane_and_harness) ... ok
+test_every_pipe_io_call_is_overlapped (test_w24_bounded_cpp_io.BoundedSourceGuards.test_every_pipe_io_call_is_overlapped) ... ok
+test_handles_are_opened_overlapped (test_w24_bounded_cpp_io.BoundedSourceGuards.test_handles_are_opened_overlapped) ... ok
+test_no_flush_file_buffers_call (test_w24_bounded_cpp_io.BoundedSourceGuards.test_no_flush_file_buffers_call) ... ok
+test_one_deadline_per_exchange (test_w24_bounded_cpp_io.BoundedSourceGuards.test_one_deadline_per_exchange) ... ok
+test_parse_happens_before_any_pipe_object_exists (test_w24_bounded_cpp_io.BoundedSourceGuards.test_parse_happens_before_any_pipe_object_exists) ... ok
+test_peer_closed_requires_eof_not_data (test_w24_bounded_cpp_io.BoundedSourceGuards.test_peer_closed_requires_eof_not_data) ... ok
+test_server_writes_peer_ok_only_after_authorization_and_deadline_check (test_w24_bounded_cpp_io.BoundedSourceGuards.test_server_writes_peer_ok_only_after_authorization_and_deadline_check) ... ok
+test_adr_links_the_open_product_gate (test_w24_bounded_cpp_io.DocumentationDrift.test_adr_links_the_open_product_gate) ... ok
+test_historical_gate_files_are_marked (test_w24_bounded_cpp_io.DocumentationDrift.test_historical_gate_files_are_marked) ... ok
+test_security_policy_has_no_superseded_claims (test_w24_bounded_cpp_io.DocumentationDrift.test_security_policy_has_no_superseded_claims) ... ok
+test_version_is_consistent (test_w24_bounded_cpp_io.DocumentationDrift.test_version_is_consistent) ... ok
+test_all_cases_pass_requires_exact_set (test_w24_bounded_cpp_io.HarnessVerdict.test_all_cases_pass_requires_exact_set) ... ok
+test_reference_parser_rejects_every_bad_argument_vector (test_w24_bounded_cpp_io.HarnessVerdict.test_reference_parser_rejects_every_bad_argument_vector) ... ok
+test_stall_verdict_is_fail_closed (test_w24_bounded_cpp_io.HarnessVerdict.test_stall_verdict_is_fail_closed) ... ok
+test_timing_margins_separate_bounded_from_holder_release (test_w24_bounded_cpp_io.HarnessVerdict.test_timing_margins_separate_bounded_from_holder_release) ... ok
+test_sources_compile_warning_free (test_w24_bounded_cpp_io.OptionalCrossCompile.test_sources_compile_warning_free) ... skipped 'mingw-w64 not installed (optional local type check; CI uses MSVC natively)'
+test_below_medium_keeps_its_reason (test_w25_2_integrity.ServerIntegrityEquality.test_below_medium_keeps_its_reason) ... skipped 'Windows Win32 named pipes required'
+test_equal_integrity_is_served (test_w25_2_integrity.ServerIntegrityEquality.test_equal_integrity_is_served) ... skipped 'Windows Win32 named pipes required'
+test_higher_integrity_token_denied (test_w25_2_integrity.ServerIntegrityEquality.test_higher_integrity_token_denied) ... skipped 'Windows Win32 named pipes required'
+test_server_without_own_integrity_refuses_to_start (test_w25_2_integrity.ServerIntegrityEquality.test_server_without_own_integrity_refuses_to_start) ... skipped 'Windows Win32 named pipes required'
+test_inherit_only_label_is_refused (test_w25_pipe_label.PipeLabelCheck.test_inherit_only_label_is_refused) ... skipped 'Windows runtime required'
+test_label_query_failure_is_typed (test_w25_pipe_label.PipeLabelCheck.test_label_query_failure_is_typed) ... skipped 'Windows runtime required'
+test_label_without_no_write_up_is_refused (test_w25_pipe_label.PipeLabelCheck.test_label_without_no_write_up_is_refused) ... skipped 'Windows runtime required'
+test_low_label_is_refused_before_writing (test_w25_pipe_label.PipeLabelCheck.test_low_label_is_refused_before_writing) ... skipped 'Windows runtime required'
+test_medium_label_passes_the_label_check (test_w25_pipe_label.PipeLabelCheck.test_medium_label_passes_the_label_check) ... skipped 'Windows runtime required'
+test_production_label_is_effective_and_no_write_up (test_w25_pipe_label.PipeLabelCheck.test_production_label_is_effective_and_no_write_up) ... skipped 'Windows runtime required'
+test_production_server_pipe_carries_own_level (test_w25_pipe_label.PipeLabelCheck.test_production_server_pipe_carries_own_level) ... skipped 'Windows runtime required'
+test_restricted_token_squatter_is_a_documented_boundary (test_w25_pipe_label.PipeLabelCheck.test_restricted_token_squatter_is_a_documented_boundary) ... skipped 'Windows runtime required'
+test_ci_job_runs_the_matrix (test_w25_principal_matrix.CiWiring.test_ci_job_runs_the_matrix) ... ok
+test_control_adds_exactly_ac_ace_and_low_label (test_w25_principal_matrix.ControlSddl.test_control_adds_exactly_ac_ace_and_low_label) ... ok
+test_control_refuses_non_production_input (test_w25_principal_matrix.ControlSddl.test_control_refuses_non_production_input) ... ok
+test_evaluate_does_not_trust_a_weakened_production_sd (test_w25_principal_matrix.ControlSddl.test_evaluate_does_not_trust_a_weakened_production_sd) ... ok
+test_evaluate_malformed_production_blocks_with_drift_without_crash (test_w25_principal_matrix.ControlSddl.test_evaluate_malformed_production_blocks_with_drift_without_crash) ... ok
+test_label_refusal_server_reason_is_one_of_the_race_pair (test_w25_principal_matrix.ControlSddl.test_label_refusal_server_reason_is_one_of_the_race_pair) ... ok
+test_production_label_is_the_parent_level (test_w25_principal_matrix.ControlSddl.test_production_label_is_the_parent_level) ... ok
+test_production_literal_matches_the_module (test_w25_principal_matrix.ControlSddl.test_production_literal_matches_the_module) ... ok
+test_underivable_production_is_a_typed_issue_not_an_exception (test_w25_principal_matrix.ControlSddl.test_underivable_production_is_a_typed_issue_not_an_exception) ... ok
+test_variants_keep_the_production_level (test_w25_principal_matrix.ControlSddl.test_variants_keep_the_production_level) ... ok
+test_complete_reports_pass_in_both_modes (test_w25_principal_matrix.CrossIntegrityW26.test_complete_reports_pass_in_both_modes) ... ok
+test_cpp_label_line_format_matches_the_parser (test_w25_principal_matrix.CrossIntegrityW26.test_cpp_label_line_format_matches_the_parser) ... ok
+test_cross_il_cases_are_elevated_only (test_w25_principal_matrix.CrossIntegrityW26.test_cross_il_cases_are_elevated_only) ... ok
+test_cross_il_cases_cannot_be_dropped (test_w25_principal_matrix.CrossIntegrityW26.test_cross_il_cases_cannot_be_dropped) ... ok
+test_elevated_client_that_writes_to_the_medium_squatter_blocks (test_w25_principal_matrix.CrossIntegrityW26.test_elevated_client_that_writes_to_the_medium_squatter_blocks) ... ok
+test_exit_7_must_be_the_equality_rule (test_w25_principal_matrix.CrossIntegrityW26.test_exit_7_must_be_the_equality_rule) ... ok
+test_medium_child_must_really_be_medium (test_w25_principal_matrix.CrossIntegrityW26.test_medium_child_must_really_be_medium) ... ok
+test_medium_client_must_be_refused_at_open (test_w25_principal_matrix.CrossIntegrityW26.test_medium_client_must_be_refused_at_open) ... ok
+test_owner_check_must_have_passed (test_w25_principal_matrix.CrossIntegrityW26.test_owner_check_must_have_passed) ... ok
+test_parse_label_line (test_w25_principal_matrix.CrossIntegrityW26.test_parse_label_line) ... ok
+test_squatter_must_use_the_projects_own_medium_descriptor (test_w25_principal_matrix.CrossIntegrityW26.test_squatter_must_use_the_projects_own_medium_descriptor) ... ok
+test_squatter_production_kind_uses_build_sddl_at_its_own_level (test_w25_principal_matrix.CrossIntegrityW26.test_squatter_production_kind_uses_build_sddl_at_its_own_level) ... ok
+test_every_mutation_anchor_exists_exactly_once (test_w25_principal_matrix.DiscriminationSpec.test_every_mutation_anchor_exists_exactly_once) ... ok
+test_appcontainer_child_must_be_in_this_appcontainer (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_appcontainer_child_must_be_in_this_appcontainer) ... ok
+test_case_error_blocks (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_case_error_blocks) ... ok
+test_case_set_must_be_exact (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_case_set_must_be_exact) ... ok
+test_case_shape (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_case_shape) ... ok
+test_child_facts_missing_blocks (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_child_facts_missing_blocks) ... ok
+test_child_must_run_as_the_same_user (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_child_must_run_as_the_same_user) ... ok
+test_cleanup (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_cleanup) ... ok
+test_cli_evaluate_mode (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_cli_evaluate_mode) ... ok
+test_client_exit_code (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_client_exit_code) ... ok
+test_client_must_end_on_its_own_in_time (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_client_must_end_on_its_own_in_time) ... ok
+test_complete_report_passes (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_complete_report_passes) ... ok
+test_cpp_server_exit (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_cpp_server_exit) ... ok
+test_denied_server_must_not_have_sent (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_denied_server_must_not_have_sent) ... ok
+test_every_case_is_discriminating (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_every_case_is_discriminating) ... ok
+test_launcher_that_did_not_lower_integrity_blocks (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_launcher_that_did_not_lower_integrity_blocks) ... ok
+test_not_an_object (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_not_an_object) ... ok
+test_orchestration_error_blocks (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_orchestration_error_blocks) ... ok
+test_parent_facts (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_parent_facts) ... ok
+test_python_server_decision (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_python_server_decision) ... ok
+test_refusal_must_be_access_denied_at_open (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_refusal_must_be_access_denied_at_open) ... ok
+test_release_claim_blocks (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_release_claim_blocks) ... ok
+test_restricted_child_must_be_restricted (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_restricted_child_must_be_restricted) ... ok
+test_sddl_drift (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_sddl_drift) ... ok
+test_server_must_have_identified_the_real_user (test_w25_principal_matrix.EvaluatePrincipalMatrix.test_server_must_have_identified_the_real_user) ... ok
+test_attribution_cases_exist (test_w25_principal_matrix.HardeningW251.test_attribution_cases_exist) ... ok
+test_binaries_must_be_the_built_ones (test_w25_principal_matrix.HardeningW251.test_binaries_must_be_the_built_ones) ... ok
+test_child_must_inherit_only_its_pipe (test_w25_principal_matrix.HardeningW251.test_child_must_inherit_only_its_pipe) ... ok
+test_cpp_probe_prints_the_denial_facts (test_w25_principal_matrix.HardeningW251.test_cpp_probe_prints_the_denial_facts) ... ok
+test_cpp_restricted_denial_must_name_only_the_restricted_flag (test_w25_principal_matrix.HardeningW251.test_cpp_restricted_denial_must_name_only_the_restricted_flag) ... ok
+test_launcher_uses_a_handle_list_for_every_principal (test_w25_principal_matrix.HardeningW251.test_launcher_uses_a_handle_list_for_every_principal) ... ok
+test_mode_must_match_the_parent_facts (test_w25_principal_matrix.HardeningW251.test_mode_must_match_the_parent_facts) ... ok
+test_parse_probe_denial (test_w25_principal_matrix.HardeningW251.test_parse_probe_denial) ... ok
+test_sd_variants_differ_by_exactly_one_mechanism (test_w25_principal_matrix.HardeningW251.test_sd_variants_differ_by_exactly_one_mechanism) ... ok
+test_server_must_have_used_the_declared_sd (test_w25_principal_matrix.HardeningW251.test_server_must_have_used_the_declared_sd) ... ok
+test_standard_account_report_passes (test_w25_principal_matrix.HardeningW251.test_standard_account_report_passes) ... ok
+test_standard_mode_cleanup (test_w25_principal_matrix.HardeningW251.test_standard_mode_cleanup) ... ok
+test_cpp_client_prints_the_error_before_exit_1 (test_w25_principal_matrix.OpenErrorLine.test_cpp_client_prints_the_error_before_exit_1) ... ok
+test_parse (test_w25_principal_matrix.OpenErrorLine.test_parse) ... ok
+test_both_modes_pass (test_w25_principal_matrix.SquatterW252.test_both_modes_pass) ... ok
+test_client_that_accepts_the_squatter_blocks (test_w25_principal_matrix.SquatterW252.test_client_that_accepts_the_squatter_blocks) ... ok
+test_cpp_client_checks_the_label_before_writing (test_w25_principal_matrix.SquatterW252.test_cpp_client_checks_the_label_before_writing) ... ok
+test_cpp_client_requires_an_effective_no_write_up_label (test_w25_principal_matrix.SquatterW252.test_cpp_client_requires_an_effective_no_write_up_label) ... ok
+test_cpp_probe_requires_equal_integrity (test_w25_principal_matrix.SquatterW252.test_cpp_probe_requires_equal_integrity) ... ok
+test_kernel_low_label_and_privilege_refusal_are_pinned (test_w25_principal_matrix.SquatterW252.test_kernel_low_label_and_privilege_refusal_are_pinned) ... ok
+test_python_client_checks_the_label_before_writing (test_w25_principal_matrix.SquatterW252.test_python_client_checks_the_label_before_writing) ... ok
+test_python_server_requires_equal_integrity (test_w25_principal_matrix.SquatterW252.test_python_server_requires_equal_integrity) ... ok
+test_squat_set_must_be_exact (test_w25_principal_matrix.SquatterW252.test_squat_set_must_be_exact) ... ok
+test_squatter_must_really_be_low_il (test_w25_principal_matrix.SquatterW252.test_squatter_must_really_be_low_il) ... ok
+test_squatter_that_could_not_create_blocks_the_default_case (test_w25_principal_matrix.SquatterW252.test_squatter_that_could_not_create_blocks_the_default_case) ... ok
+test_standard_mode_needs_the_label_check_not_the_owner_check (test_w25_principal_matrix.SquatterW252.test_standard_mode_needs_the_label_check_not_the_owner_check) ... ok
+test_one_line_per_case_without_failing_on_junk (test_w25_principal_matrix.Summary.test_one_line_per_case_without_failing_on_junk) ... ok
+test_lowered_children_must_carry_no_write_up (test_w25_principal_matrix.TokenPremisesW26.test_lowered_children_must_carry_no_write_up) ... ok
+test_summary_names_the_real_owner (test_w25_principal_matrix.TokenPremisesW26.test_summary_names_the_real_owner) ... ok
+test_token_class_constants (test_w25_principal_matrix.TokenPremisesW26.test_token_class_constants) ... ok
+test_uiaccess_or_virtualization_blocks_every_case (test_w25_principal_matrix.TokenPremisesW26.test_uiaccess_or_virtualization_blocks_every_case) ... ok
+test_classify_requires_exactly_one_test (test_w26_dk_runner.RunnerPureLogic.test_classify_requires_exactly_one_test) ... ok
+test_decide (test_w26_dk_runner.RunnerPureLogic.test_decide) ... ok
+test_runner_never_writes_the_working_tree (test_w26_dk_runner.RunnerPureLogic.test_runner_never_writes_the_working_tree) ... ok
+test_test_id (test_w26_dk_runner.RunnerPureLogic.test_test_id) ... ok
+test_each_verdict (test_w26_dk_runner.RunnerVerdicts.test_each_verdict) ... ok
+test_restore_is_byte_exact_including_crlf (test_w26_dk_runner.RunnerVerdicts.test_restore_is_byte_exact_including_crlf) ... ok
+test_spec_cannot_write_outside_the_work_copy (test_w26_dk_runner.RunnerVerdicts.test_spec_cannot_write_outside_the_work_copy) ... ok
+test_spec_is_not_ok_unless_every_applicable_case_is_killed (test_w26_dk_runner.RunnerVerdicts.test_spec_is_not_ok_unless_every_applicable_case_is_killed) ... ok
+test_cli_rejects_a_pin_for_a_spec_that_is_not_run (test_w26_dk_runner.StalePin.test_cli_rejects_a_pin_for_a_spec_that_is_not_run) ... usage: python3.13 -m unittest [-h] [--json JSON] [--expect-stale SPEC=N]
+                              specs [specs ...]
+python3.13 -m unittest: error: --expect-stale for a spec that is not run: evidence/w12_dk_spec.json
+ok
+test_exact_pin_passes_and_any_other_count_fails (test_w26_dk_runner.StalePin.test_exact_pin_passes_and_any_other_count_fails) ... ok
+test_every_w26_anchor_exists_exactly_once_and_names_a_real_test (test_w26_dk_runner.W26SpecsAnchored.test_every_w26_anchor_exists_exactly_once_and_names_a_real_test) ... ok
+test_failure_classes (test_w27_fd_handoff_startup.LoadToolPureParts.test_failure_classes) ... ok
+test_summary_counts_failures_and_runs_over_the_old_test_timeout (test_w27_fd_handoff_startup.LoadToolPureParts.test_summary_counts_failures_and_runs_over_the_old_test_timeout) ... ok
+test_adopted_descriptor_is_nonblocking_although_python_reports_blocking (test_w27_fd_handoff_startup.StartupIsNotChargedToTheProtocol.test_adopted_descriptor_is_nonblocking_although_python_reports_blocking) ... ok
+test_child_that_exits_before_ready_is_not_reported_as_ready (test_w27_fd_handoff_startup.StartupIsNotChargedToTheProtocol.test_child_that_exits_before_ready_is_not_reported_as_ready) ... ok
+test_child_that_never_becomes_ready_is_typed_bounded_and_reaped (test_w27_fd_handoff_startup.StartupIsNotChargedToTheProtocol.test_child_that_never_becomes_ready_is_typed_bounded_and_reaped) ... ok
+test_child_waits_for_a_parent_that_sends_late (test_w27_fd_handoff_startup.StartupIsNotChargedToTheProtocol.test_child_waits_for_a_parent_that_sends_late) ... ok
+test_fault_injection_arguments_are_bounded (test_w27_fd_handoff_startup.StartupIsNotChargedToTheProtocol.test_fault_injection_arguments_are_bounded) ... ok
+test_private_pair_keeps_its_two_second_timeout (test_w27_fd_handoff_startup.StartupIsNotChargedToTheProtocol.test_private_pair_keeps_its_two_second_timeout) ... ok
+test_ready_but_silent_child_still_hits_the_two_second_protocol_timeout (test_w27_fd_handoff_startup.StartupIsNotChargedToTheProtocol.test_ready_but_silent_child_still_hits_the_two_second_protocol_timeout) ... ok
+test_slow_child_start_is_not_charged_to_the_protocol_timeout (test_w27_fd_handoff_startup.StartupIsNotChargedToTheProtocol.test_slow_child_start_is_not_charged_to_the_protocol_timeout) ... ok
+test_real_sweep_on_a_synthetic_tree_reports_exactly_the_untested_direction (test_w27_guard_sweep.EndToEnd.test_real_sweep_on_a_synthetic_tree_reports_exactly_the_untested_direction) ... ok
+test_finds_every_if_and_elif_whose_body_ends_in_raise_and_nothing_else (test_w27_guard_sweep.Inventory.test_finds_every_if_and_elif_whose_body_ends_in_raise_and_nothing_else) ... ok
+test_key_changes_when_the_condition_or_the_code_changes (test_w27_guard_sweep.Inventory.test_key_changes_when_the_condition_or_the_code_changes) ... ok
+test_keys_are_unique_and_do_not_depend_on_line_numbers (test_w27_guard_sweep.Inventory.test_keys_are_unique_and_do_not_depend_on_line_numbers) ... ok
+test_non_ascii_before_the_condition_does_not_shift_the_range (test_w27_guard_sweep.Mutation.test_non_ascii_before_the_condition_does_not_shift_the_range) ... ok
+test_only_the_condition_bytes_change_also_across_lines_and_with_crlf (test_w27_guard_sweep.Mutation.test_only_the_condition_bytes_change_also_across_lines_and_with_crlf) ... ok
+test_baseline_entries_need_a_known_class_and_a_reason_and_must_be_unique (test_w27_guard_sweep.Ratchet.test_baseline_entries_need_a_known_class_and_a_reason_and_must_be_unique) ... ok
+test_new_survivor_and_stale_pin_are_both_reported (test_w27_guard_sweep.Ratchet.test_new_survivor_and_stale_pin_are_both_reported) ... ok
+test_a_timeout_is_never_a_kill_and_a_red_baseline_is_not_a_result (test_w27_guard_sweep.Verdicts.test_a_timeout_is_never_a_kill_and_a_red_baseline_is_not_a_result) ... ok
+test_classify (test_w27_guard_sweep.Verdicts.test_classify) ... ok
+test_capability_list_response_shape (test_w27_negative_controls.Core.test_capability_list_response_shape) ... ok
+test_metadata_response_field_types (test_w27_negative_controls.Core.test_metadata_response_field_types) ... ok
+test_request_must_be_bytes_not_a_bytes_like_object (test_w27_negative_controls.Core.test_request_must_be_bytes_not_a_bytes_like_object) ... ok
+test_response_code_syntax (test_w27_negative_controls.Core.test_response_code_syntax) ... ok
+test_response_frame_limit (test_w27_negative_controls.Core.test_response_frame_limit) ... ok
+test_response_must_be_bytes_not_a_bytes_like_object (test_w27_negative_controls.Core.test_response_must_be_bytes_not_a_bytes_like_object) ... ok
+test_response_request_id_must_be_a_string (test_w27_negative_controls.Core.test_response_request_id_must_be_a_string) ... ok
+test_host_policy_types (test_w27_negative_controls.CredentialedHandoff.test_host_policy_types) ... ok
+test_identity_policy_types (test_w27_negative_controls.CredentialedHandoff.test_identity_policy_types) ... ok
+test_reply_digest_syntax (test_w27_negative_controls.CredentialedHandoff.test_reply_digest_syntax) ... ok
+test_reply_requires_a_canonical_request_id (test_w27_negative_controls.CredentialedHandoff.test_reply_requires_a_canonical_request_id) ... ok
+test_send_requires_a_canonical_request_id (test_w27_negative_controls.CredentialedHandoff.test_send_requires_a_canonical_request_id) ... ok
+test_stream_socket_is_not_an_accepted_transport (test_w27_negative_controls.CredentialedHandoff.test_stream_socket_is_not_an_accepted_transport) ... ok
+test_unsupported_platform_gets_no_pair (test_w27_negative_controls.CredentialedHandoff.test_unsupported_platform_gets_no_pair) ... ok
+test_claim_grant_id_syntax (test_w27_negative_controls.DurableGrants.test_claim_grant_id_syntax) ... ok
+test_claim_owner_type (test_w27_negative_controls.DurableGrants.test_claim_owner_type) ... ok
+test_claim_request_id_must_be_canonical (test_w27_negative_controls.DurableGrants.test_claim_request_id_must_be_canonical) ... ok
+test_clock_must_be_a_positive_integer (test_w27_negative_controls.DurableGrants.test_clock_must_be_a_positive_integer) ... ok
+test_non_posix_platform_is_refused_with_a_typed_reason (test_w27_negative_controls.DurableGrants.test_non_posix_platform_is_refused_with_a_typed_reason) ... ok
+test_store_path_must_be_absolute (test_w27_negative_controls.DurableGrants.test_store_path_must_be_absolute) ... ok
+test_store_refuses_a_database_that_does_not_reach_wal_or_full_sync (test_w27_negative_controls.DurableGrants.test_store_refuses_a_database_that_does_not_reach_wal_or_full_sync) ... ok
+test_unknown_grant_cannot_be_claimed_or_revoked (test_w27_negative_controls.DurableGrants.test_unknown_grant_cannot_be_claimed_or_revoked) ... ok
+test_foreign_ancillary_data_is_refused (test_w27_negative_controls.FdHandoff.test_foreign_ancillary_data_is_refused) ... ok
+test_host_policy_types (test_w27_negative_controls.FdHandoff.test_host_policy_types) ... ok
+test_impossible_peer_credentials_are_no_peer (test_w27_negative_controls.FdHandoff.test_impossible_peer_credentials_are_no_peer) ... ok
+test_send_requires_a_canonical_request_id (test_w27_negative_controls.FdHandoff.test_send_requires_a_canonical_request_id) ... ok
+test_status_digest_syntax (test_w27_negative_controls.FdHandoff.test_status_digest_syntax) ... ok
+test_status_requires_a_canonical_expected_id (test_w27_negative_controls.FdHandoff.test_status_requires_a_canonical_expected_id) ... ok
+test_stream_socket_is_not_an_accepted_transport (test_w27_negative_controls.FdHandoff.test_stream_socket_is_not_an_accepted_transport) ... ok
+test_unsupported_platform_gets_no_pair (test_w27_negative_controls.FdHandoff.test_unsupported_platform_gets_no_pair) ... ok
+test_valid_status_with_an_attached_descriptor_is_refused_and_closed (test_w27_negative_controls.FdHandoff.test_valid_status_with_an_attached_descriptor_is_refused_and_closed) ... ok
+test_change_during_the_read_is_detected_even_at_constant_size (test_w27_negative_controls.FdReaderAndSnapshot.test_change_during_the_read_is_detected_even_at_constant_size) ... ok
+test_closed_reader_cannot_be_entered (test_w27_negative_controls.FdReaderAndSnapshot.test_closed_reader_cannot_be_entered) ... ok
+test_closed_snapshot_cannot_be_entered (test_w27_negative_controls.FdReaderAndSnapshot.test_closed_snapshot_cannot_be_entered) ... ok
+test_copy_that_makes_no_progress_is_refused (test_w27_negative_controls.FdReaderAndSnapshot.test_copy_that_makes_no_progress_is_refused) ... ok
+test_copy_whose_seals_did_not_take_is_refused (test_w27_negative_controls.FdReaderAndSnapshot.test_copy_whose_seals_did_not_take_is_refused) ... ok
+test_limit_type_and_range (test_w27_negative_controls.FdReaderAndSnapshot.test_limit_type_and_range) ... ok
+test_platform_without_fcntl_is_refused (test_w27_negative_controls.FdReaderAndSnapshot.test_platform_without_fcntl_is_refused) ... ok
+test_snapshot_platform_without_fcntl_is_refused (test_w27_negative_controls.FdReaderAndSnapshot.test_snapshot_platform_without_fcntl_is_refused) ... ok
+test_snapshot_read_checks_size_and_digest (test_w27_negative_controls.FdReaderAndSnapshot.test_snapshot_read_checks_size_and_digest) ... ok
+test_two_differing_reads_are_an_unstable_source (test_w27_negative_controls.FdReaderAndSnapshot.test_two_differing_reads_are_an_unstable_source) ... ok
+test_client_refuses_a_service_of_another_uid_before_sending (test_w27_negative_controls.LinuxIpc.test_client_refuses_a_service_of_another_uid_before_sending) ... ok
+test_client_refuses_an_oversized_response_header (test_w27_negative_controls.LinuxIpc.test_client_refuses_an_oversized_response_header) ... ok
+test_client_request_type_and_size (test_w27_negative_controls.LinuxIpc.test_client_request_type_and_size) ... ok
+test_expired_deadline_is_typed_before_any_receive (test_w27_negative_controls.LinuxIpc.test_expired_deadline_is_typed_before_any_receive) ... ok
+test_impossible_peer_credentials_are_unauthenticated (test_w27_negative_controls.LinuxIpc.test_impossible_peer_credentials_are_unauthenticated) ... ok
+test_response_budget_is_checked_before_sending (test_w27_negative_controls.LinuxIpc.test_response_budget_is_checked_before_sending) ... ok
+test_runtime_directory_must_not_be_a_symlink (test_w27_negative_controls.LinuxIpc.test_runtime_directory_must_not_be_a_symlink) ... ok
+test_runtime_directory_of_another_owner_is_refused (test_w27_negative_controls.LinuxIpc.test_runtime_directory_of_another_owner_is_refused) ... ok
+test_runtime_directory_path_length (test_w27_negative_controls.LinuxIpc.test_runtime_directory_path_length) ... ok
+test_server_refuses_to_run_as_root (test_w27_negative_controls.LinuxIpc.test_server_refuses_to_run_as_root) ... ok
+test_truncated_frame_is_a_connection_error_not_a_wait (test_w27_negative_controls.LinuxIpc.test_truncated_frame_is_a_connection_error_not_a_wait) ... ok
+test_chooser_uri_with_backslash_or_nul (test_w27_negative_controls.PortableValidation.test_chooser_uri_with_backslash_or_nul) ... ok
+test_portal_request_construction_and_state (test_w27_negative_controls.PortableValidation.test_portal_request_construction_and_state) ... ok
+test_preview_gate_scope_epoch_and_dimensions (test_w27_negative_controls.PortableValidation.test_preview_gate_scope_epoch_and_dimensions) ... ok
+test_tile_tracker_dimension_types_and_tile_budget (test_w27_negative_controls.PortableValidation.test_tile_tracker_dimension_types_and_tile_budget) ... ok
+test_tile_tracker_parameters (test_w27_negative_controls.PortableValidation.test_tile_tracker_parameters) ... ok
+test_partial_start_failure_kills_and_reaps_the_started_burners (test_w28_1_load_tool_cleanup.BurnerCleanup.test_partial_start_failure_kills_and_reaps_the_started_burners) ... ok
+test_bool_principal_equal_to_one_is_refused (test_w28_1_principal_range.PrincipalRange.test_bool_principal_equal_to_one_is_refused) ... ok
+test_claim_refuses_equal_but_wrongly_typed_principals (test_w28_1_principal_range.PrincipalRange.test_claim_refuses_equal_but_wrongly_typed_principals) ... ok
+test_out_of_range_or_wrongly_typed_recipient_is_bad_principal_at_issue (test_w28_1_principal_range.PrincipalRange.test_out_of_range_or_wrongly_typed_recipient_is_bad_principal_at_issue) ... ok
+test_parseable_but_noncanonical_ids_are_invalid_response (test_w28_1_side_effect_survivors.ResponseRequestIdIsCanonical.test_parseable_but_noncanonical_ids_are_invalid_response) ... ok
+test_credentialed_short_reply (test_w28_1_side_effect_survivors.ShortReplyIsReplyFailed.test_credentialed_short_reply) ... ok
+test_fd_handoff_short_reply (test_w28_1_side_effect_survivors.ShortReplyIsReplyFailed.test_fd_handoff_short_reply) ... ok
+test_beyond_is_invalid_clock_not_overflow (test_w28_equivalence_witnesses.DurableClockRange.test_beyond_is_invalid_clock_not_overflow) ... ok
+test_largest_clock_with_longest_ttl_fits_sqlite (test_w28_equivalence_witnesses.DurableClockRange.test_largest_clock_with_longest_ttl_fits_sqlite) ... ok
+test_every_canonical_uuid_gives_the_same_length_far_below_max_wire (test_w28_equivalence_witnesses.EnvelopeLengthIsFixed.test_every_canonical_uuid_gives_the_same_length_far_below_max_wire) ... ok
+test_long_or_escaping_ids_never_reach_the_size_check (test_w28_equivalence_witnesses.EnvelopeLengthIsFixed.test_long_or_escaping_ids_never_reach_the_size_check) ... ok
+test_above_the_limit_at_admission_is_size_limit (test_w28_equivalence_witnesses.GrowthAfterAdmission.test_above_the_limit_at_admission_is_size_limit) ... ok
+test_growth_past_the_limit_is_resource_changed_before_the_size_check (test_w28_equivalence_witnesses.GrowthAfterAdmission.test_growth_past_the_limit_is_resource_changed_before_the_size_check) ... ok
+test_deadline_overflow_is_reachable_and_refused (test_w28_equivalence_witnesses.PortalClockExtremes.test_deadline_overflow_is_reachable_and_refused) ... ok
+test_int_beyond_float_range_is_bad_clock_not_overflow (test_w28_equivalence_witnesses.PortalClockExtremes.test_int_beyond_float_range_is_bad_clock_not_overflow) ... ok
+test_positive_controls_at_the_edge (test_w28_equivalence_witnesses.PortalClockExtremes.test_positive_controls_at_the_edge) ... ok
+test_property_every_clock_value_is_accepted_finite_or_refused_typed (test_w28_equivalence_witnesses.PortalClockExtremes.test_property_every_clock_value_is_accepted_finite_or_refused_typed) ... ok
+test_int_beyond_float_range_is_clock_anomaly_not_overflow (test_w28_equivalence_witnesses.PreviewGateClockExtremes.test_int_beyond_float_range_is_clock_anomaly_not_overflow) ... ok
+test_property_every_clock_value_issues_or_refuses_typed (test_w28_equivalence_witnesses.PreviewGateClockExtremes.test_property_every_clock_value_issues_or_refuses_typed) ... ok
+test_v2_sweep_on_a_synthetic_tree (test_w28_guard_sweep_v2.EndToEnd.test_v2_sweep_on_a_synthetic_tree) ... ok
+test_a_kind_that_does_not_fit_the_form_is_refused (test_w28_guard_sweep_v2.InventoryForms.test_a_kind_that_does_not_fit_the_form_is_refused) ... ok
+test_kinds_per_form (test_w28_guard_sweep_v2.InventoryForms.test_kinds_per_form) ... ok
+test_return_and_handler_refusals_are_found_ordinary_ones_are_not (test_w28_guard_sweep_v2.InventoryForms.test_return_and_handler_refusals_are_found_ordinary_ones_are_not) ... ok
+test_runtime_package_inventory_covers_the_new_forms (test_w28_guard_sweep_v2.InventoryForms.test_runtime_package_inventory_covers_the_new_forms) ... ok
+test_untyped_mutant_catches_nothing_and_compiles (test_w28_guard_sweep_v2.InventoryForms.test_untyped_mutant_catches_nothing_and_compiles) ... ok
+test_w27_raise_keys_are_unchanged (test_w28_guard_sweep_v2.InventoryForms.test_w27_raise_keys_are_unchanged) ... ok
+test_a_failure_is_an_assertion_kill_whatever_else_happened (test_w28_guard_sweep_v2.KillAttribution.test_a_failure_is_an_assertion_kill_whatever_else_happened) ... ok
+test_an_error_inside_a_test_method_is_a_kill (test_w28_guard_sweep_v2.KillAttribution.test_an_error_inside_a_test_method_is_a_kill) ... ok
+test_structural_errors_are_not_kills (test_w28_guard_sweep_v2.KillAttribution.test_structural_errors_are_not_kills) ... ok
+test_subtest_parameters_are_not_part_of_the_test_id (test_w28_guard_sweep_v2.KillAttribution.test_subtest_parameters_are_not_part_of_the_test_id) ... ok
+test_survived_structural_and_unreliable_all_need_a_pin (test_w28_guard_sweep_v2.RatchetInput.test_survived_structural_and_unreliable_all_need_a_pin) ... ok
+test_mutants_still_evaluate_the_condition (test_w28_guard_sweep_v2.SideEffectsArePreserved.test_mutants_still_evaluate_the_condition) ... ok
+test_a_kill_that_does_not_reproduce_is_unreliable (test_w28_guard_sweep_v2.W281EndToEnd.test_a_kill_that_does_not_reproduce_is_unreliable) ... ok
+test_side_effecting_guard_without_negative_test_survives (test_w28_guard_sweep_v2.W281EndToEnd.test_side_effecting_guard_without_negative_test_survives) ... ok
+test_equivalent_needs_a_witness_and_kinds_are_known (test_w28_guard_sweep_v2.WitnessedBaseline.test_equivalent_needs_a_witness_and_kinds_are_known) ... ok
+test_missing_witness_is_reported (test_w28_guard_sweep_v2.WitnessedBaseline.test_missing_witness_is_reported) ... ok
+test_repository_baseline_is_valid_and_fully_witnessed (test_w28_guard_sweep_v2.WitnessedBaseline.test_repository_baseline_is_valid_and_fully_witnessed) ... ok
+test_uri_that_urlsplit_cannot_parse_is_invalid_uri (test_w28_negative_controls.PortalUriParseFailure.test_uri_that_urlsplit_cannot_parse_is_invalid_uri) ... ok
+test_bool_none_and_text_clocks_are_clock_anomaly (test_w28_negative_controls.PreviewGateNonNumericClock.test_bool_none_and_text_clocks_are_clock_anomaly) ... ok
+test_invalid_scope_is_reported_as_such_not_as_a_mismatch (test_w28_negative_controls.PreviewGateReturnRefusals.test_invalid_scope_is_reported_as_such_not_as_a_mismatch) ... ok
+test_malformed_grant_id_is_invalid_not_merely_absent (test_w28_negative_controls.PreviewGateReturnRefusals.test_malformed_grant_id_is_invalid_not_merely_absent) ... ok
+test_non_uuid_request_id_is_refused_and_does_not_consume_the_grant (test_w28_negative_controls.PreviewGateReturnRefusals.test_non_uuid_request_id_is_refused_and_does_not_consume_the_grant) ... ok
+test_replayed_request_id_is_refused_even_with_a_fresh_grant (test_w28_negative_controls.PreviewGateReturnRefusals.test_replayed_request_id_is_refused_even_with_a_fresh_grant) ... ok
+test_undecodable_response_bytes_are_invalid_response (test_w28_negative_controls.ResponseDecoderTypedConversion.test_undecodable_response_bytes_are_invalid_response) ... ok
+test_grant_for_an_unreadable_handle_is_invalid_source_handle (test_w28_negative_controls.TypedHandlerConversions.test_grant_for_an_unreadable_handle_is_invalid_source_handle) ... ok
+test_handoff_peer_query_failure_is_no_os_peer (test_w28_negative_controls.TypedHandlerConversions.test_handoff_peer_query_failure_is_no_os_peer) ... ok
+test_ipc_peer_query_failure_is_unauthenticated_peer (test_w28_negative_controls.TypedHandlerConversions.test_ipc_peer_query_failure_is_unauthenticated_peer) ... ok
+test_reader_on_a_closed_descriptor_is_invalid_fd_with_the_os_error_as_cause (test_w28_negative_controls.TypedHandlerConversions.test_reader_on_a_closed_descriptor_is_invalid_fd_with_the_os_error_as_cause) ... ok
+test_availability_matches_the_running_interpreter (test_w28_sealing_constants.SealingResolution.test_availability_matches_the_running_interpreter) ... ok
+test_complete_module_yields_add_get_and_full_mask (test_w28_sealing_constants.SealingResolution.test_complete_module_yields_add_get_and_full_mask) ... ok
+test_each_missing_constant_yields_none (test_w28_sealing_constants.SealingResolution.test_each_missing_constant_yields_none) ... ok
+test_module_imports_with_a_fcntl_lacking_the_constants (test_w28_sealing_constants.SealingResolution.test_module_imports_with_a_fcntl_lacking_the_constants) ... ok
+test_no_module_yields_none (test_w28_sealing_constants.SealingResolution.test_no_module_yields_none) ... ok
+test_missing_constant_is_refused_before_the_source_is_read (test_w28_sealing_constants.SnapshotRefusal.test_missing_constant_is_refused_before_the_source_is_read) ... ok
+test_os_error_while_sealing_is_typed_and_closes_the_copy (test_w28_sealing_constants.SnapshotRefusal.test_os_error_while_sealing_is_typed_and_closes_the_copy) ... ok
+test_owner_check_still_precedes_the_sealing_check (test_w28_sealing_constants.SnapshotRefusal.test_owner_check_still_precedes_the_sealing_check) ... ok
+test_positive_control_real_snapshot (test_w28_sealing_constants.SnapshotRefusal.test_positive_control_real_snapshot) ... ok
+test_early_exit_is_detected_through_eof_not_after_the_budget (test_w28_startup_matrix.StartupMatrix.test_early_exit_is_detected_through_eof_not_after_the_budget) ... ok
+test_positive_control_normal_run (test_w28_startup_matrix.StartupMatrix.test_positive_control_normal_run) ... ok
+test_wrong_ready_byte_is_refused_at_once_and_the_child_reaped (test_w28_startup_matrix.StartupMatrix.test_wrong_ready_byte_is_refused_at_once_and_the_child_reaped) ... ok
+test_every_adoption_in_the_repository_configures_blocking_first (test_w28_static_gates.AdoptedSocketsSetTheirOwnTimeout.test_every_adoption_in_the_repository_configures_blocking_first) ... ok
+test_the_gate_detects_an_unconfigured_adoption (test_w28_static_gates.AdoptedSocketsSetTheirOwnTimeout.test_the_gate_detects_an_unconfigured_adoption) ... ok
+test_no_assert_statement (test_w28_static_gates.NoAssertInTheRuntimePackage.test_no_assert_statement) ... ok
+test_every_variant_compiles_warning_free (test_w30_cancel_race.OptionalCrossCompileAllVariants.test_every_variant_compiles_warning_free) ... skipped 'mingw-w64 not installed (optional local type check; CI uses MSVC natively)'
+test_fault_injection_announces_itself (test_w30_cancel_race.ProductionCodeUnchanged.test_fault_injection_announces_itself) ... ok
+test_fi_sleep_matches_harness_timing (test_w30_cancel_race.ProductionCodeUnchanged.test_fi_sleep_matches_harness_timing) ... ok
+test_no_fault_injection_symbol_survives_in_production (test_w30_cancel_race.ProductionCodeUnchanged.test_no_fault_injection_symbol_survives_in_production) ... ok
+test_production_token_stream_equals_w24 (test_w30_cancel_race.ProductionCodeUnchanged.test_production_token_stream_equals_w24) ... ok
+test_sources_and_ci_never_define_fault_injection (test_w30_cancel_race.ProductionCodeUnchanged.test_sources_and_ci_never_define_fault_injection) ... ok
+test_stripper_is_not_vacuous (test_w30_cancel_race.ProductionCodeUnchanged.test_stripper_is_not_vacuous) ... ok
+test_all_cases_pass_exact (test_w30_cancel_race.Verdicts.test_all_cases_pass_exact) ... ok
+test_campaign_requires_both_sides_and_exact_count (test_w30_cancel_race.Verdicts.test_campaign_requires_both_sides_and_exact_count) ... ok
+test_client_run_oracle (test_w30_cancel_race.Verdicts.test_client_run_oracle) ... ok
+test_exit31_verdict (test_w30_cancel_race.Verdicts.test_exit31_verdict) ... ok
+test_markers_are_whole_lines (test_w30_cancel_race.Verdicts.test_markers_are_whole_lines) ... ok
+test_non_windows_refuses_without_claim (test_w30_cancel_race.Verdicts.test_non_windows_refuses_without_claim) ... ok
+test_race_verdict (test_w30_cancel_race.Verdicts.test_race_verdict) ... ok
+test_seeded_offsets_cover_both_forced_zones (test_w30_cancel_race.Verdicts.test_seeded_offsets_cover_both_forced_zones) ... ok
+test_server_run_oracle (test_w30_cancel_race.Verdicts.test_server_run_oracle) ... ok
+test_decode_refuses_envelope_faults (test_w31_delivery_receipts.AckCodec.test_decode_refuses_envelope_faults) ... ok
+test_decode_refuses_frame_level_faults (test_w31_delivery_receipts.AckCodec.test_decode_refuses_frame_level_faults) ... ok
+test_digest_is_sha256_of_exact_bytes (test_w31_delivery_receipts.AckCodec.test_digest_is_sha256_of_exact_bytes) ... ok
+test_encode_refuses_bad_fields (test_w31_delivery_receipts.AckCodec.test_encode_refuses_bad_fields) ... ok
+test_receipt_codec (test_w31_delivery_receipts.AckCodec.test_receipt_codec) ... ok
+test_round_trip_is_canonical (test_w31_delivery_receipts.AckCodec.test_round_trip_is_canonical) ... ok
+test_uuid_check_paths (test_w31_delivery_receipts.AckCodec.test_uuid_check_paths) ... ok
+test_client_refuses_bad_input_and_oversized_frames (test_w31_delivery_receipts.AckedLaneEndToEnd.test_client_refuses_bad_input_and_oversized_frames) ... ok
+test_delivered_then_replay_refused_after_restart (test_w31_delivery_receipts.AckedLaneEndToEnd.test_delivered_then_replay_refused_after_restart) ... ok
+test_legacy_client_against_acked_server (test_w31_delivery_receipts.AckedLaneEndToEnd.test_legacy_client_against_acked_server) ... ok
+test_rejected_response_is_acknowledged_then_raised (test_w31_delivery_receipts.AckedLaneEndToEnd.test_rejected_response_is_acknowledged_then_raised) ... ok
+test_request_without_id_is_not_journaled (test_w31_delivery_receipts.AckedLaneEndToEnd.test_request_without_id_is_not_journaled) ... ok
+test_server_killed_before_ack_is_uncertain_after_restart (test_w31_delivery_receipts.AckedLaneEndToEnd.test_server_killed_before_ack_is_uncertain_after_restart) ... ok
+test_ack_for_another_request_is_unacked (test_w31_delivery_receipts.AckedLaneSocketpair.test_ack_for_another_request_is_unacked) ... ok
+test_ack_timeout (test_w31_delivery_receipts.AckedLaneSocketpair.test_ack_timeout) ... ok
+test_client_rejected (test_w31_delivery_receipts.AckedLaneSocketpair.test_client_rejected) ... ok
+test_close_without_ack (test_w31_delivery_receipts.AckedLaneSocketpair.test_close_without_ack) ... ok
+test_delivered_with_receipt (test_w31_delivery_receipts.AckedLaneSocketpair.test_delivered_with_receipt) ... ok
+test_journal_full_is_refused_before_dispatch (test_w31_delivery_receipts.AckedLaneSocketpair.test_journal_full_is_refused_before_dispatch) ... ok
+test_malformed_and_oversized_ack (test_w31_delivery_receipts.AckedLaneSocketpair.test_malformed_and_oversized_ack) ... ok
+test_no_response_without_committed_receipt (test_w31_delivery_receipts.AckedLaneSocketpair.test_no_response_without_committed_receipt) ... ok
+test_oversized_response_is_dispatch_failed (test_w31_delivery_receipts.AckedLaneSocketpair.test_oversized_response_is_dispatch_failed) ... ok
+test_replay_is_refused_before_dispatch (test_w31_delivery_receipts.AckedLaneSocketpair.test_replay_is_refused_before_dispatch) ... ok
+test_request_without_id_is_answered_and_not_journaled (test_w31_delivery_receipts.AckedLaneSocketpair.test_request_without_id_is_answered_and_not_journaled) ... ok
+test_send_failure_is_recorded (test_w31_delivery_receipts.AckedLaneSocketpair.test_send_failure_is_recorded) ... ok
+test_truncated_request_is_dropped (test_w31_delivery_receipts.AckedLaneSocketpair.test_truncated_request_is_dropped) ... ok
+test_unauthenticated_peer_is_dropped (test_w31_delivery_receipts.AckedLaneSocketpair.test_unauthenticated_peer_is_dropped) ... ok
+test_unusable_journal_leaves_receipt_open_for_recovery (test_w31_delivery_receipts.AckedLaneSocketpair.test_unusable_journal_leaves_receipt_open_for_recovery) ... ok
+test_wrong_digest_is_unacked_without_receipt (test_w31_delivery_receipts.AckedLaneSocketpair.test_wrong_digest_is_unacked_without_receipt) ... ok
+test_huge_receipt_header_is_refused_without_reading (test_w31_delivery_receipts.ClientReceiptChecks.test_huge_receipt_header_is_refused_without_reading) ... ok
+test_matching_receipt_is_delivered (test_w31_delivery_receipts.ClientReceiptChecks.test_matching_receipt_is_delivered) ... ok
+test_oversized_receipt_is_refused (test_w31_delivery_receipts.ClientReceiptChecks.test_oversized_receipt_is_refused) ... ok
+test_receipt_for_another_request_is_refused (test_w31_delivery_receipts.ClientReceiptChecks.test_receipt_for_another_request_is_refused) ... ok
+test_service_of_another_uid_is_refused (test_w31_delivery_receipts.ClientReceiptChecks.test_service_of_another_uid_is_refused) ... ok
+test_sigkill_between_respond_and_ack (test_w31_delivery_receipts.CrashRecovery.test_sigkill_between_respond_and_ack) ... ok
+test_ack_refusals_and_mismatch_is_recorded (test_w31_delivery_receipts.Journal.test_ack_refusals_and_mismatch_is_recorded) ... ok
+test_capacity_is_a_typed_refusal (test_w31_delivery_receipts.Journal.test_capacity_is_a_typed_refusal) ... ok
+test_clock_refusals (test_w31_delivery_receipts.Journal.test_clock_refusals) ... ok
+test_concurrent_reserve_has_one_winner (test_w31_delivery_receipts.Journal.test_concurrent_reserve_has_one_winner) ... ok
+test_happy_path_and_states (test_w31_delivery_receipts.Journal.test_happy_path_and_states) ... ok
+test_key_refusals (test_w31_delivery_receipts.Journal.test_key_refusals) ... ok
+test_prune_only_terminal_and_old (test_w31_delivery_receipts.Journal.test_prune_only_terminal_and_old) ... ok
+test_recover_marks_open_receipts_uncertain_only (test_w31_delivery_receipts.Journal.test_recover_marks_open_receipts_uncertain_only) ... ok
+test_replay_in_every_state (test_w31_delivery_receipts.Journal.test_replay_in_every_state) ... ok
+test_replay_is_durable_across_reopen (test_w31_delivery_receipts.Journal.test_replay_is_durable_across_reopen) ... ok
+test_respond_refusals (test_w31_delivery_receipts.Journal.test_respond_refusals) ... ok
+test_schema_version_is_pinned (test_w31_delivery_receipts.Journal.test_schema_version_is_pinned) ... ok
+test_store_is_private_wal_full (test_w31_delivery_receipts.Journal.test_store_is_private_wal_full) ... ok
+test_store_refusals (test_w31_delivery_receipts.Journal.test_store_refusals) ... ok
+test_unacknowledged (test_w31_delivery_receipts.Journal.test_unacknowledged) ... ok
+test_wal_and_full_sync_are_required (test_w31_delivery_receipts.Journal.test_wal_and_full_sync_are_required) ... ok
+test_udx01_functions_keep_their_signature (test_w31_delivery_receipts.LegacyLaneUnchanged.test_udx01_functions_keep_their_signature) ... ok
+test_audit_bounded_under_many_failures (test_w5_hardening.CoreSecurity.test_audit_bounded_under_many_failures) ... ok
+test_client_requires_request_echo (test_w5_hardening.CoreSecurity.test_client_requires_request_echo) ... ok
+test_discovery_result_rejects_unknown_and_duplicate_capability (test_w5_hardening.CoreSecurity.test_discovery_result_rejects_unknown_and_duplicate_capability) ... ok
+test_identical_replay_atomic_in_parallel (test_w5_hardening.CoreSecurity.test_identical_replay_atomic_in_parallel) ... ok
+test_ijson_unicode_noncharacters_rejected (test_w5_hardening.CoreSecurity.test_ijson_unicode_noncharacters_rejected) ... ok
+test_metadata_response_rejects_extra_fields_and_object_swap (test_w5_hardening.CoreSecurity.test_metadata_response_rejects_extra_fields_and_object_swap) ... ok
+test_rejects_bad_response_shapes (test_w5_hardening.CoreSecurity.test_rejects_bad_response_shapes) ... ok
+test_response_duplicate_json_keys (test_w5_hardening.CoreSecurity.test_response_duplicate_json_keys) ... ok
+test_response_rejects_non_interoperable_number (test_w5_hardening.CoreSecurity.test_response_rejects_non_interoperable_number) ... ok
+test_recovery_after_saturated_clients (test_w5_hardening.IPCConcurrency.test_recovery_after_saturated_clients) ... ok
+test_saturation_is_bounded_and_fails_closed (test_w5_hardening.IPCConcurrency.test_saturation_is_bounded_and_fails_closed) ... ok
+test_slow_client_does_not_serialize_fast_client (test_w5_hardening.IPCConcurrency.test_slow_client_does_not_serialize_fast_client) ... ok
+test_read_only_fd_and_close (test_w6_source_hardening.FdReadTests.test_read_only_fd_and_close) ... ok
+test_reject_bool_fd (test_w6_source_hardening.FdReadTests.test_reject_bool_fd) ... ok
+test_reject_changed_file (test_w6_source_hardening.FdReadTests.test_reject_changed_file) ... ok
+test_reject_directory (test_w6_source_hardening.FdReadTests.test_reject_directory) ... ok
+test_reject_oversize (test_w6_source_hardening.FdReadTests.test_reject_oversize) ... ok
+test_reject_owner_mismatch (test_w6_source_hardening.FdReadTests.test_reject_owner_mismatch) ... ok
+test_reject_path_string (test_w6_source_hardening.FdReadTests.test_reject_path_string) ... ok
+test_reject_write_access (test_w6_source_hardening.FdReadTests.test_reject_write_access) ... ok
+test_guaranteed_release (test_w6_source_hardening.LeaseTests.test_guaranteed_release) ... ok
+test_release_on_exception (test_w6_source_hardening.LeaseTests.test_release_on_exception) ... ok
+test_seen_id_replay_memory_bounded (test_w6_source_hardening.MoreGateTests.test_seen_id_replay_memory_bounded) ... ok
+test_bad_inputs_fail_before_allocation (test_w6_source_hardening.PerceptionTests.test_bad_inputs_fail_before_allocation) ... ok
+test_changed_tile_detected_not_stubbed_zero (test_w6_source_hardening.PerceptionTests.test_changed_tile_detected_not_stubbed_zero) ... ok
+test_does_not_retain_full_frame (test_w6_source_hardening.PerceptionTests.test_does_not_retain_full_frame) ... ok
+test_first_baseline_requires_more_frames (test_w6_source_hardening.PerceptionTests.test_first_baseline_requires_more_frames) ... ok
+test_new_geometry_invalidates_baseline (test_w6_source_hardening.PerceptionTests.test_new_geometry_invalidates_baseline) ... ok
+test_tile_mutations_randomized (test_w6_source_hardening.PerceptionTests.test_tile_mutations_randomized) ... ok
+test_concurrent_one_winner (test_w6_source_hardening.PreviewTests.test_concurrent_one_winner) ... ok
+test_coordinates_strict_and_reject_bool_float (test_w6_source_hardening.PreviewTests.test_coordinates_strict_and_reject_bool_float) ... ok
+test_default_denied (test_w6_source_hardening.PreviewTests.test_default_denied) ... ok
+test_events_no_secret_and_bounded (test_w6_source_hardening.PreviewTests.test_events_no_secret_and_bounded) ... ok
+test_expiry_and_revoke (test_w6_source_hardening.PreviewTests.test_expiry_and_revoke) ... ok
+test_grant_capacity_bounded (test_w6_source_hardening.PreviewTests.test_grant_capacity_bounded) ... ok
+test_no_approval_no_grant (test_w6_source_hardening.PreviewTests.test_no_approval_no_grant) ... ok
+test_one_shot_dryrun_only (test_w6_source_hardening.PreviewTests.test_one_shot_dryrun_only) ... ok
+test_principal_resource_session_surface_scope (test_w6_source_hardening.PreviewTests.test_principal_resource_session_surface_scope) ... ok
+test_stale_frame_epoch_denied_without_consumption (test_w6_source_hardening.PreviewTests.test_stale_frame_epoch_denied_without_consumption) ... ok
+test_ttl_and_types_fail_closed (test_w6_source_hardening.PreviewTests.test_ttl_and_types_fail_closed) ... ok
+test_bool_and_float_equality_coercions_denied (test_w7_falsification.GateW7.test_bool_and_float_equality_coercions_denied) ... ok
+test_clock_rollback_denies_and_clears_all (test_w7_falsification.GateW7.test_clock_rollback_denies_and_clears_all) ... ok
+test_new_grants_only_after_clock_recovered (test_w7_falsification.GateW7.test_new_grants_only_after_clock_recovered) ... ok
+test_nonfinite_clock_denies (test_w7_falsification.GateW7.test_nonfinite_clock_denies) ... ok
+test_digest_does_not_leak_raw_identical_cross_instance_fingerprint (test_w7_falsification.PerceptionW7.test_digest_does_not_leak_raw_identical_cross_instance_fingerprint) ... ok
+test_nonzero_change_never_counts_quiet (test_w7_falsification.PerceptionW7.test_nonzero_change_never_counts_quiet) ... ok
+test_reset_rotates_digest_key (test_w7_falsification.PerceptionW7.test_reset_rotates_digest_key) ... ok
+test_same_input_same_instance_consistent (test_w7_falsification.PerceptionW7.test_same_input_same_instance_consistent) ... ok
+test_empty_regular_file (test_w7_falsification.SealedSnapshotW7.test_empty_regular_file) ... ok
+test_kernel_seals_reject_modification (test_w7_falsification.SealedSnapshotW7.test_kernel_seals_reject_modification) ... ok
+test_parallel_snapshot_read_and_close (test_w7_falsification.SealedSnapshotW7.test_parallel_snapshot_read_and_close) ... ok
+test_requires_os_owner_identity (test_w7_falsification.SealedSnapshotW7.test_requires_os_owner_identity) ... ok
+test_snapshot_fixed_after_source_changes (test_w7_falsification.SealedSnapshotW7.test_snapshot_fixed_after_source_changes) ... ok
+test_source_must_be_readonly (test_w7_falsification.SealedSnapshotW7.test_source_must_be_readonly) ... ok
+test_client_response_fd_injection_closed (test_w8_fd_handoff.W8FdTests.test_client_response_fd_injection_closed) ... ok
+test_directory_rejected (test_w8_fd_handoff.W8FdTests.test_directory_rejected) ... ok
+test_exact_request_id (test_w8_fd_handoff.W8FdTests.test_exact_request_id) ... ok
+test_limit (test_w8_fd_handoff.W8FdTests.test_limit) ... ok
+test_malformed_and_duplicate_json (test_w8_fd_handoff.W8FdTests.test_malformed_and_duplicate_json) ... ok
+test_no_fd_leak_on_multiple_fds (test_w8_fd_handoff.W8FdTests.test_no_fd_leak_on_multiple_fds) ... ok
+test_no_fds (test_w8_fd_handoff.W8FdTests.test_no_fds) ... ok
+test_readonly_not_write_fd (test_w8_fd_handoff.W8FdTests.test_readonly_not_write_fd) ... ok
+test_response_injected_fields_and_size (test_w8_fd_handoff.W8FdTests.test_response_injected_fields_and_size) ... ok
+test_separate_process (test_w8_fd_handoff.W8FdTests.test_separate_process) ... ok
+test_too_many_fds (test_w8_fd_handoff.W8FdTests.test_too_many_fds) ... ok
+test_truncated_control (test_w8_fd_handoff.W8FdTests.test_truncated_control) ... ok
+test_truncated_packet (test_w8_fd_handoff.W8FdTests.test_truncated_packet) ... ok
+test_valid_metadata_no_raw_payload (test_w8_fd_handoff.W8FdTests.test_valid_metadata_no_raw_payload) ... ok
+test_wrong_owner_denied (test_w8_fd_handoff.W8FdTests.test_wrong_owner_denied) ... ok
+test_wrong_peer_uid_denied (test_w8_fd_handoff.W8FdTests.test_wrong_peer_uid_denied) ... ok
+test_bad_reply_uid_rejected (test_w9_boundaries.CredentialedTests.test_bad_reply_uid_rejected) ... ok
+test_bad_sender_uid_rejected (test_w9_boundaries.CredentialedTests.test_bad_sender_uid_rejected) ... ok
+test_disabled_passcred_denied (test_w9_boundaries.CredentialedTests.test_disabled_passcred_denied) ... ok
+test_extra_fd_denied (test_w9_boundaries.CredentialedTests.test_extra_fd_denied) ... ok
+test_fd_leak_repeated_bad_packets (test_w9_boundaries.CredentialedTests.test_fd_leak_repeated_bad_packets) ... ok
+test_missing_ancillary_response_denied (test_w9_boundaries.CredentialedTests.test_missing_ancillary_response_denied) ... ok
+test_missing_fd_denied (test_w9_boundaries.CredentialedTests.test_missing_fd_denied) ... ok
+test_overlong_wire_denied (test_w9_boundaries.CredentialedTests.test_overlong_wire_denied) ... ok
+test_reply_fd_injection_denied_and_closed (test_w9_boundaries.CredentialedTests.test_reply_fd_injection_denied_and_closed) ... ok
+test_request_extra_identity_field_denied (test_w9_boundaries.CredentialedTests.test_request_extra_identity_field_denied) ... ok
+test_response_scope_denied (test_w9_boundaries.CredentialedTests.test_response_scope_denied) ... ok
+test_valid_message_credentials_and_reply (test_w9_boundaries.CredentialedTests.test_valid_message_credentials_and_reply) ... ok
+test_cancel_error_denied (test_w9_boundaries.PortalShapeTests.test_cancel_error_denied) ... ok
+test_multiple_and_writable_denied (test_w9_boundaries.PortalShapeTests.test_multiple_and_writable_denied) ... ok
+test_one_local_file (test_w9_boundaries.PortalShapeTests.test_one_local_file) ... ok
+test_uri_bad_cases (test_w9_boundaries.PortalShapeTests.test_uri_bad_cases) ... ok
+test_client_checks_pipe_owner_before_write (test_windows_source_guards.WindowsCandidateSourceAudit.test_client_checks_pipe_owner_before_write) ... ok
+test_client_opens_with_individual_rights (test_windows_source_guards.WindowsCandidateSourceAudit.test_client_opens_with_individual_rights) ... ok
+test_explicit_client_impersonation_level (test_windows_source_guards.WindowsCandidateSourceAudit.test_explicit_client_impersonation_level) ... ok
+test_no_default_dacl_or_remote_flag_omission (test_windows_source_guards.WindowsCandidateSourceAudit.test_no_default_dacl_or_remote_flag_omission) ... ok
+test_occupied_name_exit_code_parity (test_windows_source_guards.WindowsCandidateSourceAudit.test_occupied_name_exit_code_parity) ... ok
+
+----------------------------------------------------------------------
+Ran 682 tests in 18.142s
+
+OK (skipped=94)
