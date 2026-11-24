@@ -1,0 +1,110 @@
+{
+ "repo": ".",
+ "test_befehl": [
+  "python",
+  "-m",
+  "pytest"
+ ],
+ "timeout_s": 180,
+ "hinweis": "W31 versioniertes ACK und durable Receipts (W23 P1 DELIVERY, G4): Diskriminierung der Semantik (write-ahead-Reihenfolge, Replay vor Dispatch und ueber Neustarts, Recovery nie re-dispatch, Verdikt-Abbildung, FULL-Sync, Quittungspruefung, unveraenderte udx/0.1-Lane). Lauf mit tools/dk_runner.py; Linux-Lane braucht einen Nicht-root-Benutzer.",
+ "faelle": [
+  {
+   "name": "W31-DK1 Antwort wird vor dem Receipt-Commit gesendet (kein write-ahead)",
+   "datei": "udx_ref/linux_ipc.py",
+   "alt": "        payload = _encode_response(broker.handle(raw, peer))\n        journal.respond(peer.subject, rid, response_digest(payload))\n    except (ReceiptError, ValueError):\n        return _close_open(journal, peer.subject, rid, 'DISPATCH_FAILED')\n    try:\n        conn.sendall(HEADER.pack(len(payload)) + payload)\n    except (ConnectionError, OSError):",
+   "neu": "        payload = _encode_response(broker.handle(raw, peer))\n        conn.sendall(HEADER.pack(len(payload)) + payload)\n        journal.respond(peer.subject, rid, response_digest(payload))\n    except (ReceiptError, ValueError):\n        return _close_open(journal, peer.subject, rid, 'DISPATCH_FAILED')\n    try:\n        pass\n    except (ConnectionError, OSError):",
+   "test": "tests/test_w31_delivery_receipts.py::AckedLaneSocketpair::test_no_response_without_committed_receipt"
+  },
+  {
+   "name": "W31-DK2 Replay nach Neustart wird dispatcht statt abgewiesen",
+   "datei": "udx_ref/linux_ipc.py",
+   "alt": "            send_frame(conn, _denied(rid, exc.code))",
+   "neu": "            send_frame(conn, broker.handle(raw, peer))",
+   "test": "tests/test_w31_delivery_receipts.py::AckedLaneEndToEnd::test_delivered_then_replay_refused_after_restart"
+  },
+  {
+   "name": "W31-DK3 Server-Start ohne recover(): offene Receipts bleiben offen",
+   "datei": "udx_ref/linux_ipc.py",
+   "alt": "        journal = ReceiptJournal(receipt_journal)\n        journal.recover()",
+   "neu": "        journal = ReceiptJournal(receipt_journal)",
+   "test": "tests/test_w31_delivery_receipts.py::AckedLaneEndToEnd::test_server_killed_before_ack_is_uncertain_after_restart"
+  },
+  {
+   "name": "W31-DK4 recover() erfasst auch abgeschlossene Receipts",
+   "datei": "udx_ref/delivery_receipts.py",
+   "alt": "\"WHERE state IN ('RESERVED','RESPONDING')\", (now,))",
+   "neu": "\"WHERE state IN ('RESERVED','RESPONDING','DELIVERED')\", (now,))",
+   "test": "tests/test_w31_delivery_receipts.py::Journal::test_recover_marks_open_receipts_uncertain_only"
+  },
+  {
+   "name": "W31-DK5 ACK-Fehlabgleich wird zurueckgerollt statt als UNACKED festgehalten",
+   "datei": "udx_ref/delivery_receipts.py",
+   "alt": "                self._set(subject, request_id, 'UNACKED', now, mismatch)\n                state = 'UNACKED'",
+   "neu": "                raise ReceiptError(mismatch)",
+   "test": "tests/test_w31_delivery_receipts.py::Journal::test_ack_refusals_and_mismatch_is_recorded"
+  },
+  {
+   "name": "W31-DK6 Digest des ACK wird nicht verglichen",
+   "datei": "udx_ref/delivery_receipts.py",
+   "alt": "            elif ack['response_sha256'] != row[1]:",
+   "neu": "            elif False:",
+   "test": "tests/test_w31_delivery_receipts.py::AckedLaneSocketpair::test_wrong_digest_is_unacked_without_receipt"
+  },
+  {
+   "name": "W31-DK7 REJECTED wird als DELIVERED verbucht",
+   "datei": "udx_ref/delivery_receipts.py",
+   "alt": "                state = 'DELIVERED' if ack['verdict'] == 'ACCEPTED' else 'CLIENT_REJECTED'",
+   "neu": "                state = 'DELIVERED'",
+   "test": "tests/test_w31_delivery_receipts.py::Journal::test_happy_path_and_states"
+  },
+  {
+   "name": "W31-DK8 Journal mit synchronous=NORMAL (nicht durable bei Stromausfall)",
+   "datei": "udx_ref/delivery_receipts.py",
+   "alt": "            self.db.execute('PRAGMA synchronous=FULL')\n            if self.db.execute('PRAGMA synchronous').fetchone()[0] != 2:\n                raise ReceiptError('FULL_SYNC_REQUIRED')",
+   "neu": "            self.db.execute('PRAGMA synchronous=NORMAL')",
+   "test": "tests/test_w31_delivery_receipts.py::Journal::test_store_is_private_wal_full"
+  },
+  {
+   "name": "W31-DK9 Client quittiert ACCEPTED, obwohl der strikte Decoder ablehnte",
+   "datei": "udx_ref/linux_ipc.py",
+   "alt": "        verdict = 'ACCEPTED' if refusal is None else 'REJECTED'",
+   "neu": "        verdict = 'ACCEPTED'",
+   "test": "tests/test_w31_delivery_receipts.py::AckedLaneEndToEnd::test_rejected_response_is_acknowledged_then_raised"
+  },
+  {
+   "name": "W31-DK10 Client prueft die Request-ID der Quittung nicht",
+   "datei": "udx_ref/delivery_receipts.py",
+   "alt": "    if obj['request_id'] != expected_request_id:\n        raise ReceiptError('RECEIPT_REQUEST_MISMATCH')",
+   "neu": "    if False:\n        raise ReceiptError('RECEIPT_REQUEST_MISMATCH')",
+   "test": "tests/test_w31_delivery_receipts.py::ClientReceiptChecks::test_receipt_for_another_request_is_refused"
+  },
+  {
+   "name": "W31-DK11 prune() loescht offene Receipts",
+   "datei": "udx_ref/delivery_receipts.py",
+   "alt": "\"('DELIVERED','CLIENT_REJECTED','UNACKED','UNCERTAIN')\", (older_than_ns,))",
+   "neu": "\"('DELIVERED','CLIENT_REJECTED','UNACKED','UNCERTAIN','RESERVED','RESPONDING')\", (older_than_ns,))",
+   "test": "tests/test_w31_delivery_receipts.py::Journal::test_prune_only_terminal_and_old"
+  },
+  {
+   "name": "W31-DK12 Replay-Schluessel ohne Subjekt (fremder Prinzipal blockiert)",
+   "datei": "udx_ref/delivery_receipts.py",
+   "alt": "            if self._row(subject, request_id) is not None:\n                raise ReceiptError('REPLAY_REJECTED')",
+   "neu": "            if self.db.execute('SELECT 1 FROM receipts WHERE request_id=?', (request_id,)).fetchone():\n                raise ReceiptError('REPLAY_REJECTED')",
+   "test": "tests/test_w31_delivery_receipts.py::Journal::test_replay_is_durable_across_reopen"
+  },
+  {
+   "name": "W31-DK13 udx/0.1-Lane laeuft ohne Journal in den ACK-Pfad",
+   "datei": "udx_ref/linux_ipc.py",
+   "alt": "                        if journal is None:\n                            serve_connection(conn, broker)",
+   "neu": "                        if False:\n                            serve_connection(conn, broker)",
+   "test": "tests/test_linux_ipc.py::LinuxIPC::test_real_kernel_uid_and_fixture"
+  },
+  {
+   "name": "W31-DK14 Quittungszustand wird nicht gegen das gesendete Verdikt geprueft",
+   "datei": "udx_ref/delivery_receipts.py",
+   "alt": "    if expected is None or obj['receipt'] != expected:",
+   "neu": "    if expected is None:",
+   "test": "tests/test_w31_delivery_receipts.py::AckCodec::test_receipt_codec"
+  }
+ ]
+}

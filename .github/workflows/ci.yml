@@ -85,7 +85,7 @@ jobs:
           evidence/w25_dk_spec.json evidence/w26_dk_spec.json evidence/w26_carryover_dk_spec.json
           evidence/w27_dk_spec.json evidence/w28_dk_spec.json
           evidence/w13_dk_spec.json evidence/w18_dk_spec.json evidence/w24_dk_spec.json
-          evidence/w30_dk_spec.json
+          evidence/w30_dk_spec.json evidence/w31_dk_spec.json
           --expect-stale evidence/w13_dk_spec.json=2 --expect-stale evidence/w18_dk_spec.json=1
           --expect-stale evidence/w24_dk_spec.json=1 --expect-stale evidence/w27_dk_spec.json=2
           --json "$RUNNER_TEMP/udx_dk_portable.json"
@@ -121,7 +121,7 @@ jobs:
     # W27: every refusal of the portable runtime is removed (ADMIT) and forced
     # (REFUSE) in turn; a refusal that no test notices in one of the two
     # directions fails this job unless it is pinned with a reason in
-    # evidence/w28_guard_sweep_baseline.json. A pin that no longer survives
+    # evidence/w31_guard_sweep_baseline.json (W31; the W28 file is kept as a record). A pin that no longer survives
     # fails it as well. Linux only: the swept modules are skipped on Windows.
     # W28 (sweep v2): also 'if ...: return <refusal>' and typed except handlers
     # (mutant UNTYPED); import/setUpClass errors are STRUCTURAL, never a kill;
@@ -151,7 +151,7 @@ jobs:
         env:
           PYTHONPATH: .
         run: >-
-          python tools/guard_sweep.py --baseline evidence/w28_guard_sweep_baseline.json
+          python tools/guard_sweep.py --baseline evidence/w31_guard_sweep_baseline.json
           --json "$RUNNER_TEMP/udx_guard_sweep.json"
       # actions/upload-artifact, same SHA pin as the other jobs
       - name: Upload sweep result
