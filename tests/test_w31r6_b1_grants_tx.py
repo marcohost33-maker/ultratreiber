@@ -86,6 +86,8 @@ class GrantTxPrimaryError(unittest.TestCase):
         # d5049ce: OperationalError "cannot rollback - no transaction is active".
         self.assertIsInstance(cm.exception, sqlite3.IntegrityError)
         self.assertIn('R6_PRIMARY', str(cm.exception))
+        # SQLite ended the transaction itself: no cleanup was needed or attempted.
+        self.assertFalse(getattr(cm.exception, '__notes__', None))
         self.assertFalse(store.db.in_transaction)
         self.assertEqual(stored_state(path), 'ISSUED')
         # No unknown state here (SQLite rolled back itself): the store stays usable.
@@ -107,8 +109,9 @@ class GrantTxPrimaryError(unittest.TestCase):
         # Unknown state is fail-closed: the uncommitted write is gone (connection
         # closed), and the store refuses every further transaction with a typed code.
         self.assertEqual(stored_state(path), 'ISSUED')
-        with self.assertRaises(GrantDenied) as again:
+        with self.assertRaises(Exception) as again:
             store.revoke(GID)
+        self.assertIsInstance(again.exception, GrantDenied)
         self.assertEqual(str(again.exception), 'JOURNAL_POISONED')
 
     def test_commit_failure_keeps_primary_and_store_usable(self):

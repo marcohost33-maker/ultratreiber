@@ -121,6 +121,7 @@ class ReceiptTxPrimaryError(unittest.TestCase):
             journal.respond(SUBJECT, r, DIGEST)
         self.assertIsInstance(cm.exception, sqlite3.IntegrityError)
         self.assertIn('R6_PRIMARY', str(cm.exception))
+        self.assertFalse(getattr(cm.exception, '__notes__', None))
         self.assertFalse(journal.db.in_transaction)
         self.assertEqual(stored(path, SUBJECT, r), ('RESERVED', None))
         journal.db.execute('DROP TRIGGER r6_primary')
@@ -140,8 +141,9 @@ class ReceiptTxPrimaryError(unittest.TestCase):
         self.assertIs(cm.exception, primary)
         self.assertTrue(any('JOURNAL_ROLLBACK_FAILED' in n for n in getattr(primary, '__notes__', ())))
         self.assertEqual(stored(path, SUBJECT, r), ('RESERVED', None))
-        with self.assertRaises(ReceiptError) as again:
+        with self.assertRaises(Exception) as again:
             journal.respond(SUBJECT, r, DIGEST)
+        self.assertIsInstance(again.exception, ReceiptError)
         self.assertEqual(again.exception.code, 'JOURNAL_POISONED')
 
     def test_commit_failure_keeps_primary_and_journal_usable(self):
