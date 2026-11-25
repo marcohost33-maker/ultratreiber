@@ -31,7 +31,7 @@ import uuid
 from contextlib import contextmanager
 
 from .core import Refusal, check_scalars_and_depth, reject_constant, reject_float, reject_int, unique_pairs
-from .durable_grants import GrantDenied, _secure_store
+from .durable_grants import GrantDenied, _rollback_keep_primary, _secure_store
 
 ACK_VERSION = 'udx-ack/1'
 SCHEMA_VERSION = 1
@@ -105,10 +105,14 @@ def encode_ack(request_id: str, response_sha256: str, verdict: str) -> bytes:
 
 def decode_ack(raw) -> dict:
     """Strict ACK decoder: exact field set, canonical UUID, lower-case hex digest."""
-    obj = _loads(raw, 'ACK_TOO_LARGE', 'MALFORMED_ACK')
+    return _validate_ack(_loads(raw, 'ACK_TOO_LARGE', 'MALFORMED_ACK'))
+
+
+def _validate_ack(obj) -> dict:
+    """Complete ACK validation, shared by decode_ack and acknowledge (R6 B2, I2)."""
     if type(obj) is not dict or set(obj) != _ACK_FIELDS:
         raise ReceiptError('INVALID_ACK')
-    if obj['version'] != ACK_VERSION:
+    if type(obj['version']) is not str or obj['version'] != ACK_VERSION:
         raise ReceiptError('UNSUPPORTED_ACK_VERSION')
     if not _canonical_uuid(obj['request_id']):
         raise ReceiptError('INVALID_ACK_REQUEST_ID')
@@ -192,12 +196,15 @@ class ReceiptJournal:
     @contextmanager
     def _tx(self):
         with self._tx_lock:
+            if getattr(self, '_poisoned', False):
+                raise ReceiptError('JOURNAL_POISONED')
             self.db.execute('BEGIN IMMEDIATE')
             try:
                 yield
                 self.db.execute('COMMIT')
-            except BaseException:
-                self.db.execute('ROLLBACK')
+            except BaseException as primary:
+                # R6 B2: never mask the primary error (see durable_grants).
+                _rollback_keep_primary(self, primary)
                 raise
 
     def _clock(self) -> int:
@@ -246,10 +253,17 @@ class ReceiptJournal:
                             ('RESPONDING', response_sha256, now, subject, request_id))
 
     def acknowledge(self, subject: str, request_id: str, ack: dict) -> str:
-        """Apply a decoded ACK. A mismatching ACK is recorded as UNACKED and refused."""
+        """Apply a decoded ACK. A mismatching ACK is recorded as UNACKED and refused.
+
+        R6 B2 (I2): the ACK is copied and COMPLETELY validated before the
+        transaction; an invalid ACK changes no row. Only a valid ACK that names
+        another request or digest is recorded (UNACKED). The copy also pins the
+        values: a caller-held dict changed during the transaction is not read.
+        """
         _check_key(subject, request_id)
-        if type(ack) is not dict or set(ack) != _ACK_FIELDS:
+        if type(ack) is not dict:
             raise ReceiptError('INVALID_ACK')
+        ack = _validate_ack(dict(ack))
         mismatch = None
         with self._tx():
             now = self._clock()

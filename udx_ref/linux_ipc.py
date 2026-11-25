@@ -5,8 +5,10 @@ Does not support writable file access, arbitrary paths, remote access or root se
 """
 from __future__ import annotations
 import argparse
+import logging
 import os
 import socket
+import sqlite3
 import stat
 import time
 import struct
@@ -15,8 +17,8 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import BoundedSemaphore
 from pathlib import Path
 from .core import Broker, FixtureAdapter, ObjectMetadata, PeerIdentity, Policy, MAX_MESSAGE_BYTES, Refusal, VERSION, decode_request, decode_response
-from .delivery_receipts import (MAX_ACK_BYTES, ReceiptError, ReceiptJournal, decode_ack, decode_receipt, encode_ack,
-                                encode_receipt, response_digest)
+from .delivery_receipts import (MAX_ACK_BYTES, TERMINAL_STATES, ReceiptError, ReceiptJournal, decode_ack,
+                                decode_receipt, encode_ack, encode_receipt, response_digest)
 
 HEADER = struct.Struct('!I')
 UCRED = struct.Struct('3i')
@@ -120,7 +122,8 @@ def serve_connection_acked(conn, broker, journal):
     first response byte, then the ACK under its own deadline. No response leaves
     without a committed receipt row. A request without a canonical request id is
     answered like the udx/0.1 lane and not journaled. Returns the final journal
-    state of this connection, or None if nothing was journaled.
+    state of this connection, or None if no terminal state is established (R6 B2:
+    never a state the journal does not hold).
     """
     deadline = time.monotonic() + REQUEST_DEADLINE_S
     conn.settimeout(REQUEST_DEADLINE_S)
@@ -175,13 +178,27 @@ def serve_connection_acked(conn, broker, journal):
     try:
         state = journal.acknowledge(peer.subject, rid, ack)
     except ReceiptError:
-        return 'UNACKED'          # recorded by acknowledge() (mismatch) or never open
+        # R6 B2 (I2): only a mismatch commits UNACKED. NOT_RESPONDING,
+        # CLOCK_ROLLBACK, JOURNAL_POISONED, ... leave whatever the journal holds,
+        # so report the stored terminal state, never an assumed one.
+        return _journaled_terminal_state(journal, peer.subject, rid)
     try:
         receipt = encode_receipt(rid, state)
         conn.sendall(HEADER.pack(len(receipt)) + receipt)
     except (ConnectionError, OSError):
         pass                      # recorded; the client reports NOT_CONFIRMED
     return state
+
+
+def _journaled_terminal_state(journal, subject, rid):
+    """The terminal state the journal holds for this request, else None (R6 B2)."""
+    try:
+        row = journal.state(subject, rid)
+    except (ReceiptError, sqlite3.Error):
+        return None
+    if row is None or row[0] not in TERMINAL_STATES:
+        return None
+    return row[0]
 
 
 def _close_open(journal, subject, rid, reason):
