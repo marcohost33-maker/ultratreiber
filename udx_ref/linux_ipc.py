@@ -14,7 +14,7 @@ import time
 import struct
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from threading import BoundedSemaphore
+from threading import BoundedSemaphore, Event
 from pathlib import Path
 from .core import Broker, FixtureAdapter, ObjectMetadata, PeerIdentity, Policy, MAX_MESSAGE_BYTES, Refusal, VERSION, decode_request, decode_response
 from .delivery_receipts import (MAX_ACK_BYTES, TERMINAL_STATES, ReceiptError, ReceiptJournal, decode_ack,
@@ -229,6 +229,21 @@ def serve_forever(runtime_dir, *, max_connections=0, receipt_journal=None):
     max_connections=0 means until signal. A bounded value is useful for tests.
     W31: with ``receipt_journal`` (an absolute path) every connection runs the
     acknowledged lane; open receipts of an earlier run are marked UNCERTAIN first.
+
+    R6 B3 (I3): the journal is opened as exclusive owner BEFORE recover() and
+    closed only in the outer ``finally``, i.e. after the worker pool has shut
+    down; a second supervisor (or any other journal) on the same file fails
+    with JOURNAL_OWNER_BUSY before it changes a row.
+    R6 B4 (I4): an unexpected exception in a worker is not left in its Future.
+    It latches ``worker_faulted``, is logged with the fixed code
+    UDX_WORKER_FAULT (no exception text, no payload), and the slot and the
+    connection are still released. From then on no request is admitted: a
+    task not yet started returns without serving, and the accept loop closes
+    the next connection and ends with RuntimeError('UDX_WORKER_FAULT') once the
+    running workers have finished (a bounded run that reaches max_connections
+    after a fault ends the same way), which also releases the journal for a
+    restart (fail-closed and visible to the process supervisor). Not covered:
+    a worker that hangs instead of raising.
     """
     if not supported() or os.geteuid() == 0:
         raise RuntimeError('Linux unprivileged execution required')
@@ -237,15 +252,16 @@ def serve_forever(runtime_dir, *, max_connections=0, receipt_journal=None):
     if os.path.lexists(path):
         raise FileExistsError('refusing to overwrite preexisting socket/path')
     journal = None
-    if receipt_journal is not None:
-        journal = ReceiptJournal(receipt_journal)
-        journal.recover()
     owner = f'uid:{os.geteuid()}'
     broker = Broker(FixtureAdapter({'sample-1': ObjectMetadata('sample-1', owner, 42, 'fixture')}),
                     Policy({owner: {'udx.discover', 'udx.metadata.read'}}))
     own_inode = None
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
         try:
+            if receipt_journal is not None:
+                # I3: ownership from before recover() until after the last worker.
+                journal = ReceiptJournal(receipt_journal, exclusive_owner=True)
+                journal.recover()
             # Isolated dedicated process: umask 077 BEFORE filesystem socket bind.
             prior_mask = os.umask(0o077)
             try:
@@ -259,13 +275,22 @@ def serve_forever(runtime_dir, *, max_connections=0, receipt_journal=None):
             # A bounded pool avoids a single slow client serializing all peers.
             # No unbounded executor queue: reject immediately when capacity is full.
             slots = BoundedSemaphore(MAX_WORKERS)
+            worker_faulted = Event()
+
             def task(conn):
                 try:
                     with conn:
+                        if worker_faulted.is_set():
+                            return            # admitted before the fault was seen: not served
                         if journal is None:
                             serve_connection(conn, broker)
                         else:
                             serve_connection_acked(conn, broker, journal)
+                except BaseException:
+                    # I4: nobody reads the Future, so observe the fault here.
+                    # Fixed code only: the exception text may carry request data.
+                    worker_faulted.set()
+                    logging.getLogger(__name__).error('UDX_WORKER_FAULT: admission suspended')
                 finally:
                     slots.release()
             count = 0
@@ -273,6 +298,9 @@ def serve_forever(runtime_dir, *, max_connections=0, receipt_journal=None):
                 while max_connections == 0 or count < max_connections:
                     conn, _ = listener.accept()
                     count += 1
+                    if worker_faulted.is_set():
+                        conn.close()
+                        raise RuntimeError('UDX_WORKER_FAULT')
                     if slots.acquire(blocking=False):
                         try:
                             pool.submit(task, conn)
@@ -283,6 +311,9 @@ def serve_forever(runtime_dir, *, max_connections=0, receipt_journal=None):
                     else:
                         # Fail closed on saturation. Do not queue unbounded work.
                         conn.close()
+            if worker_faulted.is_set():
+                # A fault in one of the last admitted connections ends the run visibly, too.
+                raise RuntimeError('UDX_WORKER_FAULT')
         finally:
             if journal is not None:
                 journal.close()
