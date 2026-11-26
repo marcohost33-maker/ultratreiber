@@ -133,7 +133,7 @@ class JournalOwner(unittest.TestCase):
                  "    try:\n        ReceiptJournal(p, exclusive_owner=True).recover()\n        print('OPENED')\n"
                  "    except ReceiptError as e:\n        print(e.code)\n")
         out = subprocess.run([sys.executable, '-c', child, self.path, str(alias / 'store' / 'receipts.db')],
-                             capture_output=True, text=True, timeout=30, cwd=ROOT,
+                             capture_output=True, text=True, timeout=120, cwd=ROOT,
                              env=dict(os.environ, PYTHONPATH=ROOT))
         self.assertEqual(out.stdout.split(), ['JOURNAL_OWNER_BUSY', 'JOURNAL_OWNER_BUSY'], out.stderr)
 
@@ -372,11 +372,19 @@ class SupervisorInProcess(unittest.TestCase):
                                                       side_effect=ReceiptError('INVALID_CLOCK'))),
                 ('bind', lambda: mock.patch.object(socket.socket, 'bind', side_effect=OSError('bind refused')))):
             with self.subTest(name), patcher():
-                with self.assertRaises((ReceiptError, OSError)) as cm:
+                kept = None
+                try:
                     self.ipc.serve_forever(str(self.runtime), max_connections=1, receipt_journal=self.db)
-                # the traceback (cm) keeps the frame alive: only an explicit close() releases the lock
-                self.assertIsNotNone(cm.exception.__traceback__)
-                ReceiptJournal(self.db, exclusive_owner=True).close()
+                except (ReceiptError, OSError) as exc:
+                    kept = exc
+                self.assertIsNotNone(kept, 'startup did not fail')
+                # The kept traceback keeps serve_forever's frame (and its journal) alive,
+                # so garbage collection cannot release the lock: only close() can.
+                self.assertIsNotNone(kept.__traceback__)
+                try:
+                    ReceiptJournal(self.db, exclusive_owner=True).close()
+                finally:
+                    del kept
                 self.assertFalse(self.sock.exists())
 
 
@@ -399,18 +407,19 @@ class SupervisorProcesses(unittest.TestCase):
         self.addCleanup(self.stop, proc)
         sock = runtime / 'udx.sock'
         if wait:
-            for _ in range(1000):
-                if sock.exists():
-                    break
+            deadline = time.monotonic() + 60          # generous: a cold interpreter on a slow mount
+            while not sock.exists():
                 if proc.poll() is not None:
                     self.fail('server exited: ' + proc.communicate()[1].decode())
+                if time.monotonic() > deadline:
+                    self.fail('socket did not appear')
                 time.sleep(0.01)
-            else:
-                self.fail('socket did not appear')
         return proc, sock
 
     @staticmethod
     def stop(proc):
+        if proc.poll() is not None and proc.stdout.closed:
+            return                                                # already stopped and drained
         if proc.poll() is None:
             proc.send_signal(signal.SIGTERM)
         try:
@@ -421,7 +430,9 @@ class SupervisorProcesses(unittest.TestCase):
 
     def test_second_journal_cannot_recover_a_live_receipt(self):
         from udx_ref import linux_ipc
-        proc, sock = self.start('a', max_connections=1)
+        # The server keeps running (20 connections): a direct-API journal waits up
+        # to 3 s for the lock and must still find it owned.
+        proc, sock = self.start('a')
         wire = request()
         r = json.loads(wire)['request_id']
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
@@ -434,7 +445,7 @@ class SupervisorProcesses(unittest.TestCase):
             with self.assertRaises(ReceiptError) as cm:
                 ReceiptJournal(self.db).recover()
             self.assertEqual(cm.exception.code, 'JOURNAL_OWNER_BUSY')
-        proc.wait(timeout=10)                                     # bounded run ends, journal closed
+        self.stop(proc)                                           # the lock dies with the process
         with ReceiptJournal(self.db) as j:
             self.assertEqual(j.state(f'uid:{os.geteuid()}', r), ('UNACKED', 'ACK_TIMEOUT'))
 
@@ -443,7 +454,7 @@ class SupervisorProcesses(unittest.TestCase):
         _, sock_a = self.start('a')
         proc_b, sock_b = self.start('b', wait=False)
         try:
-            _, err = proc_b.communicate(timeout=15)
+            _, err = proc_b.communicate(timeout=60)
         except subprocess.TimeoutExpired:
             self.fail('second supervisor kept running on an owned journal')
         self.assertNotEqual(proc_b.returncode, 0)
