@@ -92,6 +92,31 @@ recover()            RESERVED/RESPONDING -> UNCERTAIN (RECOVERED_AFTER_CRASH); n
   Server kann `DELIVERED` verbuchen, während der Client `NOT_CONFIRMED` meldet (Quittung
   verloren). Umgekehrt nie: Der Server bestätigt nur, was er festgeschrieben hat.
 
+### R6 B3/B4: Journal-Eigentum und beobachtete Worker-Fehler
+
+- **Eigentum (I3).** `serve_forever` öffnet das Journal als `ReceiptJournal(path,
+  exclusive_owner=True)` innerhalb seines `try/finally`, **vor** `recover()`, und schließt es
+  erst nach dem Ende des Worker-Pools. Der Modus setzt `PRAGMA locking_mode=EXCLUSIVE` vor dem
+  ersten WAL-Zugriff und `busy_timeout=0`; die SQLite-Sperre liegt auf der Inode, gilt also
+  auch für andere Pfade zur selben Datei und für andere Prozesse. Jedes zweite Journal (zweiter
+  Supervisor, direkte API, Diagnose) scheitert beim Öffnen mit `JOURNAL_OWNER_BUSY`, bevor es
+  eine Zeile liest oder ändert (die direkte API wartet dabei bis zu 3 s). Die Sperre stirbt mit
+  dem Prozess (SIGKILL getestet), ein Neustart wird nicht blockiert.
+  **Folge für den Betrieb:** Das Journal eines laufenden Servers ist nicht lesbar; nach dem
+  Ende lesen. **Grenzen:** `recover()` auf dem eigenen Handle bleibt möglich (Startoperation,
+  nicht bewacht); kein Schutz vor einem Same-UID-Prozess, der die Datei ersetzt; ungeprüft auf
+  Netzdateisystemen.
+- **Worker-Fehler (I4).** Eine unerwartete Ausnahme in einem Worker bleibt nicht im
+  unbeobachteten Future: Sie setzt einen Latch, wird als `UDX_WORKER_FAULT: admission
+  suspended` geloggt (fester Text, ohne Ausnahmetext und ohne `exc_info`), Slot und Socket
+  werden freigegeben. Danach wird keine Anfrage mehr bedient: ein schon zugelassener, noch
+  nicht gestarteter Task kehrt ohne Bedienung zurück, die nächste Verbindung wird geschlossen
+  und `serve_forever` endet nach den laufenden Workern mit `RuntimeError('UDX_WORKER_FAULT')`
+  (auch am Ende eines begrenzten Laufs). Damit wird auch das Journal für einen Neustart frei.
+  **Grenzen:** ein hängender (statt werfender) Worker wird nicht erkannt; das Log erscheint
+  sofort, das Ende der Accept-Schleife erst mit der nächsten Verbindung (bis dahin bleibt das
+  Journal gesperrt).
+
 ## Belege (lokal, Linux, unprivilegiert)
 
 Alle Läufe unter einer unprivilegierten UID (65534, `setpriv`, Kopie des Arbeitsbaums), weil
