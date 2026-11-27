@@ -162,14 +162,15 @@ class AckPositiveControls(R13Case):
         journal, path = open_journal(self)
         r = rid()
         responding(journal, r)
-        self.assertEqual(journal.acknowledge(SUBJECT, r, ack(r)), 'DELIVERED')
+        self.assertEqual(self.returns(lambda: journal.acknowledge(SUBJECT, r, ack(r))), 'DELIVERED')
         self.assertEqual(stored(path, SUBJECT, r)[0], 'DELIVERED')
 
     def test_rejected_verdict_is_client_rejected(self):
         journal, path = open_journal(self)
         r = rid()
         responding(journal, r)
-        self.assertEqual(journal.acknowledge(SUBJECT, r, ack(r, verdict='REJECTED')), 'CLIENT_REJECTED')
+        self.assertEqual(self.returns(lambda: journal.acknowledge(SUBJECT, r, ack(r, verdict='REJECTED'))),
+                         'CLIENT_REJECTED')
 
     def test_valid_mismatching_acks_are_recorded_unacked(self):
         journal, path = open_journal(self)
@@ -186,7 +187,7 @@ class AckPositiveControls(R13Case):
         r = rid()
         responding(journal, r)
         responding(journal, r, subject=OTHER_SUBJECT)
-        self.assertEqual(journal.acknowledge(SUBJECT, r, ack(r)), 'DELIVERED')
+        self.assertEqual(self.returns(lambda: journal.acknowledge(SUBJECT, r, ack(r))), 'DELIVERED')
         self.assertEqual(stored(path, OTHER_SUBJECT, r)[0], 'RESPONDING')
 
 
@@ -199,7 +200,7 @@ class R13NR03InvalidAckChangesNothing(R13Case):
         self.refusal(lambda: journal.acknowledge(SUBJECT, r, bad(r)), code)
         self.assertEqual(stored(path, SUBJECT, r), ('RESPONDING', DIGEST, None))
         # Positive control on the same row: the journal is still usable.
-        self.assertEqual(journal.acknowledge(SUBJECT, r, ack(r)), 'DELIVERED')
+        self.assertEqual(self.returns(lambda: journal.acknowledge(SUBJECT, r, ack(r))), 'DELIVERED')
 
     def test_unknown_version(self):
         self._refused_unchanged(lambda r: ack(r, version='udx-ack/2'), 'UNSUPPORTED_ACK_VERSION')
