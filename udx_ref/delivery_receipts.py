@@ -236,12 +236,15 @@ class ReceiptJournal:
             if getattr(self, '_poisoned', False):
                 raise ReceiptError('JOURNAL_POISONED')
             self.db.execute('BEGIN IMMEDIATE')
+            committing = False
             try:
                 yield
+                committing = True
                 self.db.execute('COMMIT')
             except BaseException as primary:
                 # R6 B2: never mask the primary error (see durable_grants).
-                _rollback_keep_primary(self, primary)
+                # R13-NR05: a COMMIT error after the transaction ended latches.
+                _rollback_keep_primary(self, primary, committing=committing)
                 raise
 
     def _clock(self) -> int:
@@ -307,6 +310,12 @@ class ReceiptJournal:
             row = self._row(subject, request_id)
             if row is None or row[0] != 'RESPONDING':
                 raise ReceiptError('NOT_RESPONDING')
+            if type(row[1]) is not str or not _HEX64.fullmatch(row[1]):
+                # R13-NR03: respond() only stores canonical digests, so this row
+                # was changed outside the journal. Compare nothing against it
+                # (no DELIVERED, no false UNACKED) and latch the instance.
+                self._poisoned = True
+                raise ReceiptError('JOURNAL_INVALID_STORED_DIGEST')
             if ack['request_id'] != request_id:
                 mismatch = 'ACK_REQUEST_MISMATCH'
             elif ack['response_sha256'] != row[1]:

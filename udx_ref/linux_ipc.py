@@ -177,10 +177,16 @@ def serve_connection_acked(conn, broker, journal):
         return _close_open(journal, peer.subject, rid, 'ACK_MALFORMED')
     try:
         state = journal.acknowledge(peer.subject, rid, ack)
-    except ReceiptError:
+    except (ReceiptError, sqlite3.Error) as exc:
         # R6 B2 (I2): only a mismatch commits UNACKED. NOT_RESPONDING,
         # CLOCK_ROLLBACK, JOURNAL_POISONED, ... leave whatever the journal holds,
         # so report the stored terminal state, never an assumed one.
+        # R13-NR06: a storage error (e.g. a rolled-back write) is not a
+        # mismatch either: no receipt, the row stays open for recover(). Only
+        # the error type is logged (no payload); an uncertain outcome has
+        # already latched the journal, so the next reserve() is refused.
+        if isinstance(exc, sqlite3.Error):
+            logging.getLogger(__name__).error('UDX_ACK_STORAGE_FAULT: %s', type(exc).__name__)
         return _journaled_terminal_state(journal, peer.subject, rid)
     try:
         receipt = encode_receipt(rid, state)

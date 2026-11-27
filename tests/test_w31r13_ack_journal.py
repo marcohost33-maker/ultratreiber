@@ -298,6 +298,43 @@ class R13NR05UncertainTransactionLatches(R13Case):
         self.assertFalse([s for s in rec.statements[before:] if s.startswith('BEGIN')])
 
 
+class R13VariantGrantStoreCommit(R13Case):
+    """Variant search (R13: "inspect shared durable_grants._tx, same rollback
+    pattern"): the grant store shares the cleanup helper, so the same
+    uncertain-COMMIT case must latch it too."""
+
+    def test_grant_store_commit_error_after_the_transaction_ended_latches(self):
+        from udx_ref import durable_grants
+        from udx_ref.durable_grants import DurableGrantStore, GrantDenied
+        tmp = tempfile.TemporaryDirectory(prefix='udx-r13g-')
+        self.addCleanup(tmp.cleanup)
+        if POSIX:
+            os.chmod(tmp.name, 0o700)
+        path = str(Path(tmp.name) / 'grants.db')
+        if POSIX:
+            store = DurableGrantStore(path)
+        else:
+            with mock.patch.object(durable_grants, '_secure_store', lambda p: p):
+                store = DurableGrantStore(path)
+        self.addCleanup(_close_quietly, store)
+        gid = 'cd' * 20
+        store.db.execute("INSERT INTO grants VALUES(?,1000,1000,1,2,3,4,5,?,'ISSUED',NULL)", (gid, 2**62))
+        rec = store.db = Recorder(store.db, commit_reports_failure=True)
+        exc = self.raises(lambda: store.revoke(gid))
+        self.assertIsInstance(exc, sqlite3.OperationalError)
+        rec.commit_reports_failure = False
+        before = len(rec.statements)
+        try:
+            store.revoke(gid)
+        except GrantDenied as again:
+            self.assertEqual(str(again), 'JOURNAL_POISONED')
+        except Exception as again:  # noqa: BLE001
+            self.fail(f'expected GrantDenied(JOURNAL_POISONED), got {type(again).__name__}: {again}')
+        else:
+            self.fail('expected GrantDenied(JOURNAL_POISONED), call succeeded')
+        self.assertFalse([s for s in rec.statements[before:] if s.startswith('BEGIN')])
+
+
 class _Socket:
     def __init__(self):
         self.sent = []

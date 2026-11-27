@@ -71,7 +71,7 @@ def _fd_properties(fd: int, owner_uid: int):
         raise GrantDenied('INVALID_SOURCE_HANDLE') from e
 
 
-def _rollback_keep_primary(store, primary: BaseException) -> None:
+def _rollback_keep_primary(store, primary: BaseException, *, committing: bool = False) -> None:
     """Roll back after ``primary`` without ever replacing it (R6 B1/B2, I1).
 
     ROLLBACK runs only while a transaction is still open. If the state check or
@@ -80,10 +80,19 @@ def _rollback_keep_primary(store, primary: BaseException) -> None:
     connection is closed, which discards uncommitted changes. The cleanup error
     is attached to ``primary`` as a note only; ``primary`` is re-raised by the
     caller. Shared by DurableGrantStore and delivery_receipts.ReceiptJournal.
+
+    R13-NR05: ``committing`` means ``primary`` came from COMMIT. If SQLite has
+    then already ended the transaction, whether the COMMIT took effect is not
+    known to this connection (I/O or fsync error after the WAL write): the
+    store is poisoned as well. A COMMIT refused with the transaction still open
+    (e.g. a deferred constraint) is rolled back here and is a known state.
     """
     try:
         if store.db.in_transaction:
             store.db.execute('ROLLBACK')
+        elif committing:
+            store._poisoned = True
+            primary.add_note('JOURNAL_COMMIT_OUTCOME_UNKNOWN')
     except BaseException as cleanup:
         store._poisoned = True
         primary.add_note(f'JOURNAL_ROLLBACK_FAILED: {type(cleanup).__name__}')
@@ -121,15 +130,17 @@ class DurableGrantStore:
             if getattr(self, '_poisoned', False):
                 raise GrantDenied('JOURNAL_POISONED')
             self.db.execute('BEGIN IMMEDIATE')
+            committing = False
             try:
                 yield
+                committing = True
                 self.db.execute('COMMIT')
             except BaseException as primary:
                 # R6 B1: the primary error reaches the caller unchanged. SQLite may
                 # already have ended the transaction (trigger RAISE(ROLLBACK), some
                 # I/O and full errors); a blind ROLLBACK then raised "no transaction
                 # is active" and masked the IntegrityError.
-                _rollback_keep_primary(self, primary)
+                _rollback_keep_primary(self, primary, committing=committing)
                 raise
     def _clock(self):
         now = self._now()
