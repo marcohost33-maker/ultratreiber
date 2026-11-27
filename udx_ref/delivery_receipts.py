@@ -31,7 +31,7 @@ import uuid
 from contextlib import contextmanager
 
 from .core import Refusal, check_scalars_and_depth, reject_constant, reject_float, reject_int, unique_pairs
-from .durable_grants import GrantDenied, _secure_store
+from .durable_grants import GrantDenied, _rollback_keep_primary, _secure_store
 
 ACK_VERSION = 'udx-ack/1'
 SCHEMA_VERSION = 1
@@ -105,10 +105,14 @@ def encode_ack(request_id: str, response_sha256: str, verdict: str) -> bytes:
 
 def decode_ack(raw) -> dict:
     """Strict ACK decoder: exact field set, canonical UUID, lower-case hex digest."""
-    obj = _loads(raw, 'ACK_TOO_LARGE', 'MALFORMED_ACK')
+    return _validate_ack(_loads(raw, 'ACK_TOO_LARGE', 'MALFORMED_ACK'))
+
+
+def _validate_ack(obj) -> dict:
+    """Complete ACK validation, shared by decode_ack and acknowledge (R6 B2, I2)."""
     if type(obj) is not dict or set(obj) != _ACK_FIELDS:
         raise ReceiptError('INVALID_ACK')
-    if obj['version'] != ACK_VERSION:
+    if type(obj['version']) is not str or obj['version'] != ACK_VERSION:
         raise ReceiptError('UNSUPPORTED_ACK_VERSION')
     if not _canonical_uuid(obj['request_id']):
         raise ReceiptError('INVALID_ACK_REQUEST_ID')
@@ -147,11 +151,34 @@ def _check_key(subject, request_id):
         raise ReceiptError('BAD_REQUEST_ID')
 
 
+def _is_busy(exc) -> bool:
+    """SQLITE_BUSY / SQLITE_LOCKED, including their extended codes."""
+    return (isinstance(exc, sqlite3.Error)
+            and (getattr(exc, 'sqlite_errorcode', 0) & 0xff) in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED))
+
+
 class ReceiptJournal:
     """Durable per-(subject, request_id) delivery receipts. One shared connection,
-    transactions serialized by a lock (same pattern as DurableGrantStore)."""
+    transactions serialized by a lock (same pattern as DurableGrantStore).
 
-    def __init__(self, db_path: str, *, clock_ns=None, max_receipts: int = DEFAULT_MAX_RECEIPTS):
+    R6 B3 (I3): ``exclusive_owner=True`` is the supervisor mode. SQLite
+    ``locking_mode=EXCLUSIVE`` is set before the first file access, so the
+    first transaction takes the database lock and this connection keeps it
+    until ``close()``. No other connection, in this or another process and
+    under any path alias of the same file (the lock is on the inode), can then
+    open the journal or run ``recover()`` on it. Any journal that cannot get
+    the lock while opening fails with ``JOURNAL_OWNER_BUSY`` before it reads
+    or changes a row; the owner does not wait (busy_timeout=0). The lock dies
+    with the owner process (crash, SIGKILL), so a restart is not blocked.
+    Limits: ``recover()`` on the owner's own handle is still possible (it is a
+    supervisor-start operation, not guarded), and an exclusive journal cannot
+    be inspected while it is owned; read it after the supervisor ended.
+    """
+
+    def __init__(self, db_path: str, *, clock_ns=None, max_receipts: int = DEFAULT_MAX_RECEIPTS,
+                 exclusive_owner: bool = False):
+        if type(exclusive_owner) is not bool:
+            raise ReceiptError('BAD_OWNER_MODE')
         if type(max_receipts) is not int or not 1 <= max_receipts <= 10**7:
             raise ReceiptError('BAD_CAPACITY')
         try:
@@ -161,9 +188,16 @@ class ReceiptJournal:
         self._tx_lock = threading.RLock()
         self._now = clock_ns if clock_ns is not None else time.time_ns
         self._max = max_receipts
-        self.db = sqlite3.connect(self.path, timeout=3, isolation_level=None, check_same_thread=False)
+        self.exclusive_owner = exclusive_owner
+        self.db = sqlite3.connect(self.path, timeout=0 if exclusive_owner else 3, isolation_level=None,
+                                  check_same_thread=False)
         try:
-            self.db.execute('PRAGMA busy_timeout=3000')
+            self.db.execute('PRAGMA busy_timeout=0' if exclusive_owner else 'PRAGMA busy_timeout=3000')
+            if exclusive_owner:
+                # Must precede the first WAL access: then no shared-memory index
+                # is used and the lock is held until close (sqlite.org/wal.html).
+                if self.db.execute('PRAGMA locking_mode=EXCLUSIVE').fetchone()[0].lower() != 'exclusive':
+                    raise ReceiptError('EXCLUSIVE_OWNER_REQUIRED')
             if self.db.execute('PRAGMA journal_mode=WAL').fetchone()[0].lower() != 'wal':
                 raise ReceiptError('WAL_REQUIRED')
             self.db.execute('PRAGMA synchronous=FULL')
@@ -185,19 +219,32 @@ class ReceiptJournal:
                     self.db.execute('INSERT INTO receipt_meta VALUES(1,?,?)', (SCHEMA_VERSION, ACK_VERSION))
                 elif tuple(meta) != (SCHEMA_VERSION, ACK_VERSION):
                     raise ReceiptError('SCHEMA_MISMATCH')
-        except BaseException:
-            self.db.close()
+        except BaseException as primary:
+            # I1 variant: a failing close() must not replace the opening error.
+            try:
+                self.db.close()
+            except BaseException as close_error:
+                primary.add_note(f'JOURNAL_CLOSE_FAILED: {type(close_error).__name__}')
+            if _is_busy(primary):
+                # I3: another connection owns the journal (or holds its lock).
+                raise ReceiptError('JOURNAL_OWNER_BUSY') from primary
             raise
 
     @contextmanager
     def _tx(self):
         with self._tx_lock:
+            if getattr(self, '_poisoned', False):
+                raise ReceiptError('JOURNAL_POISONED')
             self.db.execute('BEGIN IMMEDIATE')
+            committing = False
             try:
                 yield
+                committing = True
                 self.db.execute('COMMIT')
-            except BaseException:
-                self.db.execute('ROLLBACK')
+            except BaseException as primary:
+                # R6 B2: never mask the primary error (see durable_grants).
+                # R13-NR05: a COMMIT error after the transaction ended latches.
+                _rollback_keep_primary(self, primary, committing=committing)
                 raise
 
     def _clock(self) -> int:
@@ -246,16 +293,29 @@ class ReceiptJournal:
                             ('RESPONDING', response_sha256, now, subject, request_id))
 
     def acknowledge(self, subject: str, request_id: str, ack: dict) -> str:
-        """Apply a decoded ACK. A mismatching ACK is recorded as UNACKED and refused."""
+        """Apply a decoded ACK. A mismatching ACK is recorded as UNACKED and refused.
+
+        R6 B2 (I2): the ACK is copied and COMPLETELY validated before the
+        transaction; an invalid ACK changes no row. Only a valid ACK that names
+        another request or digest is recorded (UNACKED). The copy also pins the
+        values: a caller-held dict changed during the transaction is not read.
+        """
         _check_key(subject, request_id)
-        if type(ack) is not dict or set(ack) != _ACK_FIELDS:
+        if type(ack) is not dict:
             raise ReceiptError('INVALID_ACK')
+        ack = _validate_ack(dict(ack))
         mismatch = None
         with self._tx():
             now = self._clock()
             row = self._row(subject, request_id)
             if row is None or row[0] != 'RESPONDING':
                 raise ReceiptError('NOT_RESPONDING')
+            if type(row[1]) is not str or not _HEX64.fullmatch(row[1]):
+                # R13-NR03: respond() only stores canonical digests, so this row
+                # was changed outside the journal. Compare nothing against it
+                # (no DELIVERED, no false UNACKED) and latch the instance.
+                self._poisoned = True
+                raise ReceiptError('JOURNAL_INVALID_STORED_DIGEST')
             if ack['request_id'] != request_id:
                 mismatch = 'ACK_REQUEST_MISMATCH'
             elif ack['response_sha256'] != row[1]:

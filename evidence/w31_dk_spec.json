@@ -25,8 +25,8 @@
   {
    "name": "W31-DK3 Server-Start ohne recover(): offene Receipts bleiben offen",
    "datei": "udx_ref/linux_ipc.py",
-   "alt": "        journal = ReceiptJournal(receipt_journal)\n        journal.recover()",
-   "neu": "        journal = ReceiptJournal(receipt_journal)",
+   "alt": "                journal = ReceiptJournal(receipt_journal, exclusive_owner=True)\n                journal.recover()",
+   "neu": "                journal = ReceiptJournal(receipt_journal, exclusive_owner=True)",
    "test": "tests/test_w31_delivery_receipts.py::AckedLaneEndToEnd::test_server_killed_before_ack_is_uncertain_after_restart"
   },
   {

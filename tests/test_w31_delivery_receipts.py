@@ -615,9 +615,9 @@ class AckedLaneEndToEnd(unittest.TestCase):
         self.sock = self.runtime / 'udx.sock'
         self.proc = None
 
-    def start(self):
+    def start(self, max_connections=20):
         self.proc = subprocess.Popen([sys.executable, '-m', 'udx_ref.linux_ipc', '--runtime-dir', str(self.runtime),
-                                      '--max-connections', '20', '--receipt-journal', self.db],
+                                      '--max-connections', str(max_connections), '--receipt-journal', self.db],
                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         for _ in range(1000):
             if self.sock.exists():
@@ -657,17 +657,15 @@ class AckedLaneEndToEnd(unittest.TestCase):
 
     def test_legacy_client_against_acked_server(self):
         from udx_ref.linux_ipc import request_on_socket
-        self.start()
+        # R6 B3: the running server owns the journal exclusively, so it is read
+        # after a bounded run (one connection) has ended and closed it.
+        self.start(max_connections=1)
         wire = request()
         self.assertEqual(request_on_socket(self.sock, wire)['code'], 'OK')    # response unchanged
-        deadline = time.monotonic() + 5
-        r = json.loads(wire)['request_id']
-        while time.monotonic() < deadline:
-            with ReceiptJournal(self.db) as j:
-                st = j.state(f'uid:{os.geteuid()}', r)
-            if st and st[0] != 'RESPONDING':
-                break
-            time.sleep(0.05)
+        self.proc.communicate(timeout=10)
+        self.assertEqual(self.proc.returncode, 0)
+        with ReceiptJournal(self.db) as j:
+            st = j.state(f'uid:{os.geteuid()}', json.loads(wire)['request_id'])
         self.assertEqual(st, ('UNACKED', 'ACK_MISSING'))
 
     def test_request_without_id_is_not_journaled(self):
