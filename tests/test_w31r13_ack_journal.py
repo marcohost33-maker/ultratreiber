@@ -297,6 +297,21 @@ class R13NR05UncertainTransactionLatches(R13Case):
         self.refusal(lambda: journal.reserve(SUBJECT, rid()), 'JOURNAL_POISONED')
         self.assertFalse([s for s in rec.statements[before:] if s.startswith('BEGIN')])
 
+    def test_commit_refused_with_the_transaction_open_does_not_latch(self):
+        """Negative control (deliberately narrower than the R13 stand-in, which
+        latched here): COMMIT refused before it ran leaves the transaction open,
+        the ROLLBACK succeeds, the state is known."""
+        journal, path = open_journal(self)
+        r = rid()
+        responding(journal, r)
+        journal.db.set_authorizer(
+            lambda action, arg1, *rest: sqlite3.SQLITE_DENY
+            if action == sqlite3.SQLITE_TRANSACTION and arg1 == 'COMMIT' else sqlite3.SQLITE_OK)
+        self.raises(lambda: journal.acknowledge(SUBJECT, r, ack(r)))
+        journal.db.set_authorizer(None)
+        self.assertEqual(stored(path, SUBJECT, r)[0], 'RESPONDING')
+        self.assertEqual(self.returns(lambda: journal.acknowledge(SUBJECT, r, ack(r))), 'DELIVERED')
+
 
 class R13VariantGrantStoreCommit(R13Case):
     """Variant search (R13: "inspect shared durable_grants._tx, same rollback
